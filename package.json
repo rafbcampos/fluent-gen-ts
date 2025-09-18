@@ -1,0 +1,95 @@
+{
+  "name": "fluent-gen",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "TypeScript type extraction system that empowers developers to create fluent builders for any interface, object literal, or record type",
+  "main": "./dist/lib.js",
+  "module": "./dist/lib.js",
+  "types": "./dist/lib.d.ts",
+  "bin": {
+    "fluent-gen": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    },
+    "./cli": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "pnpm run build:lib && pnpm run build:cli",
+    "build:lib": "rolldown -c rolldown.lib.config.ts",
+    "build:cli": "rolldown -c rolldown.config.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview",
+    "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm run build && changeset publish",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "fluent",
+    "builder",
+    "typescript",
+    "codegen",
+    "code generation",
+    "ts-morph"
+  ],
+  "author": "Rafael Campos <campos.rb@hotmail.com>",
+  "license": "MIT",
+  "packageManager": "pnpm@10.8.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rafbcampos/fluent-gen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rafbcampos/fluent-gen/issues"
+  },
+  "homepage": "https://github.com/rafbcampos/fluent-gen#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.1",
+    "@player-ui/types": "^0.13.0",
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^24.3.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "execa": "^9.6.0",
+    "husky": "^9.1.7",
+    "oxlint": "^1.12.0",
+    "prettier": "^3.6.2",
+    "rolldown": "1.0.0-beta.34",
+    "typescript": "^5.9.2",
+    "vitepress": "^2.0.0-alpha.12",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "chalk": "^5.6.0",
+    "commander": "^14.0.0",
+    "cosmiconfig": "^9.0.0",
+    "fast-glob": "^3.3.3",
+    "glob": "^11.0.3",
+    "inquirer": "^12.9.4",
+    "minimatch": "^10.0.3",
+    "ora": "^8.2.0",
+    "ts-morph": "^26.0.0",
+    "zod": "^4.1.5"
+  }
+}

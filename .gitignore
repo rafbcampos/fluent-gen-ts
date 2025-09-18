@@ -1,0 +1,6 @@
+node_modules
+coverage
+dist
+.generated
+.vitepress/dist
+.vitepress/cache

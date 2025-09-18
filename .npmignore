@@ -1,0 +1,28 @@
+# Source files
+src/
+__tests__/
+*.test.ts
+*.spec.ts
+
+# Configuration files
+.changeset/
+.github/
+.vitepress/
+docs/
+.generated/
+coverage/
+tsconfig.json
+vitest.config.ts
+rolldown.config.ts
+rolldown.lib.config.ts
+CLAUDE.md
+CONTRIBUTING.md
+
+# Development files
+*.log
+.DS_Store
+node_modules/
+pnpm-lock.yaml
+
+# Build artifacts
+*.map
