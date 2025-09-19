@@ -157,7 +157,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Text, TextStyle } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { Text, TextStyle } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface TextBuilderMethods {
   /** Unique identifier */
@@ -373,7 +373,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Text, TextStyle } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { Text, TextStyle } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface TextBuilderMethods {
   /** Unique identifier */
@@ -590,7 +590,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Text, TextStyle } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { Text, TextStyle } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface TextBuilderMethods {
   /** Unique identifier */
@@ -806,7 +806,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Action, Text } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { Action, Text } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface ActionBuilderMethods {
   /** Unique identifier */
@@ -1075,7 +1075,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { SimpleType } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { SimpleType } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface SimpleTypeBuilderMethods {
   withValue(value: string): SimpleTypeBuilder;
@@ -1279,7 +1279,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Button, Text, Action } from "/home/rcampos/repos/gen/src/__tests__/fixtures/plugin-scenario.ts";
+import type { Button, Text, Action } from "./src/__tests__/fixtures/plugin-scenario.ts";
 
 export interface ButtonBuilderMethods {
   /** Unique identifier */

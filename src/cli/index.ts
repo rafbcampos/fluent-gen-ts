@@ -7,20 +7,34 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+interface PackageJson {
+  name?: string;
+  version?: string;
+  description?: string;
+}
+
+function isValidPackageJson(obj: unknown): obj is PackageJson {
+  return typeof obj === "object" && obj !== null;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const packageJson = JSON.parse(
+const packageJsonRaw = JSON.parse(
   readFileSync(path.resolve(__dirname, "../package.json"), "utf-8"),
 );
+
+const packageJson: PackageJson = isValidPackageJson(packageJsonRaw)
+  ? packageJsonRaw
+  : {};
 
 const program = new Command();
 const commands = new Commands();
 
 program
   .name("fluent-gen")
-  .description(packageJson.description)
-  .version(packageJson.version);
+  .description(packageJson.description || "TypeScript type extraction system")
+  .version(packageJson.version || "0.0.1");
 
 program
   .command("generate")
@@ -31,7 +45,9 @@ program
   .option("-o, --output <path>", "Output file path")
   .option("-c, --config <path>", "Path to configuration file")
   .option("-t, --tsconfig <path>", "Path to tsconfig.json")
+  .option("-p, --plugins <paths...>", "Path(s) to plugin files")
   .option("-d, --defaults", "Use default values for optional properties")
+  .option("--dry-run", "Preview what would be generated without writing files")
   .option("--no-comments", "Don't include JSDoc comments in generated code")
   .action(async (file, type, options) => {
     try {
@@ -46,7 +62,9 @@ program
   .command("batch")
   .description("Generate builders from configuration file")
   .option("-c, --config <path>", "Path to configuration file")
-  .option("-d, --dry", "Dry run without writing files")
+  .option("-p, --plugins <paths...>", "Path(s) to plugin files")
+  .option("-d, --dry-run", "Dry run without writing files")
+  .option("--parallel", "Generate builders in parallel")
   .action(async (options) => {
     try {
       await commands.batch(options);
@@ -65,7 +83,15 @@ program
     "Output file pattern (use {file} and {type} placeholders)",
   )
   .option("-c, --config <path>", "Path to configuration file")
+  .option("-p, --plugins <paths...>", "Path(s) to plugin files")
+  .option("-e, --exclude <patterns...>", "Patterns to exclude from scanning")
+  .option(
+    "-t, --types <types>",
+    "Comma-separated list of type names to include",
+  )
   .option("-i, --interactive", "Interactive mode to select types")
+  .option("--dry-run", "Preview discovered types without generating")
+  .option("--ignore-private", "Ignore non-exported interfaces")
   .action(async (pattern, options) => {
     try {
       await commands.scan(pattern, options);
@@ -78,10 +104,60 @@ program
 program
   .command("init")
   .description("Initialize a configuration file")
-  .action(async () => {
+  .option(
+    "-f, --format <format>",
+    "Configuration format (json, yaml, js)",
+    "json",
+  )
+  .option("-i, --interactive", "Interactive configuration setup", true)
+  .option(
+    "--template <name>",
+    "Use a configuration template (basic, advanced, monorepo)",
+  )
+  .option("--overwrite", "Overwrite existing configuration")
+  .action(async (options) => {
     const inquirer = (await import("inquirer")).default;
+    const { existsSync, writeFileSync } = await import("node:fs");
+
+    // Check if config already exists
+    const configFiles = [
+      ".fluentgenrc.json",
+      ".fluentgenrc.yaml",
+      ".fluentgenrc.js",
+    ];
+    const existingConfig = configFiles.find((file) => existsSync(file));
+
+    if (existingConfig && !options.overwrite) {
+      console.error(
+        chalk.red(
+          `Configuration file ${existingConfig} already exists. Use --overwrite to replace it.`,
+        ),
+      );
+      process.exit(1);
+    }
 
     console.log(chalk.blue("Initializing fluent-gen configuration...\n"));
+
+    // Use template if specified
+    if (options.template) {
+      const config = await commands.getTemplate(options.template);
+      console.log(chalk.green(`✓ Using ${options.template} template\n`));
+
+      const configFile =
+        options.format === "js" ? "fluentgen.config.js" : ".fluentgenrc.json";
+
+      if (options.format === "js") {
+        const jsContent = `module.exports = ${JSON.stringify(config, null, 2)};\n`;
+        writeFileSync(configFile, jsContent);
+      } else {
+        writeFileSync(configFile, JSON.stringify(config, null, 2));
+      }
+
+      console.log(chalk.green(`\n✓ Configuration file created: ${configFile}`));
+      console.log(chalk.gray("\nYou can now run:"));
+      console.log(chalk.cyan("  fluent-gen batch"));
+      return;
+    }
 
     const answers = await inquirer.prompt([
       {
@@ -130,14 +206,20 @@ program
       },
       targets: [],
       patterns: [],
+      plugins: [],
     };
 
-    const { writeFileSync } = await import("node:fs");
-    writeFileSync(".fluentgenrc.json", JSON.stringify(config, null, 2));
+    const configFile =
+      options.format === "js" ? "fluentgen.config.js" : ".fluentgenrc.json";
 
-    console.log(
-      chalk.green("\n Configuration file created: .fluentgenrc.json"),
-    );
+    if (options.format === "js") {
+      const jsContent = `module.exports = ${JSON.stringify(config, null, 2)};\n`;
+      writeFileSync(configFile, jsContent);
+    } else {
+      writeFileSync(configFile, JSON.stringify(config, null, 2));
+    }
+
+    console.log(chalk.green(`\n✓ Configuration file created: ${configFile}`));
     console.log(
       chalk.gray(
         "\nYou can now add targets to the configuration file and run:",

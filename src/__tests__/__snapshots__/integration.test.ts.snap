@@ -159,7 +159,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Address } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { Address } from "./src/__tests__/fixtures/simple.ts";
 
 export interface AddressBuilderMethods {
   /** Street name */
@@ -378,7 +378,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { ApiResponse, User } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { ApiResponse, User } from "./src/__tests__/fixtures/simple.ts";
 
 export interface ApiResponseBuilderMethods<T = any, U extends User = User> {
   withData(value: T): ApiResponseBuilder<T, U>;
@@ -597,7 +597,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { Point } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { Point } from "./src/__tests__/fixtures/simple.ts";
 
 export interface PointBuilderMethods {
   withX(value: number): PointBuilder;
@@ -814,7 +814,7 @@ export function createInspectMethod(builderName: string, properties: Record<stri
   FLUENT_BUILDER_SYMBOL,
   createInspectMethod
 } from "./common.js";
-import type { Address } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { Address } from "./src/__tests__/fixtures/simple.ts";
 
 export interface AddressBuilderMethods {
   /** Street name */
@@ -878,7 +878,7 @@ export function address(initial?: Partial<Address>): AddressBuilder {
   FLUENT_BUILDER_SYMBOL,
   createInspectMethod
 } from "./common.js";
-import type { User, Address } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { User, Address } from "./src/__tests__/fixtures/simple.ts";
 
 export interface UserBuilderMethods {
   /** Unique identifier */
@@ -950,7 +950,7 @@ export function user(initial?: Partial<User>): UserBuilder {
   FLUENT_BUILDER_SYMBOL,
   createInspectMethod
 } from "./common.js";
-import type { Point } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { Point } from "./src/__tests__/fixtures/simple.ts";
 
 export interface PointBuilderMethods {
   withX(value: number): PointBuilder;
@@ -1164,7 +1164,7 @@ function createInspectMethod(builderName: string, properties: Record<string, unk
 }
 
 
-import type { User, Address } from "/home/rcampos/repos/gen/src/__tests__/fixtures/simple.ts";
+import type { User, Address } from "./src/__tests__/fixtures/simple.ts";
 
 export interface UserBuilderMethods {
   /** Unique identifier */

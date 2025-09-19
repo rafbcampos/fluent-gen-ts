@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    setupFiles: ["./vitest.setup.ts"],
     coverage: {
       enabled: true,
       provider: "v8",
@@ -19,6 +20,7 @@ export default defineConfig({
         "**/*.generated/**",
         ".generated/**",
         "**/generated/**",
+        ".vitepress/**",
       ],
       thresholds: {
         global: {
@@ -31,3 +33,4 @@ export default defineConfig({
     },
   },
 });
+

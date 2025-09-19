@@ -44,14 +44,13 @@ fluent-gen generate <file> <type> [options]
 
 | Option | Alias | Type | Description |
 |--------|-------|------|-------------|
-| `--output` | `-o` | string | Output directory for generated files |
-| `--no-defaults` | | boolean | Disable default value generation |
-| `--no-comments` | | boolean | Disable JSDoc comment preservation |
-| `--context-type` | | string | Custom context type name |
-| `--import-path` | | string | Import path for context type |
-| `--indent-size` | | number | Number of spaces for indentation |
-| `--use-tabs` | | boolean | Use tabs instead of spaces |
-| `--tsconfig` | | string | Path to TypeScript configuration file |
+| `--output` | `-o` | string | Output file path |
+| `--config` | `-c` | string | Path to configuration file |
+| `--tsconfig` | `-t` | string | Path to tsconfig.json |
+| `--plugins` | `-p` | string[] | Path(s) to plugin files |
+| `--defaults` | `-d` | boolean | Use default values for optional properties |
+| `--dry-run` | | boolean | Preview what would be generated without writing files |
+| `--no-comments` | | boolean | Don't include JSDoc comments in generated code |
 
 ### Examples
 
@@ -61,39 +60,39 @@ fluent-gen generate <file> <type> [options]
 # Generate a User builder
 fluent-gen generate ./src/types.ts User
 
-# Generate with custom output directory
-fluent-gen generate ./src/models/user.ts User --output ./src/builders
+# Generate with custom output file
+fluent-gen generate ./src/models/user.ts User --output ./src/builders/user.builder.ts
 
-# Generate without default values
-fluent-gen generate ./src/types.ts Product --no-defaults
+# Generate with default values enabled
+fluent-gen generate ./src/types.ts Product --defaults
 ```
 
 #### Advanced Usage
 
 ```bash
-# Custom context type
+# With plugins
 fluent-gen generate ./src/types.ts Order \
-  --context-type "BuildContext" \
-  --import-path "../context"
+  --plugins ./plugins/custom-plugin.js
 
-# Custom formatting
+# Dry run to preview generated code
 fluent-gen generate ./src/types.ts Config \
-  --indent-size 4 \
-  --use-tabs
+  --dry-run
 
 # Multiple options
 fluent-gen generate ./src/api/types.ts ApiResponse \
-  --output ./generated/builders \
+  --output ./generated/builders/api-response.builder.ts \
   --no-comments \
-  --tsconfig ./tsconfig.build.json
+  --tsconfig ./tsconfig.build.json \
+  --config ./fluent-gen.config.js
 ```
 
 #### Generated Output
 
 ```bash
 $ fluent-gen generate ./src/types.ts User
-✓ Generating builder for User
-✓ Generated: ./src/User.builder.ts
+- Loading configuration...
+✔ ✓ Generation complete
+[Generated builder code output would appear here]
 ```
 
 ## batch
@@ -111,11 +110,9 @@ fluent-gen batch [options]
 | Option | Alias | Type | Description |
 |--------|-------|------|-------------|
 | `--config` | `-c` | string | Path to configuration file |
-| `--watch` | `-w` | boolean | Watch for changes and regenerate |
-| `--dry-run` | | boolean | Show what would be generated without writing files |
+| `--plugins` | `-p` | string[] | Path(s) to plugin files |
+| `--dry-run` | `-d` | boolean | Dry run without writing files |
 | `--parallel` | | boolean | Generate builders in parallel |
-| `--output` | `-o` | string | Override output directory |
-| `--verbose` | `-v` | boolean | Show detailed output |
 
 ### Examples
 
@@ -128,18 +125,8 @@ fluent-gen batch
 # Use custom config file
 fluent-gen batch --config ./custom.config.json
 
-# Show detailed output
-fluent-gen batch --verbose
-```
-
-#### Watch Mode
-
-```bash
-# Watch for changes and regenerate
-fluent-gen batch --watch
-
-# Watch with custom config
-fluent-gen batch --config ./dev.config.json --watch
+# With plugins
+fluent-gen batch --plugins ./plugins/my-plugin.js
 ```
 
 #### Advanced Options
@@ -151,22 +138,19 @@ fluent-gen batch --dry-run
 # Parallel generation for performance
 fluent-gen batch --parallel
 
-# Override output directory
-fluent-gen batch --output ./dist/builders
+# Multiple plugins
+fluent-gen batch --plugins ./plugins/plugin1.js ./plugins/plugin2.js
+
+# Custom config with parallel processing
+fluent-gen batch --config ./build.config.json --parallel
 ```
 
 #### Sample Output
 
 ```bash
-$ fluent-gen batch --verbose
-✓ Loading configuration from .fluentgenrc.json
-✓ Found 5 targets to generate
-✓ Generating User builder from ./src/models/user.ts
-✓ Generating Product builder from ./src/models/product.ts
-✓ Generating Order builder from ./src/models/order.ts
-✓ Generating Payment builder from ./src/models/payment.ts
-✓ Generating Customer builder from ./src/models/customer.ts
-✓ Generated 5 builders in 1.2s
+$ fluent-gen batch
+- Loading configuration...
+✔ ✓ Batch generation complete: 5 succeeded, 0 failed
 ```
 
 ## scan
@@ -187,12 +171,14 @@ fluent-gen scan <pattern> [options]
 
 | Option | Alias | Type | Description |
 |--------|-------|------|-------------|
-| `--exclude` | `-e` | string | Patterns to exclude from scanning |
-| `--output` | `-o` | string | Output directory for generated files |
+| `--output` | `-o` | string | Output file pattern (use {file} and {type} placeholders) |
+| `--config` | `-c` | string | Path to configuration file |
+| `--plugins` | `-p` | string[] | Path(s) to plugin files |
+| `--exclude` | `-e` | string[] | Patterns to exclude from scanning |
 | `--types` | `-t` | string | Comma-separated list of type names to include |
+| `--interactive` | `-i` | boolean | Interactive mode to select types |
+| `--dry-run` | | boolean | Preview discovered types without generating |
 | `--ignore-private` | | boolean | Ignore non-exported interfaces |
-| `--recursive` | `-r` | boolean | Scan directories recursively |
-| `--dry-run` | | boolean | Show discovered types without generating |
 
 ### Examples
 
@@ -206,7 +192,7 @@ fluent-gen scan "src/**/*.ts"
 fluent-gen scan "src/models/*.ts"
 
 # Scan with exclusions
-fluent-gen scan "src/**/*.ts" --exclude "**/*.test.ts,**/*.spec.ts"
+fluent-gen scan "src/**/*.ts" --exclude "**/*.test.ts" "**/*.spec.ts"
 ```
 
 #### Filtered Scanning
@@ -215,23 +201,32 @@ fluent-gen scan "src/**/*.ts" --exclude "**/*.test.ts,**/*.spec.ts"
 # Only generate specific types
 fluent-gen scan "src/**/*.ts" --types "User,Product,Order"
 
-# Ignore private interfaces
-fluent-gen scan "src/**/*.ts" --ignore-private
+# Interactive mode to select types
+fluent-gen scan "src/**/*.ts" --interactive
 
 # Preview discovered types
 fluent-gen scan "src/**/*.ts" --dry-run
+
+# With custom output pattern
+fluent-gen scan "src/**/*.ts" --output "./builders/{type}.builder.ts"
 ```
 
 #### Sample Output
 
 ```bash
 $ fluent-gen scan "src/models/*.ts" --dry-run
-✓ Scanning src/models/*.ts
-✓ Found 3 files to process:
-  - src/models/user.ts (2 interfaces: User, UserProfile)
-  - src/models/product.ts (1 interface: Product)
-  - src/models/order.ts (3 interfaces: Order, OrderItem, OrderStatus)
-✓ Total: 6 interfaces discovered
+- Scanning for files matching src/models/*.ts...
+✔ Found 1 file(s)
+- Scanning src/models/user.ts...
+✔   ✓ Found 3 type(s) in src/models/user.ts
+    - User
+    - UserProfile
+    - UserSettings
+
+✓ Dry-run complete. Found 3 type(s):
+  User (src/models/user.ts)
+  UserProfile (src/models/user.ts)
+  UserSettings (src/models/user.ts)
 ```
 
 ## init
@@ -248,10 +243,10 @@ fluent-gen init [options]
 
 | Option | Alias | Type | Description |
 |--------|-------|------|-------------|
-| `--format` | `-f` | string | Configuration format (json, yaml, js) |
-| `--interactive` | `-i` | boolean | Interactive configuration setup |
+| `--format` | `-f` | string | Configuration format (json, yaml, js) (default: "json") |
+| `--interactive` | `-i` | boolean | Interactive configuration setup (default: true) |
+| `--template` | | string | Use a configuration template (basic, advanced, monorepo) |
 | `--overwrite` | | boolean | Overwrite existing configuration |
-| `--template` | | string | Use a configuration template |
 
 ### Examples
 
@@ -274,7 +269,7 @@ fluent-gen init --interactive
 # Use a specific template
 fluent-gen init --template monorepo
 
-# Available templates: basic, advanced, monorepo, testing
+# Available templates: basic, advanced, monorepo
 fluent-gen init --template advanced --format js
 ```
 
@@ -282,13 +277,22 @@ fluent-gen init --template advanced --format js
 
 ```bash
 $ fluent-gen init --interactive
-? Configuration format: JSON
-? Output directory: ./src/builders
-? Use default values: Yes
-? Add JSDoc comments: Yes
-? TypeScript config path: ./tsconfig.json
-? Watch mode in development: Yes
-✓ Created .fluentgenrc.json
+🚀 Welcome to fluent-gen configuration setup!
+
+? How would you like to set up your configuration?
+  ❯ 🎯 Quick setup (recommended defaults)
+    ⚙️  Custom setup (configure everything)
+    📋 Start from template
+
+✓ Configuration file created: .fluentgenrc.json
+
+📚 Next steps:
+
+  1. Generate a single builder:
+     fluent-gen generate <file> <type>
+
+  For more information:
+     fluent-gen --help
 ```
 
 ## Global Options
@@ -299,9 +303,6 @@ These options are available for all commands:
 |--------|-------|------|-------------|
 | `--help` | `-h` | boolean | Show help information |
 | `--version` | `-V` | boolean | Show version number |
-| `--silent` | | boolean | Suppress all output except errors |
-| `--debug` | | boolean | Enable debug logging |
-| `--no-color` | | boolean | Disable colored output |
 
 ### Examples
 
@@ -312,39 +313,9 @@ fluent-gen generate --help
 # Show version
 fluent-gen --version
 
-# Debug mode
-fluent-gen batch --debug
-
-# Silent mode for CI
-fluent-gen batch --silent
+# Show general help
+fluent-gen --help
 ```
-
-## Environment Variables
-
-Override CLI options with environment variables:
-
-```bash
-# Set output directory
-export FLUENT_GEN_OUTPUT_DIR=./generated
-fluent-gen generate ./src/types.ts User
-
-# Enable debug mode
-export FLUENT_GEN_DEBUG=true
-fluent-gen batch
-
-# Custom TypeScript config
-export FLUENT_GEN_TS_CONFIG=./tsconfig.build.json
-fluent-gen scan "src/**/*.ts"
-```
-
-### Available Environment Variables
-
-- `FLUENT_GEN_OUTPUT_DIR` - Default output directory
-- `FLUENT_GEN_CONFIG` - Default configuration file path
-- `FLUENT_GEN_DEBUG` - Enable debug logging
-- `FLUENT_GEN_SILENT` - Silent mode
-- `FLUENT_GEN_NO_COLOR` - Disable colors
-- `FLUENT_GEN_TS_CONFIG` - TypeScript configuration path
 
 ## Exit Codes
 
@@ -352,10 +323,6 @@ The CLI uses standard exit codes:
 
 - `0` - Success
 - `1` - General error
-- `2` - Invalid command or arguments
-- `3` - Configuration error
-- `4` - TypeScript compilation error
-- `5` - File system error
 
 ## Integration with Build Tools
 
@@ -365,8 +332,9 @@ The CLI uses standard exit codes:
 {
   "scripts": {
     "gen": "fluent-gen batch",
-    "gen:watch": "fluent-gen batch --watch",
+    "gen:parallel": "fluent-gen batch --parallel",
     "gen:user": "fluent-gen generate ./src/types.ts User",
+    "gen:dry-run": "fluent-gen batch --dry-run",
     "prebuild": "npm run gen",
     "build": "tsc && npm run gen"
   }
@@ -403,7 +371,7 @@ jobs:
           node-version: '18'
 
       - run: npm ci
-      - run: npx fluent-gen batch --silent
+      - run: npx fluent-gen batch
 
       # Check if generated files are up to date
       - run: git diff --exit-code
@@ -418,8 +386,8 @@ jobs:
 gen:
 	npx fluent-gen batch
 
-gen-watch:
-	npx fluent-gen batch --watch
+gen-parallel:
+	npx fluent-gen batch --parallel
 
 gen-clean:
 	rm -rf src/builders/*.builder.ts
@@ -450,20 +418,22 @@ fluent-gen scan "src/**/*.ts" --types "User,Product"
 fluent-gen scan "src/**/*.ts" --exclude "**/*.{test,spec}.ts"
 ```
 
-### Watch Mode Optimization
+### Configuration Optimization
 
-Optimize watch mode for better performance:
+Optimize your configuration for better performance:
 
 ```json
 {
-  "watch": {
-    "debounce": 300,
-    "ignore": [
-      "**/node_modules/**",
-      "**/*.test.ts",
-      "**/*.spec.ts"
-    ]
-  }
+  "generator": {
+    "outputDir": "./src/builders",
+    "useDefaults": true,
+    "addComments": false
+  },
+  "exclude": [
+    "**/node_modules/**",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
 }
 ```
 
@@ -502,21 +472,7 @@ Error: TypeScript compilation failed
 Solutions:
 - Fix TypeScript errors in source files
 - Check `tsconfig.json` configuration
-- Use `--skip-type-check` for debugging
-
-### Debug Mode
-
-Enable debug logging for troubleshooting:
-
-```bash
-fluent-gen generate ./src/types.ts User --debug
-```
-
-This provides detailed information about:
-- File resolution
-- Type parsing
-- Import resolution
-- Code generation steps
+- Verify the interface exists and is exported
 
 ## Next Steps
 
