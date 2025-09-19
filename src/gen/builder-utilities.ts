@@ -138,8 +138,10 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   readonly [FLUENT_BUILDER_SYMBOL] = true;
   /** Storage for property values */
   protected values: Partial<T> = {};
-  /** Storage for nested builders */
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
   /** Optional build context */
   protected context?: C;
 
@@ -159,21 +161,63 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
    * @param value - The value or builder to set
    */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      // Check if array contains any builders
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(`${keyStr}[${index}]`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(`${keyStr}[${index}]`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
-        // Safe assignment: we've validated it's not a builder array
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
-      // Safe assignment: we've validated it's not a builder
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
+  }
+
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
   }
 
   /**
@@ -187,8 +231,32 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
     // Apply explicitly set values
     Object.assign(result, this.values);
 
-    // Recursively build nested builders
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = `${key}[${index}]`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
@@ -219,11 +287,34 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   }
 
   /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
+  }
+
+  /**
    * Checks if a property has been set
    * @param key - The property key to check
    */
   public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
   }
 
   /**

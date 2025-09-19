@@ -36,7 +36,7 @@ export class TypeStringGenerator {
       case TypeKind.Function:
         return typeInfo.name ?? "Function";
       case TypeKind.Tuple:
-        return `[${this.typeInfoToString(typeInfo.elementType)}]`;
+        return `[${typeInfo.elements.map(element => this.typeInfoToString(element)).join(", ")}]`;
       case TypeKind.Enum:
         return typeInfo.name;
       case TypeKind.Unknown:

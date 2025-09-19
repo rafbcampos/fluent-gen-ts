@@ -14,7 +14,7 @@ import {
 import {
   getCommonFileTemplate,
   getSingleFileUtilitiesTemplate,
-} from "./static-content.js";
+} from "./template-generator.js";
 import { ImportGenerator } from "./import-generator.js";
 import { TypeStringGenerator } from "./type-string-generator.js";
 import { DefaultValueGenerator } from "./default-value-generator.js";
@@ -159,15 +159,9 @@ export class BuilderGenerator {
       this.generateFactoryFunction(name, typeInfo),
     );
 
-    // Generate nested builders
-    for (const dep of resolvedType.dependencies) {
-      if (!this.generatedBuilders.has(dep.name)) {
-        const depCode = await this.generateBuilder(dep);
-        if (depCode) {
-          parts.push(depCode);
-        }
-      }
-    }
+    // Do NOT generate nested builders automatically
+    // Each type should have its builder generated explicitly when requested
+    // Properties will accept FluentBuilder<T> | T to handle both cases
 
     return parts.filter(Boolean).join("\n\n");
   }
@@ -290,7 +284,7 @@ ${buildMethod}
       genericConstraints,
     );
 
-    // Apply legacy plugin transformations for backward compatibility
+    // Apply plugin transformations if available
     for (const plugin of this.pluginManager.getPlugins()) {
       if (plugin.transformBuildMethod) {
         const context: BuildMethodContext = {

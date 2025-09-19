@@ -15,6 +15,10 @@ export interface DefaultGeneratorConfig {
   readonly useDefaults: boolean;
   /** Custom default generators by type */
   readonly customDefaults?: Map<string, () => string>;
+  /** Maximum depth for recursive default generation */
+  readonly maxDepth?: number;
+  /** Track visited types to prevent infinite recursion */
+  readonly visitedTypes?: Set<string>;
 }
 
 /**
@@ -25,31 +29,49 @@ export class DefaultValueGenerator {
    * Generates a defaults object for a type
    * @param typeInfo - The type information
    * @param config - Default generation configuration
+   * @param depth - Current recursion depth
    */
   generateDefaultsObject(
     typeInfo: TypeInfo,
     config: DefaultGeneratorConfig,
+    depth = 0,
   ): string | null {
     if (!config.useDefaults || !this.isObjectType(typeInfo)) {
       return null;
     }
 
+    const maxDepth = config.maxDepth ?? 5;
+    if (depth > maxDepth) {
+      return "{}";
+    }
+
+    const visited = config.visitedTypes ?? new Set<string>();
+    const typeKey = this.getTypeKey(typeInfo);
+
+    // Check for circular references
+    if (visited.has(typeKey)) {
+      return "{}";
+    }
+
+    visited.add(typeKey);
     const defaults: string[] = [];
 
     for (const prop of typeInfo.properties) {
       // Only generate defaults for required properties
       if (prop.optional) continue;
 
-      // Skip object and reference types that would cause TypeScript issues
-      if (this.shouldSkipDefault(prop.type)) {
-        continue;
-      }
+      const defaultValue = this.getDefaultValueForType(
+        prop.type,
+        { ...config, visitedTypes: visited },
+        depth + 1,
+      );
 
-      const defaultValue = this.getDefaultValueForType(prop.type, config);
       if (defaultValue !== "undefined") {
         defaults.push(this.formatDefaultProperty(prop.name, defaultValue));
       }
     }
+
+    visited.delete(typeKey);
 
     if (defaults.length === 0) return null;
     return `{ ${defaults.join(", ")} }`;
@@ -59,10 +81,12 @@ export class DefaultValueGenerator {
    * Generates default value for a specific type
    * @param typeInfo - The type to generate a default for
    * @param config - Default generation configuration
+   * @param depth - Current recursion depth
    */
   getDefaultValueForType(
     typeInfo: TypeInfo,
     config?: DefaultGeneratorConfig,
+    depth = 0,
   ): string {
     // Check for custom defaults first
     if (config?.customDefaults && typeInfo.kind === TypeKind.Primitive) {
@@ -72,29 +96,109 @@ export class DefaultValueGenerator {
       }
     }
 
+    const maxDepth = config?.maxDepth ?? 5;
+    if (depth > maxDepth) {
+      // Return safe defaults at max depth
+      switch (typeInfo.kind) {
+        case TypeKind.Object:
+        case TypeKind.Reference:
+        case TypeKind.Intersection:
+          return "{}";
+        case TypeKind.Array:
+        case TypeKind.Tuple:
+          return "[]";
+        default:
+          return "undefined";
+      }
+    }
+
     switch (typeInfo.kind) {
       case TypeKind.Primitive:
         return this.getPrimitiveDefault(typeInfo.name);
+
       case TypeKind.Array:
+        // Generate array with default element if possible
+        if (depth < maxDepth - 1) {
+          const elementDefault = this.getDefaultValueForType(
+            typeInfo.elementType,
+            config,
+            depth + 1,
+          );
+          // Only generate non-empty array for primitives and literals
+          if (
+            elementDefault !== "undefined" &&
+            elementDefault !== "{}" &&
+            elementDefault !== "[]" &&
+            (typeInfo.elementType.kind === TypeKind.Primitive ||
+              typeInfo.elementType.kind === TypeKind.Literal)
+          ) {
+            return `[${elementDefault}]`;
+          }
+        }
         return "[]";
+
       case TypeKind.Function:
         return "() => undefined";
+
       case TypeKind.Literal:
         return this.getLiteralDefault(typeInfo);
+
       case TypeKind.Union:
-        return this.getUnionDefault(typeInfo);
+        return this.getUnionDefault(typeInfo, config, depth);
+
       case TypeKind.Object:
+        // Generate nested object defaults
+        if (this.isObjectType(typeInfo) && typeInfo.properties.length > 0) {
+          const objectDefaults = this.generateObjectDefaults(
+            typeInfo,
+            config,
+            depth + 1,
+          );
+          return objectDefaults || "{}";
+        }
         return "{}";
+
       case TypeKind.Reference:
+        // For references, try to generate a minimal valid object
+        // This would need access to the referenced type definition
+        // For now, return empty object
         return "{}";
+
       case TypeKind.Generic:
         return "undefined";
+
       case TypeKind.Tuple:
+        // Generate tuple with default elements
+        if (depth < maxDepth - 1 && this.isTupleType(typeInfo)) {
+          const defaults = typeInfo.elements.map((element) =>
+            this.getDefaultValueForType(element, config, depth + 1),
+          );
+          return `[${defaults.join(", ")}]`;
+        }
         return "[]";
+
       case TypeKind.Intersection:
+        // For intersections, merge defaults from all types
+        if (this.isIntersectionType(typeInfo) && typeInfo.intersectionTypes) {
+          const merged = this.mergeIntersectionDefaults(
+            typeInfo.intersectionTypes,
+            config,
+            depth + 1,
+          );
+          return merged || "{}";
+        }
         return "{}";
+
       case TypeKind.Enum:
+        // Return first enum value if available
+        if (this.isEnumType(typeInfo) && typeInfo.values && typeInfo.values.length > 0) {
+          const firstValue = typeInfo.values[0];
+          return typeof firstValue === "string"
+            ? `"${firstValue}"`
+            : String(firstValue);
+        }
         return "undefined";
+
       case TypeKind.Unknown:
       default:
         return "undefined";
@@ -143,6 +247,8 @@ export class DefaultValueGenerator {
    */
   private getUnionDefault(
     typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>,
+    config?: DefaultGeneratorConfig,
+    depth = 0,
   ): string {
     // For unions, pick the first non-undefined type
     if (typeInfo.unionTypes && typeInfo.unionTypes.length > 0) {
@@ -150,7 +256,7 @@ export class DefaultValueGenerator {
         (t) => !(t.kind === TypeKind.Primitive && t.name === "undefined"),
       );
       if (firstNonUndefined) {
-        return this.getDefaultValueForType(firstNonUndefined);
+        return this.getDefaultValueForType(firstNonUndefined, config, depth);
       }
     }
     return "undefined";
@@ -168,10 +274,83 @@ export class DefaultValueGenerator {
   }
 
   /**
-   * Determines if a type should skip default generation
+   * Generates defaults for an object type
    */
-  private shouldSkipDefault(type: TypeInfo): boolean {
-    return type.kind === TypeKind.Object || type.kind === TypeKind.Reference;
+  private generateObjectDefaults(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
+    config?: DefaultGeneratorConfig,
+    depth = 0,
+  ): string | null {
+    const defaults: string[] = [];
+    const visited = config?.visitedTypes ?? new Set<string>();
+
+    for (const prop of typeInfo.properties) {
+      if (prop.optional) continue;
+
+      const defaultValue = this.getDefaultValueForType(
+        prop.type,
+        { ...config, visitedTypes: visited } as DefaultGeneratorConfig,
+        depth,
+      );
+
+      if (defaultValue !== "undefined") {
+        defaults.push(this.formatDefaultProperty(prop.name, defaultValue));
+      }
+    }
+
+    if (defaults.length === 0) return null;
+    return `{ ${defaults.join(", ")} }`;
+  }
+
+  /**
+   * Merges defaults from intersection types
+   */
+  private mergeIntersectionDefaults(
+    types: readonly TypeInfo[],
+    config?: DefaultGeneratorConfig,
+    depth = 0,
+  ): string | null {
+    const allDefaults: Record<string, string> = {};
+
+    for (const type of types) {
+      if (type.kind === TypeKind.Object && this.isObjectType(type)) {
+        // Collect properties directly instead of parsing strings
+        for (const prop of type.properties) {
+          if (prop.optional) continue;
+
+          const defaultValue = this.getDefaultValueForType(
+            prop.type,
+            config,
+            depth,
+          );
+
+          if (defaultValue !== "undefined") {
+            allDefaults[prop.name] = defaultValue;
+          }
+        }
+      }
+    }
+
+    if (Object.keys(allDefaults).length === 0) return null;
+
+    const props = Object.entries(allDefaults).map(
+      ([key, value]) => this.formatDefaultProperty(key, value),
+    );
+
+    return `{ ${props.join(", ")} }`;
+  }
+
+  /**
+   * Gets a unique key for a type to track circular references
+   */
+  private getTypeKey(typeInfo: TypeInfo): string {
+    if (typeInfo.kind === TypeKind.Object && "name" in typeInfo) {
+      return `${typeInfo.kind}:${typeInfo.name}`;
+    }
+    if (typeInfo.kind === TypeKind.Reference && "name" in typeInfo) {
+      return `${typeInfo.kind}:${typeInfo.name}`;
+    }
+    return `${typeInfo.kind}:anonymous`;
   }
 
   /**
@@ -181,6 +360,33 @@ export class DefaultValueGenerator {
     typeInfo: TypeInfo,
   ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Object }> {
     return typeInfo.kind === TypeKind.Object;
+  }
+
+  /**
+   * Type guard to check if typeInfo is a tuple type
+   */
+  private isTupleType(
+    typeInfo: TypeInfo,
+  ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Tuple }> {
+    return typeInfo.kind === TypeKind.Tuple;
+  }
+
+  /**
+   * Type guard to check if typeInfo is an intersection type
+   */
+  private isIntersectionType(
+    typeInfo: TypeInfo,
+  ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Intersection }> {
+    return typeInfo.kind === TypeKind.Intersection;
+  }
+
+  /**
+   * Type guard to check if typeInfo is an enum type
+   */
+  private isEnumType(
+    typeInfo: TypeInfo,
+  ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Enum }> {
+    return typeInfo.kind === TypeKind.Enum;
   }
 }
 

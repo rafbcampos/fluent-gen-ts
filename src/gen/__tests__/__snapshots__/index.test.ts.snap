@@ -4,26 +4,52 @@ exports[`FluentGen > complex types > should generate builder for ComplexType wit
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -31,11 +57,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -44,12 +72,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -62,6 +102,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -89,52 +135,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -143,17 +292,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -165,13 +356,13 @@ export interface ComplexTypeBuilderMethods {
   withUnion(value: string | number | undefined | undefined): ComplexTypeBuilder;
   withIntersection(value: User & object): ComplexTypeBuilder;
   withArray(value: Array<string>): ComplexTypeBuilder;
-  withTuple(value: [string]): ComplexTypeBuilder;
+  withTuple(value: [string, number, boolean]): ComplexTypeBuilder;
   withLiteral(value: "foo" | "bar" | 42): ComplexTypeBuilder;
   withNested(value: object): ComplexTypeBuilder;
 }
 
 export class ComplexTypeBuilder extends FluentBuilderBase<ComplexType> implements ComplexTypeBuilderMethods, FluentBuilder<ComplexType, BaseBuildContext> {
-  private static readonly defaults: Record<string, unknown> = { union: "", intersection: {}, array: [], tuple: [], literal: "foo" };
+  private static readonly defaults: Record<string, unknown> = { union: "", intersection: { id: "", name: "", address: { street: "", city: "", country: "" }, role: "" }, array: [""], tuple: ["", 0, false], literal: "foo", nested: { deep: { value: "" } } };
 
   constructor(initial?: Partial<ComplexType>) {
     super(initial);
@@ -193,7 +384,7 @@ export class ComplexTypeBuilder extends FluentBuilderBase<ComplexType> implement
   }
 
 
-  withTuple(value: [string]): ComplexTypeBuilder {
+  withTuple(value: [string, number, boolean]): ComplexTypeBuilder {
     return this.set("tuple", value);
   }
 
@@ -235,26 +426,52 @@ exports[`FluentGen > complex types > should generate builder for Result union ty
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -262,11 +479,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -275,12 +494,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -293,6 +524,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -320,52 +557,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -374,17 +714,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -428,26 +810,52 @@ exports[`FluentGen > generateBuilder > should generate builder for Address type 
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -455,11 +863,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -468,12 +878,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -486,6 +908,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -513,52 +941,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -567,17 +1098,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -647,26 +1220,52 @@ exports[`FluentGen > generateBuilder > should generate builder for User type wit
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -674,11 +1273,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -687,12 +1288,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -705,6 +1318,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -732,52 +1351,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -786,17 +1508,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -816,7 +1580,7 @@ export interface UserBuilderMethods {
 }
 
 export class UserBuilder extends FluentBuilderBase<User> implements UserBuilderMethods, FluentBuilder<User, BaseBuildContext> {
-  private static readonly defaults: Record<string, unknown> = { id: "", name: "" };
+  private static readonly defaults: Record<string, unknown> = { id: "", name: "", address: { street: "", city: "", country: "" } };
 
   constructor(initial?: Partial<User>) {
     super(initial);
@@ -874,26 +1638,52 @@ exports[`FluentGen > generateBuilder > should generate builder for generic ApiRe
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -901,11 +1691,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -914,12 +1706,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -932,6 +1736,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -959,52 +1769,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -1013,17 +1926,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -1093,26 +2048,52 @@ exports[`FluentGen > generateBuilder with JSDoc > should include JSDoc comments 
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -1120,11 +2101,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -1133,12 +2116,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -1151,6 +2146,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -1178,52 +2179,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -1232,17 +2336,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -1312,26 +2458,52 @@ exports[`FluentGen > generateBuilder with JSDoc > should not include JSDoc comme
 {
   "ok": true,
   "value": "
-// === Fluent Builder Utilities ===
 /**
- * Common utilities for fluent builders
- * Auto-generated - do not modify manually
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
  */
 
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -1339,11 +2511,13 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -1352,12 +2526,24 @@ function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildCont
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -1370,6 +2556,12 @@ function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -1397,52 +2589,155 @@ function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -1451,17 +2746,59 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }
@@ -1522,23 +2859,54 @@ exports[`FluentGen > generateMultiple > should generate builders for multiple ty
   "value": Map {
     "common.ts" => "/**
  * Common utilities for fluent builders
- * Auto-generated - do not modify manually
  */
 
+/**
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
+ */
+
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 export const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 export interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 export interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -1546,11 +2914,13 @@ export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBu
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -1559,12 +2929,24 @@ export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBu
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 export function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 export function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -1577,6 +2959,12 @@ export function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 export function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -1604,52 +2992,155 @@ export function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -1658,17 +3149,59 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 export function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }",
@@ -1804,23 +3337,54 @@ exports[`FluentGen > generateMultiple > should handle empty type list 1`] = `
   "value": Map {
     "common.ts" => "/**
  * Common utilities for fluent builders
- * Auto-generated - do not modify manually
  */
 
+/**
+ * Runtime utilities for fluent builders
+ * Core functionality for builder pattern implementation
+ */
+
+/**
+ * Unique symbol for identifying fluent builders
+ * Used across module boundaries for proper type identification
+ */
 export const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
 
+/**
+ * Base context interface for builder operations
+ * Provides information about the builder's position in the object hierarchy
+ */
 export interface BaseBuildContext {
+  /** Parent builder identifier */
   readonly parentId?: string;
+  /** Name of the parameter being built */
   readonly parameterName?: string;
+  /** Index in array if building array elements */
   readonly index?: number;
+  /** Additional context properties */
   readonly [key: string]: unknown;
 }
 
+/**
+ * Core fluent builder interface
+ * All generated builders implement this interface
+ */
 export interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Identifies this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL]: true;
+  /**
+   * Builds the final object
+   * @param context - Optional build context
+   */
   build(context?: C): T;
 }
 
+/**
+ * Type guard to check if a value is a fluent builder
+ * Uses Symbol.for to ensure proper identification across module boundaries
+ * @param value - Value to check
+ * @returns True if value is a fluent builder
+ */
 export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
@@ -1828,11 +3392,13 @@ export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBu
     return false;
   }
 
+  // Safely check for symbol property
   const hasSymbol = FLUENT_BUILDER_SYMBOL in value;
   if (!hasSymbol) {
     return false;
   }
 
+  // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
   return (
@@ -1841,12 +3407,24 @@ export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBu
   );
 }
 
+/**
+ * Type guard to check if a value is a builder array
+ * @param value - Value to check
+ * @returns True if value is an array of builders
+ */
 export function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is Array<FluentBuilder<T, C>> {
   return Array.isArray(value) && value.every(isFluentBuilder);
 }
 
+/**
+ * Creates a new context for nested builders with proper inheritance
+ * @param parentContext - Context from parent builder
+ * @param parameterName - Name of the parameter being built
+ * @param index - Optional array index
+ * @returns New context with inherited properties
+ */
 export function createNestedContext<C extends BaseBuildContext>(
   parentContext: C,
   parameterName: string,
@@ -1859,6 +3437,12 @@ export function createNestedContext<C extends BaseBuildContext>(
   } as C;
 }
 
+/**
+ * Recursively resolves builders in a value
+ * @param value - Value to resolve
+ * @param context - Optional build context
+ * @returns Resolved value with all builders built
+ */
 export function resolveValue<T, C extends BaseBuildContext>(
   value: unknown,
   context?: C
@@ -1886,52 +3470,155 @@ export function resolveValue<T, C extends BaseBuildContext>(
   return value;
 }
 
+/**
+ * Base class for all generated builders
+ * Provides core functionality for the builder pattern
+ */
 export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
+  /** Marks this as a fluent builder */
   readonly [FLUENT_BUILDER_SYMBOL] = true;
+  /** Storage for property values */
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | Array<FluentBuilder<unknown, C>>>();
+  /** Storage for nested builders - includes indexed keys for array elements */
+  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
+  /** Storage for mixed arrays (static values + builders) */
+  protected mixedArrays = new Map<string, unknown[]>();
+  /** Optional build context */
   protected context?: C;
 
+  /**
+   * Creates a new builder instance
+   * @param initial - Optional initial values
+   */
   constructor(initial?: Partial<T>) {
     if (initial) {
       this.values = { ...initial };
     }
   }
 
+  /**
+   * Sets a property value, handling both regular values and nested builders
+   * @param key - The property key
+   * @param value - The value or builder to set
+   */
   protected set<K extends keyof T>(key: K, value: unknown): this {
-    if (isFluentBuilder(value) || isBuilderArray(value)) {
-      this.builders.set(String(key), value);
+    const keyStr = String(key);
+
+    if (isFluentBuilder(value)) {
+      this.builders.set(keyStr, value);
+      // Clear from values if it was there
+      delete this.values[key];
     } else if (Array.isArray(value)) {
-      if (value.some(isFluentBuilder)) {
-        this.builders.set(String(key), value);
+      // Handle mixed arrays (builders + static values)
+      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
+        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+
+      if (hasBuilders) {
+        // Store the array for mixed processing
+        this.mixedArrays.set(keyStr, value);
+        // Store individual builders with indexed keys
+        value.forEach((item, index) => {
+          if (isFluentBuilder(item)) {
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+            // Store objects containing builders for recursive resolution
+            this.builders.set(\`\${keyStr}[\${index}]\`, item);
+          }
+        });
+        // Clear from values
+        delete this.values[key];
       } else {
+        // Pure static array
         this.values[key] = value as T[K];
+        // Clear from mixed arrays if it was there
+        this.mixedArrays.delete(keyStr);
       }
+    } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
+      // Object containing builders
+      this.builders.set(keyStr, value);
+      delete this.values[key];
     } else {
+      // Static value
       this.values[key] = value as T[K];
+      // Clear from builders if it was there
+      this.builders.delete(keyStr);
+      this.mixedArrays.delete(keyStr);
     }
     return this;
   }
 
+  /**
+   * Checks if an object contains any builders recursively
+   */
+  private containsBuilder(obj: unknown): boolean {
+    if (isFluentBuilder(obj)) return true;
+    if (Array.isArray(obj)) {
+      return obj.some((item) => this.containsBuilder(item));
+    }
+    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+      return Object.values(obj).some((val) => this.containsBuilder(val));
+    }
+    return false;
+  }
+
+  /**
+   * Builds the final object with defaults and nested builder resolution
+   * @param defaults - Optional default values
+   * @param context - Optional build context
+   */
   protected buildWithDefaults(defaults?: Partial<T>, context?: C): T {
     const result: Record<string, unknown> = defaults ? { ...defaults } : {};
 
+    // Apply explicitly set values
     Object.assign(result, this.values);
 
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      result[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
       const nestedContext = context ? createNestedContext(context, key) : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 
+    // Type assertion is safe here as we're building from typed values
     return result as T;
   }
 
+  /**
+   * Conditionally sets a property based on a predicate
+   * @param predicate - Function to determine if the property should be set
+   * @param property - The property key
+   * @param value - The value or value generator
+   */
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
     value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
   ): this {
     if (predicate(this)) {
+      // Type guard: check if it's a function that's not a builder
       const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
         ? (value as () => T[K] | FluentBuilder<T[K], C>)()
         : value;
@@ -1940,17 +3627,59 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
     return this;
   }
 
-  public has<K extends keyof T>(key: K): boolean {
-    return key in this.values || this.builders.has(String(key));
+  /**
+   * Conditionally sets a property choosing between two values
+   * @param predicate - Function to determine which value to use
+   * @param property - The property key
+   * @param trueValue - Value to use if predicate is true
+   * @param falseValue - Value to use if predicate is false
+   */
+  public ifElse<K extends keyof T>(
+    predicate: (builder: this) => boolean,
+    property: K,
+    trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+  ): this {
+    const valueToUse = predicate(this) ? trueValue : falseValue;
+    // Type guard: check if it's a function that's not a builder
+    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+      : valueToUse;
+    this.set(property, resolvedValue);
+    return this;
   }
 
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  public has<K extends keyof T>(key: K): boolean {
+    const keyStr = String(key);
+    return key in this.values || this.builders.has(keyStr) || this.mixedArrays.has(keyStr);
+  }
+
+  /**
+   * Get current value (useful for conditional logic)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
   }
 
+  /**
+   * Abstract build method to be implemented by generated builders
+   * @param context - Optional build context
+   */
   abstract build(context?: C): T;
 }
 
+/**
+ * Creates an inspect method for better debugging experience
+ * @param builderName - Name of the builder class
+ * @param properties - Current builder properties
+ * @returns Formatted string for inspection
+ */
 export function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
   return \`\${builderName} { properties: \${JSON.stringify(properties, null, 2)} }\`;
 }",

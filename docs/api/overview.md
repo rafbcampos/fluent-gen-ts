@@ -10,13 +10,13 @@ Fluent Gen follows a microkernel architecture with the following core components
 ┌─────────────────────────────────────────────────────────┐
 │                    Fluent Gen Core                      │
 ├─────────────────────────────────────────────────────────┤
-│  CLI Layer          │  Programmatic API                │
-├─────────────────────┼─────────────────────────────────┤
-│  Generator Layer    │  Code Generation Engine          │
-├─────────────────────┼─────────────────────────────────┤
-│  Type Info Layer    │  Type Extraction & Resolution    │
-├─────────────────────┼─────────────────────────────────┤
-│  Core Layer         │  Result Types, Caching, Plugins  │
+│  CLI Layer          │  Programmatic API                 │
+├─────────────────────┼───────────────────────────────────┤
+│  Generator Layer    │  Code Generation Engine           │
+├─────────────────────┼───────────────────────────────────┤
+│  Type Info Layer    │  Type Extraction & Resolution     │
+├─────────────────────┼───────────────────────────────────┤
+│  Core Layer         │  Result Types, Caching, Plugins   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -74,10 +74,12 @@ interface FluentBuilder<T, Ctx extends BuildContext = BuildContext> {
 ```
 
 **Type Parameters:**
+
 - `T` - The type being built
 - `Ctx` - Build context type for parent-child relationships
 
 **Usage:**
+
 ```typescript
 // Generated builder extends this interface
 interface UserBuilder extends FluentBuilder<User> {
@@ -105,6 +107,7 @@ type TypeInfo =
 ```
 
 **Common Properties:**
+
 ```typescript
 interface BaseTypeInfo {
   kind: TypeKind;
@@ -151,32 +154,27 @@ interface Err {
 
 ```typescript
 // Create success result
-function ok<T>(value: T): Ok<T>
+function ok<T>(value: T): Ok<T>;
 
 // Create error result
-function err(error: Error | string): Err
+function err(error: Error | string): Err;
 
 // Chain operations
-function chain<T, U>(
-  result: Result<T>,
-  fn: (value: T) => Result<U>
-): Result<U>
+function chain<T, U>(result: Result<T>, fn: (value: T) => Result<U>): Result<U>;
 
 // Map over success values
-function map<T, U>(
-  result: Result<T>,
-  fn: (value: T) => U
-): Result<U>
+function map<T, U>(result: Result<T>, fn: (value: T) => U): Result<U>;
 ```
 
 **Usage Example:**
+
 ```typescript
-const result = await generator.generateBuilder('./types.ts', 'User');
+const result = await generator.generateBuilder("./types.ts", "User");
 
 if (result.ok) {
-  console.log('Generated:', result.value);
+  console.log("Generated:", result.value);
 } else {
-  console.error('Error:', result.error.message);
+  console.error("Error:", result.error.message);
 }
 ```
 
@@ -199,12 +197,14 @@ interface TypeResolutionCache {
 ### Cache Keys
 
 Cache keys are generated from:
+
 - File path
 - Type name
 - Generic parameters
 - Import context
 
 **Example Cache Key:**
+
 ```
 /src/types.ts:User<T=string,U=number>:imports=[./base.ts]
 ```
@@ -251,40 +251,43 @@ interface PluginHooks {
 ### Hook Types
 
 **Parsing Hooks:**
+
 ```typescript
 type BeforeParsingHook = (
-  context: ParseContext
+  context: ParseContext,
 ) => ParseContext | Promise<ParseContext>;
 
 type AfterParsingHook = (
   context: ParseContext,
-  result: ParseResult
+  result: ParseResult,
 ) => ParseResult | Promise<ParseResult>;
 ```
 
 **Generation Hooks:**
+
 ```typescript
 type BeforeGenerationHook = (
-  context: GenerationContext
+  context: GenerationContext,
 ) => GenerationContext | Promise<GenerationContext>;
 
 type AfterGenerationHook = (
   context: GenerationContext,
-  code: string
+  code: string,
 ) => string | Promise<string>;
 ```
 
 **Property Hooks:**
+
 ```typescript
 type BeforePropertyGenerationHook = (
   context: PropertyContext,
-  property: PropertyInfo
+  property: PropertyInfo,
 ) => PropertyInfo | Promise<PropertyInfo>;
 
 type AfterPropertyGenerationHook = (
   context: PropertyContext,
   property: PropertyInfo,
-  method: MethodDeclaration
+  method: MethodDeclaration,
 ) => MethodDeclaration | Promise<MethodDeclaration>;
 ```
 
@@ -322,12 +325,12 @@ Handles TypeScript module resolution:
 interface ImportResolver {
   resolveImport(
     importPath: string,
-    fromFile: string
+    fromFile: string,
   ): Promise<Result<ResolvedImport>>;
 
   resolveTypeImport(
     typeName: string,
-    fromFile: string
+    fromFile: string,
   ): Promise<Result<TypeImport>>;
 }
 
@@ -352,20 +355,20 @@ interface ResolvedImport {
 
 ```typescript
 enum ErrorCode {
-  FILE_NOT_FOUND = 'FILE_NOT_FOUND',
-  TYPE_NOT_FOUND = 'TYPE_NOT_FOUND',
-  PARSE_ERROR = 'PARSE_ERROR',
-  RESOLVE_ERROR = 'RESOLVE_ERROR',
-  GENERATION_ERROR = 'GENERATION_ERROR',
-  CIRCULAR_REFERENCE = 'CIRCULAR_REFERENCE',
-  UNSUPPORTED_TYPE = 'UNSUPPORTED_TYPE'
+  FILE_NOT_FOUND = "FILE_NOT_FOUND",
+  TYPE_NOT_FOUND = "TYPE_NOT_FOUND",
+  PARSE_ERROR = "PARSE_ERROR",
+  RESOLVE_ERROR = "RESOLVE_ERROR",
+  GENERATION_ERROR = "GENERATION_ERROR",
+  CIRCULAR_REFERENCE = "CIRCULAR_REFERENCE",
+  UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE",
 }
 
 class FluentGenError extends Error {
   constructor(
     public code: ErrorCode,
     message: string,
-    public context?: any
+    public context?: any,
   ) {
     super(message);
   }
@@ -478,15 +481,15 @@ Fluent Gen provides type guards for runtime type checking:
 
 ```typescript
 // Core type guards
-function isFluentBuilder<T>(obj: any): obj is FluentBuilder<T>
-function isPrimitiveType(type: TypeInfo): type is PrimitiveTypeInfo
-function isObjectType(type: TypeInfo): type is ObjectTypeInfo
-function isArrayType(type: TypeInfo): type is ArrayTypeInfo
-function isUnionType(type: TypeInfo): type is UnionTypeInfo
+function isFluentBuilder<T>(obj: any): obj is FluentBuilder<T>;
+function isPrimitiveType(type: TypeInfo): type is PrimitiveTypeInfo;
+function isObjectType(type: TypeInfo): type is ObjectTypeInfo;
+function isArrayType(type: TypeInfo): type is ArrayTypeInfo;
+function isUnionType(type: TypeInfo): type is UnionTypeInfo;
 
 // Result type guards
-function isOk<T>(result: Result<T>): result is Ok<T>
-function isErr<T>(result: Result<T>): result is Err
+function isOk<T>(result: Result<T>): result is Ok<T>;
+function isErr<T>(result: Result<T>): result is Err;
 ```
 
 ## Constants
@@ -494,20 +497,20 @@ function isErr<T>(result: Result<T>): result is Err
 ### Symbols
 
 ```typescript
-const FLUENT_BUILDER_SYMBOL = Symbol.for('fluent-builder');
-const BUILDER_CONTEXT_SYMBOL = Symbol.for('builder-context');
+const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
+const BUILDER_CONTEXT_SYMBOL = Symbol.for("builder-context");
 ```
 
 ### Default Values
 
 ```typescript
 const DEFAULT_CONFIG: GeneratorConfig = {
-  outputDir: './src/builders',
+  outputDir: "./src/builders",
   useDefaults: true,
   addComments: true,
   indentSize: 2,
   useTab: false,
-  fileExtension: '.builder.ts'
+  fileExtension: ".builder.ts",
 };
 ```
 
@@ -517,29 +520,29 @@ const DEFAULT_CONFIG: GeneratorConfig = {
 
 ```typescript
 // Get default value for a type
-function getDefaultValue(typeInfo: TypeInfo): any
+function getDefaultValue(typeInfo: TypeInfo): any;
 
 // Generate TypeScript type string
-function generateTypeString(typeInfo: TypeInfo): string
+function generateTypeString(typeInfo: TypeInfo): string;
 
 // Check if type is optional
-function isOptionalType(typeInfo: TypeInfo): boolean
+function isOptionalType(typeInfo: TypeInfo): boolean;
 
 // Flatten union types
-function flattenUnionType(typeInfo: UnionTypeInfo): TypeInfo[]
+function flattenUnionType(typeInfo: UnionTypeInfo): TypeInfo[];
 ```
 
 ### String Utilities
 
 ```typescript
 // Convert to camelCase
-function toCamelCase(str: string): string
+function toCamelCase(str: string): string;
 
 // Convert to PascalCase
-function toPascalCase(str: string): string
+function toPascalCase(str: string): string;
 
 // Generate with method name
-function toWithMethodName(propertyName: string): string
+function toWithMethodName(propertyName: string): string;
 ```
 
 ## Performance Considerations
@@ -560,6 +563,7 @@ function toWithMethodName(propertyName: string): string
 ### Benchmarks
 
 Typical performance characteristics:
+
 - Simple interface (5 properties): ~10ms
 - Complex nested structure (20+ properties): ~50ms
 - Large union type (100+ variants): ~100ms
@@ -571,3 +575,4 @@ Typical performance characteristics:
 - [Type Resolution System](./resolver.md)
 - [Plugin Development Guide](./plugins.md)
 - [CLI Reference](../guide/cli.md)
+

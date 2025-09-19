@@ -1,13 +1,22 @@
 import { Type, ts } from "ts-morph";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
-import type { TypeInfo, PropertyInfo } from "../core/types.js";
+import type { TypeInfo, IndexSignature } from "../core/types.js";
 import { TypeKind } from "../core/types.js";
 
 export interface MappedTypeResolverOptions {
   readonly maxDepth?: number;
 }
 
+/**
+ * Handles mapped types that haven't been resolved by TypeScript.
+ *
+ * In most cases, TypeScript will have already expanded mapped types
+ * (e.g., `Readonly<User>` becomes an object with readonly properties).
+ * This resolver primarily handles:
+ * - Index signatures ({ [key: string]: T })
+ * - Unresolved generic mapped types
+ */
 export class MappedTypeResolver {
   private readonly maxDepth: number;
 
@@ -24,42 +33,61 @@ export class MappedTypeResolver {
       return err(new Error(`Max mapped type resolution depth exceeded`));
     }
 
-    // Check if this is a mapped type by examining its structure
-    const symbol = type.getSymbol();
-    const declaration = symbol?.getValueDeclaration();
-
-    if (!declaration) {
-      return ok(null);
-    }
-
-    // Try to get mapped type information using ts-morph's capabilities
-    if (this.isMappedType(type)) {
-      return this.expandMappedType(type, resolveType, depth);
-    }
-
     // Check for index signature types
     if (this.hasIndexSignature(type)) {
       return this.expandIndexSignatureType(type, resolveType, depth);
     }
 
+    // Check if this is an unresolved generic mapped type
+    if (this.isUnresolvedMappedType(type)) {
+      // For unresolved generic mapped types, we can't expand them
+      // Return generic type info
+      return ok({
+        kind: TypeKind.Generic,
+        name: type.getSymbol()?.getName() || type.getText(),
+      });
+    }
+
+    // TypeScript has already expanded this mapped type
     return ok(null);
   }
 
-  private isMappedType(type: Type): boolean {
-    // Check if the type has the structure of a mapped type
-    // This includes types like { [K in keyof T]: ... } or { [K in Union]: ... }
-    const typeText = type.getText();
-
-    // Look for mapped type patterns
-    if (typeText.includes(" in ") && (typeText.includes("[") || typeText.includes("{"))) {
-      return true;
+  private isUnresolvedMappedType(type: Type): boolean {
+    // If the type has properties, it's already been expanded by TypeScript
+    if (type.getProperties().length > 0) {
+      return false;
     }
 
-    // Check using TypeScript's internal flags if available
-    const tsType = type.compilerType;
-    if (tsType && "objectFlags" in tsType && typeof tsType.objectFlags === "number") {
-      // TypeScript ObjectFlags.Mapped = 32
-      return (tsType.objectFlags & 32) !== 0;
+    // Check if this looks like an unresolved mapped type
+    const typeText = type.getText();
+    const symbol = type.getSymbol();
+    const symbolName = symbol?.getName();
+
+    // Patterns that indicate unresolved mapped types:
+    // - Type alias with generic parameters (e.g., "MyPartial<T>")
+    // - Contains angle brackets
+    // - Not an anonymous/expanded type
+    if (symbolName && typeText.includes("<") && typeText.includes(">")) {
+      // Exclude already resolved types
+      if (symbolName === "__type" || symbolName === "Anonymous") {
+        return false;
+      }
+
+      // Check using TypeScript's internal flags as a fallback
+      const tsType = type.compilerType as ts.Type;
+      if (
+        tsType &&
+        "objectFlags" in tsType &&
+        typeof tsType.objectFlags === "number"
+      ) {
+        // TypeScript ObjectFlags.Mapped = 32
+        // ObjectFlags.InstantiatedMapped = 96 (already instantiated)
+        return (
+          (tsType.objectFlags & 32) !== 0 && (tsType.objectFlags & 96) !== 96
+        );
+      }
+
+      return true;
     }
 
     return false;
@@ -71,54 +99,18 @@ export class MappedTypeResolver {
     // Don't treat arrays as index signatures
     if (type.isArray()) return false;
 
-    const indexInfos = type.getStringIndexType() || type.getNumberIndexType();
-    return indexInfos !== undefined;
-  }
+    // Check for string or number index signatures
+    const stringIndexType = type.getStringIndexType();
+    const numberIndexType = type.getNumberIndexType();
 
-  private async expandMappedType(
-    type: Type,
-    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
-    depth: number,
-  ): Promise<Result<TypeInfo>> {
-    // Get the properties that result from the mapped type
-    const properties: PropertyInfo[] = [];
-
-    try {
-      // If this is a concrete mapped type (already resolved to specific properties)
-      if (type.getProperties().length > 0) {
-        for (const prop of type.getProperties()) {
-          const propType = prop.getTypeAtLocation(prop.getValueDeclaration()!);
-          const resolvedPropType = await resolveType(propType, depth + 1);
-
-          if (!resolvedPropType.ok) continue;
-
-          const property: PropertyInfo = {
-            name: prop.getName(),
-            type: resolvedPropType.value,
-            optional: prop.isOptional(),
-            readonly: this.isReadonlyProperty(prop),
-          };
-
-          properties.push(property);
-        }
-
-        return ok({
-          kind: TypeKind.Object,
-          properties,
-          name: "__MappedType__", // Special marker for mapped types
-        });
-      }
-
-      // If this is an abstract mapped type, we may need to handle it differently
-      // For now, return an object with a special marker
-      return ok({
-        kind: TypeKind.Object,
-        properties: [],
-        name: "__MappedType__",
-      });
-    } catch (error) {
-      return err(new Error(`Failed to expand mapped type: ${error}`));
+    if (stringIndexType === undefined && numberIndexType === undefined) {
+      return false;
     }
+
+    // Only handle pure index signatures (no regular properties)
+    // If the type has both properties and index signatures, let the main resolver handle it
+    const properties = type.getProperties();
+    return properties.length === 0;
   }
 
   private async expandIndexSignatureType(
@@ -129,67 +121,75 @@ export class MappedTypeResolver {
     const stringIndexType = type.getStringIndexType();
     const numberIndexType = type.getNumberIndexType();
 
-    let valueType: TypeInfo = { kind: TypeKind.Unknown };
+    // Resolve the value type
+    let indexSignature: IndexSignature | undefined;
 
     if (stringIndexType) {
       const resolved = await resolveType(stringIndexType, depth + 1);
       if (resolved.ok) {
-        valueType = resolved.value;
+        indexSignature = {
+          keyType: "string",
+          valueType: resolved.value,
+          readonly: this.isReadonlyIndexSignature(type),
+        };
       }
     } else if (numberIndexType) {
       const resolved = await resolveType(numberIndexType, depth + 1);
       if (resolved.ok) {
-        valueType = resolved.value;
+        indexSignature = {
+          keyType: "number",
+          valueType: resolved.value,
+          readonly: this.isReadonlyIndexSignature(type),
+        };
       }
     }
 
-    // Return a special object type that represents an index signature
+    if (!indexSignature) {
+      return ok({ kind: TypeKind.Unknown });
+    }
+
+    // Return an object type with index signature
     return ok({
       kind: TypeKind.Object,
       properties: [],
-      name: "__IndexSignature__",
-      indexSignatures: [
-        {
-          keyType: stringIndexType ? "string" : "number",
-          valueType: valueType,
-        },
-      ],
+      indexSignature,
     });
   }
 
-  private isReadonlyProperty(symbol: any): boolean {
-    const valueDeclaration = symbol.getValueDeclaration?.();
-    if (!valueDeclaration) return false;
 
-    const modifiers = valueDeclaration.getModifiers?.();
-    if (!modifiers) return false;
+  private isReadonlyIndexSignature(type: Type): boolean {
+    // Check if the index signature is readonly
+    const symbol = type.getSymbol();
+    if (!symbol) return false;
 
-    return modifiers.some(
-      (mod: any) => mod.getKind() === ts.SyntaxKind.ReadonlyKeyword
-    );
-  }
+    const declarations = symbol.getDeclarations() || [];
 
-  resolveKeyRemapping(type: Type): Result<Map<string, string>> {
-    // Handle key remapping in mapped types like:
-    // { [K in keyof T as `get${Capitalize<K>}`]: T[K] }
-    const remapping = new Map<string, string>();
+    // Check declarations for index signatures and readonly modifiers
+    for (const decl of declarations) {
+      if (!decl) continue;
 
-    try {
-      const typeText = type.getText();
-      const asMatch = typeText.match(/as\s+`([^`]+)`/);
-
-      if (asMatch && asMatch[1]) {
-        // This is a simplified implementation
-        // Real implementation would need to parse template literal types
-        const template = asMatch[1];
-
-        // For now, just mark that remapping exists
-        remapping.set("__remapped__", template);
+      // Try to access the members to find index signatures
+      if ("getMembers" in decl && typeof decl.getMembers === "function") {
+        const members = decl.getMembers();
+        for (const member of members) {
+          // Check if this is an index signature
+          if (
+            member.getKindName &&
+            member.getKindName() === "IndexSignature"
+          ) {
+            // Check for readonly modifier
+            const modifiers = member.getModifiers
+              ? member.getModifiers()
+              : [];
+            return modifiers.some(
+              (mod: any) => mod.getKind() === ts.SyntaxKind.ReadonlyKeyword,
+            );
+          }
+        }
       }
-
-      return ok(remapping);
-    } catch (error) {
-      return err(new Error(`Failed to resolve key remapping: ${error}`));
     }
+
+    return false;
   }
 }
+

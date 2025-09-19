@@ -67,7 +67,7 @@ describe("DefaultValueGenerator", () => {
       expect(result).toBe('{ required: "" }');
     });
 
-    it("should skip object and reference types", () => {
+    it("should generate defaults for object and reference types", () => {
       const typeInfo: TypeInfo = {
         kind: TypeKind.Object,
         properties: [
@@ -80,7 +80,8 @@ describe("DefaultValueGenerator", () => {
       const config: DefaultGeneratorConfig = { useDefaults: true };
       const result = generator.generateDefaultsObject(typeInfo, config);
 
-      expect(result).toBe('{ str: "" }');
+      // Now we generate defaults for objects and references too
+      expect(result).toBe('{ str: "", obj: {}, ref: {} }');
     });
 
     it("should handle hyphenated property names", () => {
@@ -98,7 +99,7 @@ describe("DefaultValueGenerator", () => {
       expect(result).toBe('{ ["content-type"]: "", ["x-auth-token"]: "" }');
     });
 
-    it("should return null when no defaults are generated", () => {
+    it("should generate defaults even for only object properties", () => {
       const typeInfo: TypeInfo = {
         kind: TypeKind.Object,
         properties: [
@@ -110,7 +111,8 @@ describe("DefaultValueGenerator", () => {
       const config: DefaultGeneratorConfig = { useDefaults: true };
       const result = generator.generateDefaultsObject(typeInfo, config);
 
-      expect(result).toBeNull();
+      // Now we generate defaults for object properties
+      expect(result).toBe('{ obj: {} }');
     });
   });
 
@@ -178,11 +180,21 @@ describe("DefaultValueGenerator", () => {
     });
 
     describe("array types", () => {
-      it("should return empty array for array type", () => {
+      it("should return array with default element for primitive array type", () => {
         const typeInfo: TypeInfo = {
           kind: TypeKind.Array,
           elementType: { kind: TypeKind.Primitive, name: "string" },
         };
+        // Arrays of primitives get a default element
+        expect(generator.getDefaultValueForType(typeInfo)).toBe('[""]');
+      });
+
+      it("should return empty array for object array type", () => {
+        const typeInfo: TypeInfo = {
+          kind: TypeKind.Array,
+          elementType: { kind: TypeKind.Object, properties: [] },
+        };
+        // Arrays of objects stay empty
         expect(generator.getDefaultValueForType(typeInfo)).toBe("[]");
       });
     });
@@ -283,12 +295,15 @@ describe("DefaultValueGenerator", () => {
         expect(generator.getDefaultValueForType(typeInfo)).toBe("undefined");
       });
 
-      it("should return empty array for tuple type", () => {
+      it("should return array with default elements for tuple type", () => {
         const typeInfo: TypeInfo = {
           kind: TypeKind.Tuple,
-          elementType: { kind: TypeKind.Primitive, name: "string" },
+          elements: [
+            { kind: TypeKind.Primitive, name: "string" },
+            { kind: TypeKind.Primitive, name: "number" },
+          ],
         };
-        expect(generator.getDefaultValueForType(typeInfo)).toBe("[]");
+        expect(generator.getDefaultValueForType(typeInfo)).toBe('["", 0]');
       });
 
       it("should return empty object for intersection type", () => {
@@ -419,7 +434,8 @@ describe("DefaultValueGenerator", () => {
       const config: DefaultGeneratorConfig = { useDefaults: true };
       const result = generator.generateDefaultsObject(typeInfo, config);
 
-      expect(result).toBe('{ id: "", tags: [], status: "active", callback: () => undefined }');
+      // Now includes defaults for nested objects and arrays with primitive elements
+      expect(result).toBe('{ id: "", tags: [""], status: "active", metadata: {}, callback: () => undefined }');
     });
 
     it("should handle all primitive types", () => {

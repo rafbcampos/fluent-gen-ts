@@ -87,12 +87,12 @@ export type TypeInfo =
     }
   | {
       readonly kind: TypeKind.Tuple;
-      readonly elementType: TypeInfo;
+      readonly elements: readonly TypeInfo[];
     }
   | {
       readonly kind: TypeKind.Enum;
       readonly name: string;
-      readonly literal?: unknown;
+      readonly values?: readonly unknown[];
     };
 
 export interface GenericParam {

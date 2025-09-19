@@ -1,4 +1,4 @@
-import { Type, ts } from "ts-morph";
+import { Type, ts, Symbol as TsSymbol } from "ts-morph";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
 import type {
@@ -226,7 +226,7 @@ export class TypeResolver {
         if (!tupleTypes.ok) return tupleTypes;
         typeInfo = {
           kind: TypeKind.Tuple,
-          elementType: tupleTypes.value[0] || { kind: TypeKind.Unknown },
+          elements: tupleTypes.value,
         };
       } else if (type.isEnum()) {
         const enumName = type.getSymbol()?.getName();
@@ -376,7 +376,7 @@ export class TypeResolver {
               name: propName,
               type: resolvedType.value,
               optional: symbol.isOptional(),
-              readonly: false,
+              readonly: this.isReadonlyProperty(symbol),
             };
 
             properties.push(property);
@@ -442,10 +442,7 @@ export class TypeResolver {
           name: symbol.getName(),
           type: resolvedType.value,
           optional: symbol.isOptional(),
-          readonly:
-            symbol
-              .getValueDeclaration()
-              ?.isKind(ts.SyntaxKind.ReadonlyKeyword) ?? false,
+          readonly: this.isReadonlyProperty(symbol),
           ...(jsDoc && { jsDoc }),
         };
 
@@ -678,5 +675,20 @@ export class TypeResolver {
     } catch (error) {
       return err(new Error(`Failed to resolve index signature: ${error}`));
     }
+  }
+
+  private isReadonlyProperty(symbol: TsSymbol): boolean {
+    const valueDeclaration = symbol.getValueDeclaration();
+    if (!valueDeclaration) return false;
+
+    // Use ts-morph's built-in modifier checking
+    if (
+      "hasModifier" in valueDeclaration &&
+      typeof valueDeclaration.hasModifier === "function"
+    ) {
+      return valueDeclaration.hasModifier(ts.SyntaxKind.ReadonlyKeyword);
+    }
+
+    return false;
   }
 }

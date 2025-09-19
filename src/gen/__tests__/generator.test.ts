@@ -426,7 +426,7 @@ describe("BuilderGenerator", () => {
       }
     });
 
-    it("should generate builders for dependencies", async () => {
+    it("should NOT automatically generate builders for dependencies", async () => {
       const childType: ResolvedType = {
         sourceFile: "/test/file.ts",
         name: "Child",
@@ -470,8 +470,10 @@ describe("BuilderGenerator", () => {
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         expect(result.value).toContain("export function parent(");
-        expect(result.value).toContain("export function child(");
-        expect(result.value).toContain("ChildBuilder");
+        // Should NOT auto-generate child builder
+        expect(result.value).not.toContain("export function child(");
+        // But should accept Child | FluentBuilder<Child>
+        expect(result.value).toContain("withChild(value: Child | FluentBuilder<Child");
       }
     });
 

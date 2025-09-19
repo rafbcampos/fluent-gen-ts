@@ -288,9 +288,8 @@ describe("Builder Utilities", () => {
       const obj: any = { value: "test" };
       obj.circular = obj;
 
-      // TODO: Current implementation doesn't handle circular references
-      // This would require tracking visited objects
-      // For now, we acknowledge this limitation
+      // TODO: Verify if the assumption that the builders will handle different object or a
+      // nested builder, so a deferred call, holds:
       expect(() => {
         resolveValue(obj);
       }).toThrow();
@@ -530,4 +529,3 @@ describe("Builder Utilities", () => {
     });
   });
 });
-

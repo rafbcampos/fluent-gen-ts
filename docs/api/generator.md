@@ -7,15 +7,15 @@ The generator module is responsible for transforming resolved TypeScript type in
 The generation system follows a multi-layer architecture:
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                FluentGen (Main)                     │
-├─────────────────────────────────────────────────────┤
-│            BuilderGenerator                         │
-├─────────────────────────────────────────────────────┤
-│  TemplateGen │ MethodGen │ ImportGen │ TypeStringGen │
-├─────────────┼───────────┼───────────┼───────────────┤
-│         DefaultValueGen │ StaticGen │              │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                   FluentGen (Main)                     │
+├────────────────────────────────────────────────────────┤
+│               BuilderGenerator                         │
+├────────────────────────────────────────────────────────┤
+│  TemplateGen │ MethodGen │ ImportGen │ TypeStringGen   │
+├────────────────────────────────────────────────────────┤
+│    DefaultValueGen       │ StaticGen │                 │
+└────────────────────────────────────────────────────────┘
 ```
 
 ## Main Generator API
@@ -30,8 +30,15 @@ class FluentGen {
 
   // Core generation methods
   generateBuilder(filePath: string, typeName: string): Promise<Result<string>>;
-  generateMultiple(filePath: string, typeNames: string[]): Promise<Result<Map<string, string>>>;
-  generateToFile(filePath: string, typeName: string, outputPath?: string): Promise<Result<string>>;
+  generateMultiple(
+    filePath: string,
+    typeNames: string[],
+  ): Promise<Result<Map<string, string>>>;
+  generateToFile(
+    filePath: string,
+    typeName: string,
+    outputPath?: string,
+  ): Promise<Result<string>>;
   scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>;
 
   // Configuration
@@ -55,15 +62,17 @@ new FluentGen(config?: GeneratorConfig)
 ```
 
 **Parameters:**
+
 - `config` - Optional generator configuration
 
 **Example:**
+
 ```typescript
 const generator = new FluentGen({
-  outputDir: './src/builders',
+  outputDir: "./src/builders",
   useDefaults: true,
   addComments: true,
-  indentSize: 2
+  indentSize: 2,
 });
 ```
 
@@ -79,19 +88,21 @@ async generateBuilder(
 ```
 
 **Parameters:**
+
 - `filePath` - Path to TypeScript file containing the type
 - `typeName` - Name of the interface or type to generate builder for
 
 **Returns:** `Result<string>` containing the generated builder code
 
 **Example:**
+
 ```typescript
-const result = await generator.generateBuilder('./types.ts', 'User');
+const result = await generator.generateBuilder("./types.ts", "User");
 
 if (result.ok) {
-  console.log('Generated builder code:', result.value);
+  console.log("Generated builder code:", result.value);
 } else {
-  console.error('Generation failed:', result.error.message);
+  console.error("Generation failed:", result.error.message);
 }
 ```
 
@@ -107,17 +118,20 @@ async generateMultiple(
 ```
 
 **Parameters:**
+
 - `filePath` - Path to TypeScript file
 - `typeNames` - Array of type names to generate builders for
 
 **Returns:** `Result<Map<string, string>>` where keys are type names and values are generated code
 
 **Example:**
+
 ```typescript
-const result = await generator.generateMultiple(
-  './api-types.ts',
-  ['CreateUserRequest', 'UpdateUserRequest', 'UserResponse']
-);
+const result = await generator.generateMultiple("./api-types.ts", [
+  "CreateUserRequest",
+  "UpdateUserRequest",
+  "UserResponse",
+]);
 
 if (result.ok) {
   for (const [typeName, code] of result.value) {
@@ -139,6 +153,7 @@ async generateToFile(
 ```
 
 **Parameters:**
+
 - `filePath` - Source TypeScript file path
 - `typeName` - Type name to generate builder for
 - `outputPath` - Optional output file path (auto-generated if not provided)
@@ -146,15 +161,16 @@ async generateToFile(
 **Returns:** `Result<string>` containing the output file path
 
 **Example:**
+
 ```typescript
 // Auto-generate output path based on type name
-const result1 = await generator.generateToFile('./types.ts', 'User');
+const result1 = await generator.generateToFile("./types.ts", "User");
 
 // Custom output path
 const result2 = await generator.generateToFile(
-  './types.ts',
-  'Product',
-  './custom/Product.builder.ts'
+  "./types.ts",
+  "Product",
+  "./custom/Product.builder.ts",
 );
 ```
 
@@ -167,13 +183,15 @@ async scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>
 ```
 
 **Parameters:**
+
 - `pattern` - Glob pattern to match TypeScript files
 
 **Returns:** `Result<Map<string, string>>` with discovered types and generated code
 
 **Example:**
+
 ```typescript
-const result = await generator.scanAndGenerate('src/models/**/*.ts');
+const result = await generator.scanAndGenerate("src/models/**/*.ts");
 
 if (result.ok) {
   console.log(`Found ${result.value.size} types to generate`);
@@ -196,32 +214,34 @@ Generate builder code from resolved type information:
 ```typescript
 function generateBuilderCode(
   typeInfo: TypeInfo,
-  config?: GeneratorConfig
-): Result<string>
+  config?: GeneratorConfig,
+): Result<string>;
 ```
 
 **Parameters:**
+
 - `typeInfo` - Resolved type information
 - `config` - Optional generator configuration
 
 **Returns:** `Result<string>` containing generated code
 
 **Example:**
+
 ```typescript
-import { extractTypeInfo, generateBuilderCode } from 'fluent-gen';
+import { extractTypeInfo, generateBuilderCode } from "fluent-gen";
 
 // First extract type information
-const typeResult = await extractTypeInfo('./types.ts', 'User');
+const typeResult = await extractTypeInfo("./types.ts", "User");
 
 if (typeResult.ok) {
   // Then generate builder code
   const codeResult = generateBuilderCode(typeResult.value, {
     useDefaults: true,
-    addComments: true
+    addComments: true,
   });
 
   if (codeResult.ok) {
-    console.log('Generated code:', codeResult.value);
+    console.log("Generated code:", codeResult.value);
   }
 }
 ```
@@ -233,25 +253,25 @@ if (typeResult.ok) {
 ```typescript
 interface GeneratorConfig {
   // Output settings
-  outputDir?: string;              // Output directory for generated files
-  fileExtension?: string;          // File extension for generated builders
-  fileNameTemplate?: string;       // Template for file names
+  outputDir?: string; // Output directory for generated files
+  fileExtension?: string; // File extension for generated builders
+  fileNameTemplate?: string; // Template for file names
 
   // Code generation options
-  useDefaults?: boolean;           // Generate default values for properties
-  addComments?: boolean;           // Include JSDoc comments in generated code
-  skipTypeCheck?: boolean;         // Skip TypeScript type checking
+  useDefaults?: boolean; // Generate default values for properties
+  addComments?: boolean; // Include JSDoc comments in generated code
+  skipTypeCheck?: boolean; // Skip TypeScript type checking
 
   // Formatting options
-  indentSize?: number;             // Number of spaces for indentation
-  useTab?: boolean;               // Use tabs instead of spaces
+  indentSize?: number; // Number of spaces for indentation
+  useTab?: boolean; // Use tabs instead of spaces
 
   // Context options
-  contextType?: string;           // Custom context type name
-  importPath?: string;            // Import path for context type
+  contextType?: string; // Custom context type name
+  importPath?: string; // Import path for context type
 
   // Advanced options
-  customTemplates?: TemplateMap;  // Custom code templates
+  customTemplates?: TemplateMap; // Custom code templates
   typeTransforms?: TypeTransform[]; // Type transformation functions
 }
 ```
@@ -260,52 +280,56 @@ interface GeneratorConfig {
 
 ```typescript
 const DEFAULT_CONFIG: GeneratorConfig = {
-  outputDir: './src/builders',
-  fileExtension: '.builder.ts',
-  fileNameTemplate: '{type}{ext}',
+  outputDir: "./src/builders",
+  fileExtension: ".builder.ts",
+  fileNameTemplate: "{type}{ext}",
   useDefaults: true,
   addComments: true,
   skipTypeCheck: false,
   indentSize: 2,
   useTab: false,
-  contextType: 'BuildContext',
-  importPath: 'fluent-gen'
+  contextType: "BuildContext",
+  importPath: "fluent-gen",
 };
 ```
 
 ### Configuration Examples
 
 #### Minimal Configuration
+
 ```typescript
 const generator = new FluentGen({
-  outputDir: './generated'
+  outputDir: "./generated",
 });
 ```
 
 #### Custom Formatting
+
 ```typescript
 const generator = new FluentGen({
   indentSize: 4,
   useTab: true,
-  fileExtension: '.generated.ts'
+  fileExtension: ".generated.ts",
 });
 ```
 
 #### Production Configuration
+
 ```typescript
 const generator = new FluentGen({
-  outputDir: './dist/builders',
+  outputDir: "./dist/builders",
   useDefaults: false,
   addComments: false,
-  skipTypeCheck: true
+  skipTypeCheck: true,
 });
 ```
 
 #### Custom Context Type
+
 ```typescript
 const generator = new FluentGen({
-  contextType: 'MyBuildContext',
-  importPath: '@/types/build-context'
+  contextType: "MyBuildContext",
+  importPath: "@/types/build-context",
 });
 ```
 
@@ -342,7 +366,10 @@ Generates individual builder methods:
 
 ```typescript
 class MethodGenerator {
-  generateWithMethod(property: PropertyInfo, context: GenerationContext): MethodDeclaration;
+  generateWithMethod(
+    property: PropertyInfo,
+    context: GenerationContext,
+  ): MethodDeclaration;
   generateBuildMethod(context: GenerationContext): MethodDeclaration;
   generateCloneMethod(context: GenerationContext): MethodDeclaration;
 }
@@ -416,6 +443,7 @@ class {TypeName}BuilderImpl implements {TypeName}Builder {
 ### Method Generation Patterns
 
 #### Simple Property Method
+
 ```typescript
 with{PropertyName}(value: {PropertyType}): {TypeName}Builder {
   return new {TypeName}BuilderImpl({
@@ -426,6 +454,7 @@ with{PropertyName}(value: {PropertyType}): {TypeName}Builder {
 ```
 
 #### Optional Property Method
+
 ```typescript
 with{PropertyName}(value?: {PropertyType}): {TypeName}Builder {
   const newData = { ...this.data };
@@ -437,6 +466,7 @@ with{PropertyName}(value?: {PropertyType}): {TypeName}Builder {
 ```
 
 #### Nested Builder Support
+
 ```typescript
 with{PropertyName}(
   value: {PropertyType} | FluentBuilder<{PropertyType}>
@@ -450,6 +480,7 @@ with{PropertyName}(
 ```
 
 #### Array Property Method
+
 ```typescript
 with{PropertyName}(value: {ElementType}[]): {TypeName}Builder {
   return new {TypeName}BuilderImpl({
@@ -488,11 +519,11 @@ const customTemplates: TemplateMap = {
       // Custom implementation
       return this.set('{{propertyName}}', value);
     }
-  `
+  `,
 };
 
 const generator = new FluentGen({
-  customTemplates
+  customTemplates,
 });
 ```
 
@@ -508,17 +539,17 @@ interface TypeTransform {
 }
 
 const dateTransform: TypeTransform = {
-  name: 'date-to-string',
-  match: (type) => type.kind === 'primitive' && type.name === 'Date',
+  name: "date-to-string",
+  match: (type) => type.kind === "primitive" && type.name === "Date",
   transform: (type) => ({
     ...type,
-    name: 'string',
-    jsDoc: 'ISO date string'
-  })
+    name: "string",
+    jsDoc: "ISO date string",
+  }),
 };
 
 const generator = new FluentGen({
-  typeTransforms: [dateTransform]
+  typeTransforms: [dateTransform],
 });
 ```
 
@@ -541,9 +572,9 @@ const generator = new FluentGen({
   // Additional formatting via prettier integration
   prettier: {
     semi: true,
-    trailingComma: 'es5',
-    singleQuote: true
-  }
+    trailingComma: "es5",
+    singleQuote: true,
+  },
 });
 ```
 
@@ -561,14 +592,14 @@ const generator = new FluentGen({
 // Generate multiple builders in parallel
 const generator = new FluentGen();
 
-const types = ['User', 'Product', 'Order'];
+const types = ["User", "Product", "Order"];
 const results = await Promise.all(
-  types.map(type => generator.generateBuilder('./types.ts', type))
+  types.map((type) => generator.generateBuilder("./types.ts", type)),
 );
 
 // Check all results
-const successful = results.filter(r => r.ok);
-const failed = results.filter(r => !r.ok);
+const successful = results.filter((r) => r.ok);
+const failed = results.filter((r) => !r.ok);
 ```
 
 ### Memory Management
@@ -583,18 +614,18 @@ const failed = results.filter(r => !r.ok);
 
 ```typescript
 enum GenerationErrorCode {
-  TEMPLATE_ERROR = 'TEMPLATE_ERROR',
-  TYPE_GENERATION_ERROR = 'TYPE_GENERATION_ERROR',
-  METHOD_GENERATION_ERROR = 'METHOD_GENERATION_ERROR',
-  IMPORT_GENERATION_ERROR = 'IMPORT_GENERATION_ERROR',
-  OUTPUT_ERROR = 'OUTPUT_ERROR'
+  TEMPLATE_ERROR = "TEMPLATE_ERROR",
+  TYPE_GENERATION_ERROR = "TYPE_GENERATION_ERROR",
+  METHOD_GENERATION_ERROR = "METHOD_GENERATION_ERROR",
+  IMPORT_GENERATION_ERROR = "IMPORT_GENERATION_ERROR",
+  OUTPUT_ERROR = "OUTPUT_ERROR",
 }
 
 class GenerationError extends FluentGenError {
   constructor(
     code: GenerationErrorCode,
     message: string,
-    context?: GenerationErrorContext
+    context?: GenerationErrorContext,
   ) {
     super(code, message, context);
   }
@@ -605,20 +636,20 @@ class GenerationError extends FluentGenError {
 
 ```typescript
 // Graceful error handling
-const result = await generator.generateBuilder('./types.ts', 'User');
+const result = await generator.generateBuilder("./types.ts", "User");
 
 if (!result.ok) {
   const error = result.error as GenerationError;
 
   switch (error.code) {
     case GenerationErrorCode.TEMPLATE_ERROR:
-      console.log('Template compilation failed');
+      console.log("Template compilation failed");
       break;
     case GenerationErrorCode.TYPE_GENERATION_ERROR:
-      console.log('Type generation failed for:', error.context?.typeName);
+      console.log("Type generation failed for:", error.context?.typeName);
       break;
     default:
-      console.log('Unknown generation error:', error.message);
+      console.log("Unknown generation error:", error.message);
   }
 }
 ```
@@ -628,28 +659,28 @@ if (!result.ok) {
 ### Unit Testing
 
 ```typescript
-import { generateBuilderCode } from 'fluent-gen';
+import { generateBuilderCode } from "fluent-gen";
 
-describe('generateBuilderCode', () => {
-  it('should generate basic builder', () => {
+describe("generateBuilderCode", () => {
+  it("should generate basic builder", () => {
     const typeInfo: ObjectTypeInfo = {
-      kind: 'object',
+      kind: "object",
       properties: [
         {
-          name: 'name',
-          type: { kind: 'primitive', name: 'string' },
+          name: "name",
+          type: { kind: "primitive", name: "string" },
           optional: false,
-          readonly: false
-        }
-      ]
+          readonly: false,
+        },
+      ],
     };
 
     const result = generateBuilderCode(typeInfo, {
-      useDefaults: true
+      useDefaults: true,
     });
 
     expect(result.ok).toBe(true);
-    expect(result.value).toContain('withName');
+    expect(result.value).toContain("withName");
   });
 });
 ```
@@ -657,23 +688,26 @@ describe('generateBuilderCode', () => {
 ### Integration Testing
 
 ```typescript
-describe('FluentGen integration', () => {
-  it('should generate working builder', async () => {
+describe("FluentGen integration", () => {
+  it("should generate working builder", async () => {
     const generator = new FluentGen();
-    const result = await generator.generateBuilder('./test-types.ts', 'TestUser');
+    const result = await generator.generateBuilder(
+      "./test-types.ts",
+      "TestUser",
+    );
 
     expect(result.ok).toBe(true);
 
     // Write and import generated code
-    await fs.writeFile('./TestUser.builder.ts', result.value);
+    await fs.writeFile("./TestUser.builder.ts", result.value);
 
-    const { testUserBuilder } = await import('./TestUser.builder');
+    const { testUserBuilder } = await import("./TestUser.builder");
     const user = testUserBuilder()
-      .withName('Test User')
-      .withEmail('test@example.com')();
+      .withName("Test User")
+      .withEmail("test@example.com")();
 
-    expect(user.name).toBe('Test User');
-    expect(user.email).toBe('test@example.com');
+    expect(user.name).toBe("Test User");
+    expect(user.email).toBe("test@example.com");
   });
 });
 ```
@@ -685,9 +719,9 @@ describe('FluentGen integration', () => {
 ```typescript
 // Environment-based configuration
 const config: GeneratorConfig = {
-  outputDir: process.env.BUILDER_OUTPUT_DIR || './src/builders',
-  useDefaults: process.env.NODE_ENV !== 'production',
-  addComments: process.env.NODE_ENV === 'development'
+  outputDir: process.env.BUILDER_OUTPUT_DIR || "./src/builders",
+  useDefaults: process.env.NODE_ENV !== "production",
+  addComments: process.env.NODE_ENV === "development",
 };
 ```
 
@@ -695,17 +729,17 @@ const config: GeneratorConfig = {
 
 ```typescript
 // Always check results
-const result = await generator.generateBuilder('./types.ts', 'User');
+const result = await generator.generateBuilder("./types.ts", "User");
 
 if (result.ok) {
   // Handle success
   await processGeneratedCode(result.value);
 } else {
   // Handle error with context
-  logger.error('Generation failed', {
+  logger.error("Generation failed", {
     error: result.error.message,
     code: result.error.code,
-    context: result.error.context
+    context: result.error.context,
   });
 }
 ```
@@ -714,8 +748,8 @@ if (result.ok) {
 
 ```typescript
 // Batch operations when possible
-const types = ['User', 'Product', 'Order'];
-const result = await generator.generateMultiple('./types.ts', types);
+const types = ["User", "Product", "Order"];
+const result = await generator.generateMultiple("./types.ts", types);
 
 // Use caching for repeated operations
 const generator = new FluentGen();
@@ -728,3 +762,4 @@ const generator = new FluentGen();
 - [Plugin Development Guide](./plugins.md)
 - [CLI Reference](../guide/cli.md)
 - [Configuration Guide](../guide/configuration.md)
+

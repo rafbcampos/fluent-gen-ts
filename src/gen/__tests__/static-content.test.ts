@@ -5,13 +5,15 @@ import {
   isBuilderArray,
   createNestedContext,
   createInspectMethod,
-  getCommonFileTemplate,
-  getSingleFileUtilitiesTemplate,
   type BaseBuildContext,
   type FluentBuilder,
-} from "../static-content.js";
+} from "../builder-utilities.js";
+import {
+  getCommonFileTemplate,
+  getSingleFileUtilitiesTemplate,
+} from "../template-generator.js";
 
-describe("static-content utilities", () => {
+describe("builder utilities and templates", () => {
   describe("FLUENT_BUILDER_SYMBOL", () => {
     it("should be a symbol", () => {
       expect(typeof FLUENT_BUILDER_SYMBOL).toBe("symbol");

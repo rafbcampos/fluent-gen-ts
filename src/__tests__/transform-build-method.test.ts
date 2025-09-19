@@ -126,25 +126,34 @@ describe("Transform Build Method Plugin Integration", () => {
       parentId: generatedId,
     };
 
-    this.builders.forEach((builder, key) => {
-      if (Array.isArray(builder)) {
-        const arr: Array<unknown> = [];
-        builder.forEach((b, index) => {
-          const nestedCtx = {
-            ...enhancedContext,
-            parameterName: key,
-            index,
-          };
-          arr.push(b.build(nestedCtx));
-        });
-        (result as Record<string, unknown>)[key] = arr;
-      } else {
-        const nestedCtx = {
-          ...enhancedContext,
-          parameterName: key,
-        };
-        (result as Record<string, unknown>)[key] = builder.build(nestedCtx);
-      }
+    // Process mixed arrays
+    this.mixedArrays.forEach((array, key) => {
+      const resolvedArray: unknown[] = [];
+      array.forEach((item, index) => {
+        const indexedKey = \`\${key}[\${index}]\`;
+        const nestedContext = enhancedContext ? createNestedContext(enhancedContext, key, index) : undefined;
+
+        // Check if this index has a builder stored
+        if (this.builders.has(indexedKey)) {
+          const builderOrObj = this.builders.get(indexedKey);
+          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+        } else {
+          // Static value
+          resolvedArray[index] = item;
+        }
+      });
+      (result as Record<string, unknown>)[key] = resolvedArray;
+    });
+
+    // Process regular builders (non-array)
+    this.builders.forEach((value, key) => {
+      // Skip indexed keys (they're handled in mixed arrays)
+      if (key.includes('[')) return;
+      // Skip keys that are in mixed arrays
+      if (this.mixedArrays.has(key)) return;
+
+      const nestedContext = enhancedContext ? createNestedContext(enhancedContext, key) : undefined;
+      (result as Record<string, unknown>)[key] = resolveValue(value, nestedContext);
     });
 
     return result as ${context.typeName}${context.genericConstraints};
