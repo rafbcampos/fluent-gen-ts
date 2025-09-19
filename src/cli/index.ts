@@ -104,128 +104,14 @@ program
 program
   .command("init")
   .description("Initialize a configuration file")
-  .option(
-    "-f, --format <format>",
-    "Configuration format (json, yaml, js)",
-    "json",
-  )
-  .option("-i, --interactive", "Interactive configuration setup", true)
-  .option(
-    "--template <name>",
-    "Use a configuration template (basic, advanced, monorepo)",
-  )
   .option("--overwrite", "Overwrite existing configuration")
   .action(async (options) => {
-    const inquirer = (await import("inquirer")).default;
-    const { existsSync, writeFileSync } = await import("node:fs");
-
-    // Check if config already exists
-    const configFiles = [
-      ".fluentgenrc.json",
-      ".fluentgenrc.yaml",
-      ".fluentgenrc.js",
-    ];
-    const existingConfig = configFiles.find((file) => existsSync(file));
-
-    if (existingConfig && !options.overwrite) {
-      console.error(
-        chalk.red(
-          `Configuration file ${existingConfig} already exists. Use --overwrite to replace it.`,
-        ),
-      );
+    try {
+      await commands.init(options);
+    } catch (error) {
+      console.error(chalk.red("Error:"), error);
       process.exit(1);
     }
-
-    console.log(chalk.blue("Initializing fluent-gen configuration...\n"));
-
-    // Use template if specified
-    if (options.template) {
-      const config = await commands.getTemplate(options.template);
-      console.log(chalk.green(`✓ Using ${options.template} template\n`));
-
-      const configFile =
-        options.format === "js" ? "fluentgen.config.js" : ".fluentgenrc.json";
-
-      if (options.format === "js") {
-        const jsContent = `module.exports = ${JSON.stringify(config, null, 2)};\n`;
-        writeFileSync(configFile, jsContent);
-      } else {
-        writeFileSync(configFile, JSON.stringify(config, null, 2));
-      }
-
-      console.log(chalk.green(`\n✓ Configuration file created: ${configFile}`));
-      console.log(chalk.gray("\nYou can now run:"));
-      console.log(chalk.cyan("  fluent-gen batch"));
-      return;
-    }
-
-    const answers = await inquirer.prompt([
-      {
-        type: "input",
-        name: "outputDir",
-        message: "Output directory for generated files:",
-        default: "./generated",
-      },
-      {
-        type: "confirm",
-        name: "useDefaults",
-        message: "Use default values for optional properties?",
-        default: true,
-      },
-      {
-        type: "confirm",
-        name: "addComments",
-        message: "Include JSDoc comments in generated code?",
-        default: true,
-      },
-      {
-        type: "list",
-        name: "indent",
-        message: "Indentation style:",
-        choices: [
-          { name: "2 spaces", value: { useTab: false, indentSize: 2 } },
-          { name: "4 spaces", value: { useTab: false, indentSize: 4 } },
-          { name: "Tabs", value: { useTab: true } },
-        ],
-      },
-      {
-        type: "input",
-        name: "tsConfigPath",
-        message: "Path to tsconfig.json (optional):",
-        default: "",
-      },
-    ]);
-
-    const config = {
-      tsConfigPath: answers.tsConfigPath || undefined,
-      generator: {
-        outputDir: answers.outputDir,
-        useDefaults: answers.useDefaults,
-        addComments: answers.addComments,
-        ...answers.indent,
-      },
-      targets: [],
-      patterns: [],
-      plugins: [],
-    };
-
-    const configFile =
-      options.format === "js" ? "fluentgen.config.js" : ".fluentgenrc.json";
-
-    if (options.format === "js") {
-      const jsContent = `module.exports = ${JSON.stringify(config, null, 2)};\n`;
-      writeFileSync(configFile, jsContent);
-    } else {
-      writeFileSync(configFile, JSON.stringify(config, null, 2));
-    }
-
-    console.log(chalk.green(`\n✓ Configuration file created: ${configFile}`));
-    console.log(
-      chalk.gray(
-        "\nYou can now add targets to the configuration file and run:",
-      ),
-    );
-    console.log(chalk.cyan("  fluent-gen batch"));
   });
 
 program.parse(process.argv);

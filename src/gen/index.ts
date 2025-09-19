@@ -108,7 +108,7 @@ export class FluentGen {
       return code;
     }
 
-    const output = outputPath ?? this.getOutputPath(filePath, typeName);
+    const output = outputPath ?? this.getOutputPath(typeName);
 
     try {
       const dir = path.dirname(output);
@@ -148,7 +148,7 @@ export class FluentGen {
     this.pluginManager.register(plugin);
   }
 
-  private getOutputPath(filePath: string, typeName: string): string {
+  private getOutputPath(typeName: string): string {
     const outputDir = this.options.outputDir ?? "./generated";
     const fileName =
       this.options.fileName ?? `${typeName.toLowerCase()}.builder.ts`;

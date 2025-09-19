@@ -8,8 +8,6 @@ export const GeneratorConfigSchema = z.object({
   useDefaults: z.boolean().optional(),
   contextType: z.string().optional(),
   importPath: z.string().optional(),
-  indentSize: z.number().min(1).max(8).optional(),
-  useTab: z.boolean().optional(),
   addComments: z.boolean().optional(),
 });
 

@@ -1,5 +1,10 @@
 import type { Result } from "./result.js";
-import type { TypeInfo, ResolvedType, PropertyInfo, GeneratorOptions } from "./types.js";
+import type {
+  TypeInfo,
+  ResolvedType,
+  PropertyInfo,
+  GeneratorOptions,
+} from "./types.js";
 import type { Type, Symbol } from "ts-morph";
 
 export interface ParseContext {
@@ -112,7 +117,9 @@ export interface Plugin {
   transformBuildMethod?(context: BuildMethodContext): Result<string>;
 
   /** Transform the method signature for a property */
-  transformPropertyMethod?(context: PropertyMethodContext): Result<PropertyMethodTransform>;
+  transformPropertyMethod?(
+    context: PropertyMethodContext,
+  ): Result<PropertyMethodTransform>;
 
   /** Add custom methods to the builder */
   addCustomMethods?(context: BuilderContext): Result<readonly CustomMethod[]>;
@@ -180,17 +187,19 @@ export class PluginManager {
 
     return {
       runtime: this.dedupeImports(runtimeImports),
-      types: this.dedupeImports(typeImports)
+      types: this.dedupeImports(typeImports),
     };
   }
 
   /** Get property method transformation for a specific property */
-  async getPropertyMethodTransform(context: PropertyMethodContext): Promise<PropertyMethodTransform | null> {
+  getPropertyMethodTransform(
+    context: PropertyMethodContext,
+  ): PropertyMethodTransform | null {
     let transform: PropertyMethodTransform = {};
 
     for (const plugin of this.plugins.values()) {
       if (plugin.transformPropertyMethod) {
-        const result = await plugin.transformPropertyMethod(context);
+        const result = plugin.transformPropertyMethod(context);
         if (result.ok && result.value) {
           // Merge transforms, later plugins override earlier ones
           transform = { ...transform, ...result.value };
@@ -202,12 +211,12 @@ export class PluginManager {
   }
 
   /** Get all custom methods from plugins */
-  async getCustomMethods(context: BuilderContext): Promise<readonly CustomMethod[]> {
+  getCustomMethods(context: BuilderContext): readonly CustomMethod[] {
     const allMethods: CustomMethod[] = [];
 
     for (const plugin of this.plugins.values()) {
       if (plugin.addCustomMethods) {
-        const result = await plugin.addCustomMethods(context);
+        const result = plugin.addCustomMethods(context);
         if (result.ok && result.value) {
           allMethods.push(...result.value);
         }
@@ -218,12 +227,12 @@ export class PluginManager {
   }
 
   /** Get value transformations for a property */
-  async getValueTransforms(context: ValueContext): Promise<readonly ValueTransform[]> {
+  getValueTransforms(context: ValueContext): readonly ValueTransform[] {
     const transforms: ValueTransform[] = [];
 
     for (const plugin of this.plugins.values()) {
       if (plugin.transformValue) {
-        const result = await plugin.transformValue(context);
+        const result = plugin.transformValue(context);
         if (result.ok && result.value) {
           transforms.push(result.value);
         }
@@ -237,4 +246,3 @@ export class PluginManager {
     return Array.from(new Set(imports));
   }
 }
-

@@ -10,7 +10,6 @@ import {
   PluginManager,
   HookType,
   type BuildMethodContext,
-  type ValueContext,
 } from "../core/plugin.js";
 import {
   getCommonFileTemplate,
@@ -136,7 +135,6 @@ export class BuilderGenerator {
     return getCommonFileTemplate();
   }
 
-
   private async generateBuilder(resolvedType: ResolvedType): Promise<string> {
     const { name, typeInfo } = resolvedType;
 
@@ -186,16 +184,12 @@ export class BuilderGenerator {
   }
 
   /**
-   * Generates type imports from the source file
-   */
-  private generateTypeImports(resolvedType: ResolvedType): string {
-    return this.importGenerator.generateTypeImports(resolvedType);
-  }
-
-  /**
    * Generates the builder interface
    */
-  private async generateBuilderInterface(name: string, typeInfo: TypeInfo): Promise<string> {
+  private async generateBuilderInterface(
+    name: string,
+    typeInfo: TypeInfo,
+  ): Promise<string> {
     return this.methodGenerator.generateBuilderInterface(name, typeInfo, {
       addComments: this.config.addComments,
       contextType: this.config.contextType,
@@ -216,13 +210,18 @@ export class BuilderGenerator {
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
       : "";
     const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      ? this.typeStringGenerator.formatGenericConstraints(
+          typeInfo.genericParams,
+        )
       : "";
 
     // Generate static defaults
-    const defaults = this.defaultValueGenerator.generateDefaultsObject(typeInfo, {
-      useDefaults: this.config.useDefaults,
-    });
+    const defaults = this.defaultValueGenerator.generateDefaultsObject(
+      typeInfo,
+      {
+        useDefaults: this.config.useDefaults,
+      },
+    );
     const defaultsCode = defaults
       ? `  private static readonly defaults: Record<string, unknown> = ${defaults};`
       : "";
@@ -237,7 +236,7 @@ export class BuilderGenerator {
         contextType: this.config.contextType,
         pluginManager: this.pluginManager,
       },
-      name
+      name,
     );
 
     const buildMethod = await this.generateBuildMethodWithPlugins(
@@ -266,29 +265,6 @@ ${buildMethod}
   }
 
   /**
-   * Generates the build method
-   */
-  private generateBuildMethod(
-    name: string,
-    genericConstraints: string,
-    typeInfo?: TypeInfo,
-  ): string {
-    const builderName = this.getBuilderName(name);
-    const hasDefaults = typeInfo && this.defaultValueGenerator.generateDefaultsObject(
-      typeInfo,
-      { useDefaults: this.config.useDefaults }
-    ) !== null;
-    const defaultsReference = hasDefaults
-      ? `${builderName}.defaults`
-      : "undefined";
-
-    return `  build(context?: BaseBuildContext): ${name}${genericConstraints} {
-    return this.buildWithDefaults(${defaultsReference}, context);
-  }`;
-  }
-
-
-  /**
    * Generates the build method with plugin transformations
    */
   private async generateBuildMethodWithPlugins(
@@ -301,7 +277,9 @@ ${buildMethod}
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
       : "";
     const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      ? this.typeStringGenerator.formatGenericConstraints(
+          typeInfo.genericParams,
+        )
       : "";
     const properties = isObjectType(typeInfo) ? typeInfo.properties : [];
 
@@ -309,7 +287,7 @@ ${buildMethod}
     let buildMethodCode = await this.generateEnhancedBuildMethod(
       name,
       typeInfo,
-      genericConstraints
+      genericConstraints,
     );
 
     // Apply legacy plugin transformations for backward compatibility
@@ -327,7 +305,7 @@ ${buildMethod}
           resolvedType,
         };
 
-        const result = await plugin.transformBuildMethod(context);
+        const result = plugin.transformBuildMethod(context);
         if (result.ok) {
           buildMethodCode = result.value;
         }
@@ -343,7 +321,7 @@ ${buildMethod}
   private async generateEnhancedBuildMethod(
     typeName: string,
     typeInfo: TypeInfo,
-    genericConstraints: string
+    genericConstraints: string,
   ): Promise<string> {
     const builderName = this.getBuilderName(typeName);
     const hasDefaults = this.hasDefaultValues(typeInfo);
@@ -361,48 +339,14 @@ ${buildMethod}
   }
 
   /**
-   * Generates value transformation code from plugins
-   */
-  private async generateValueTransforms(typeInfo: TypeInfo): Promise<string> {
-    if (!isObjectType(typeInfo)) {
-      return "";
-    }
-
-    const transforms: string[] = [];
-
-    for (const prop of typeInfo.properties) {
-      const context: ValueContext = {
-        property: prop.name,
-        valueVariable: `result["${prop.name}"]`,
-        type: prop.type,
-        isOptional: prop.optional,
-      };
-
-      const valueTransforms = await this.pluginManager.getValueTransforms(context);
-
-      for (const transform of valueTransforms) {
-        if (transform.condition) {
-          transforms.push(`
-    if (${transform.condition}) {
-      ${transform.transform};
-    }`);
-        } else {
-          transforms.push(`
-    ${transform.transform};`);
-        }
-      }
-    }
-
-    return transforms.join("");
-  }
-
-  /**
    * Checks if a type has default values
    */
   private hasDefaultValues(typeInfo: TypeInfo): boolean {
-    return this.defaultValueGenerator.generateDefaultsObject(typeInfo, {
-      useDefaults: this.config.useDefaults,
-    }) !== null;
+    return (
+      this.defaultValueGenerator.generateDefaultsObject(typeInfo, {
+        useDefaults: this.config.useDefaults,
+      }) !== null
+    );
   }
 
   /**
@@ -415,7 +359,9 @@ ${buildMethod}
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
       : "";
     const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      ? this.typeStringGenerator.formatGenericConstraints(
+          typeInfo.genericParams,
+        )
       : "";
 
     // Add JSDoc for the factory function
@@ -433,7 +379,6 @@ ${jsDoc}export function ${funcName}${genericParams}(initial?: Partial<${name}${g
 `.trim();
   }
 
-
   private getBuilderName(typeName: string): string {
     return `${typeName}Builder`;
   }
@@ -444,7 +389,4 @@ ${jsDoc}export function ${funcName}${genericParams}(initial?: Partial<${name}${g
   private lowerFirst(str: string): string {
     return str.charAt(0).toLowerCase() + str.slice(1);
   }
-
-
-
 }

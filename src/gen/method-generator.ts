@@ -5,7 +5,12 @@
 
 import type { TypeInfo, PropertyInfo, IndexSignature } from "../core/types.js";
 import { TypeKind } from "../core/types.js";
-import type { PluginManager, PropertyMethodContext, CustomMethod, BuilderContext } from "../core/plugin.js";
+import type {
+  PluginManager,
+  PropertyMethodContext,
+  CustomMethod,
+  BuilderContext,
+} from "../core/plugin.js";
 import { TypeStringGenerator } from "./type-string-generator.js";
 import { isIndexSignature } from "./types.js";
 
@@ -36,14 +41,16 @@ export class MethodGenerator {
   async generateBuilderInterface(
     name: string,
     typeInfo: TypeInfo,
-    config: MethodGeneratorConfig
+    config: MethodGeneratorConfig,
   ): Promise<string> {
     const builderName = this.getBuilderName(name);
     const genericParams = this.isObjectType(typeInfo)
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
       : "";
     const genericConstraints = this.isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      ? this.typeStringGenerator.formatGenericConstraints(
+          typeInfo.genericParams,
+        )
       : "";
 
     const methods = await this.generateInterfaceMethods(
@@ -51,7 +58,7 @@ export class MethodGenerator {
       builderName,
       genericConstraints,
       config,
-      name
+      name,
     );
 
     return `
@@ -72,7 +79,7 @@ ${methods}
     builderName: string,
     genericConstraints: string,
     config: MethodGeneratorConfig,
-    typeName: string
+    typeName: string,
   ): Promise<string> {
     if (!this.isObjectType(typeInfo)) {
       return "";
@@ -88,19 +95,21 @@ ${methods}
         genericConstraints,
         config,
         typeName,
-        typeInfo
+        typeInfo,
       );
       methods.push(method);
     }
 
     // Add withAdditionalProperties method if there's an index signature
     if (typeInfo.indexSignature && isIndexSignature(typeInfo.indexSignature)) {
-      methods.push(this.generateIndexSignatureMethod(
-        typeInfo.indexSignature,
-        builderName,
-        genericConstraints,
-        config
-      ));
+      methods.push(
+        this.generateIndexSignatureMethod(
+          typeInfo.indexSignature,
+          builderName,
+          genericConstraints,
+          config,
+        ),
+      );
     }
 
     return methods.join("\n\n");
@@ -115,11 +124,13 @@ ${methods}
   generateBuildMethod(
     name: string,
     typeInfo: TypeInfo,
-    config: MethodGeneratorConfig
+    config: MethodGeneratorConfig,
   ): string {
     const builderName = this.getBuilderName(name);
     const genericConstraints = this.isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      ? this.typeStringGenerator.formatGenericConstraints(
+          typeInfo.genericParams,
+        )
       : "";
 
     const hasDefaults = this.hasDefaultValues(typeInfo);
@@ -144,7 +155,7 @@ ${methods}
     builderName: string,
     genericConstraints: string,
     config: MethodGeneratorConfig,
-    typeName: string
+    typeName: string,
   ): Promise<string> {
     if (!this.isObjectType(typeInfo)) {
       return "";
@@ -165,16 +176,19 @@ ${methods}
           originalType: paramType,
           builderName,
           typeName,
-          typeInfo
+          typeInfo,
         };
 
-        const transform = await config.pluginManager.getPropertyMethodTransform(context);
+        const transform =
+          config.pluginManager.getPropertyMethodTransform(context);
         if (transform?.parameterType) {
           paramType = transform.parameterType;
         }
       }
 
-      methodSignatures.push(`${jsDoc}  ${methodName}(value: ${paramType}): ${returnType};`);
+      methodSignatures.push(
+        `${jsDoc}  ${methodName}(value: ${paramType}): ${returnType};`,
+      );
     }
 
     // Add custom method signatures from plugins
@@ -184,7 +198,7 @@ ${methods}
         genericConstraints,
         config,
         typeName,
-        typeInfo
+        typeInfo,
       );
       if (customMethods) {
         methodSignatures.push(customMethods);
@@ -203,7 +217,7 @@ ${methods}
     genericConstraints: string,
     config: MethodGeneratorConfig,
     typeName: string,
-    typeInfo: TypeInfo
+    typeInfo: TypeInfo,
   ): Promise<string> {
     const methodName = `with${this.capitalize(prop.name)}`;
     let paramType = this.typeStringGenerator.getPropertyType(prop);
@@ -216,10 +230,11 @@ ${methods}
         originalType: paramType,
         builderName,
         typeName,
-        typeInfo
+        typeInfo,
       };
 
-      const transform = await config.pluginManager.getPropertyMethodTransform(context);
+      const transform =
+        config.pluginManager.getPropertyMethodTransform(context);
 
       if (transform) {
         if (transform.parameterType) {
@@ -229,11 +244,11 @@ ${methods}
         if (transform.extractValue || transform.validate) {
           const extractCode = transform.extractValue
             ? `const extractedValue = ${transform.extractValue};`
-            : 'const extractedValue = value;';
+            : "const extractedValue = value;";
 
           const validateCode = transform.validate
             ? `${transform.validate};`
-            : '';
+            : "";
 
           implementation = `
     ${extractCode}
@@ -259,9 +274,11 @@ ${methods}
     indexSignature: IndexSignature,
     builderName: string,
     genericConstraints: string,
-    config: MethodGeneratorConfig
+    config: MethodGeneratorConfig,
   ): string {
-    const valueType = this.typeStringGenerator.typeInfoToString(indexSignature.valueType);
+    const valueType = this.typeStringGenerator.typeInfoToString(
+      indexSignature.valueType,
+    );
     const keyType = indexSignature.keyType;
     const jsDoc = config.addComments
       ? `  /**
@@ -280,7 +297,10 @@ ${methods}
   /**
    * Generates JSDoc comment for a property
    */
-  private generateJsDoc(prop: PropertyInfo, config: MethodGeneratorConfig): string {
+  private generateJsDoc(
+    prop: PropertyInfo,
+    config: MethodGeneratorConfig,
+  ): string {
     if (!config.addComments || !prop.jsDoc) {
       return "";
     }
@@ -314,7 +334,7 @@ ${methods}
     genericConstraints: string,
     config: MethodGeneratorConfig,
     typeName: string,
-    typeInfo: TypeInfo
+    typeInfo: TypeInfo,
   ): Promise<string> {
     if (!config.pluginManager || !this.isObjectType(typeInfo)) {
       return "";
@@ -325,58 +345,24 @@ ${methods}
       builderName,
       typeInfo,
       properties: typeInfo.properties,
-      genericParams: this.typeStringGenerator.formatGenericParams(typeInfo.genericParams),
-      genericConstraints
+      genericParams: this.typeStringGenerator.formatGenericParams(
+        typeInfo.genericParams,
+      ),
+      genericConstraints,
     };
 
-    const customMethods = await config.pluginManager.getCustomMethods(context);
+    const customMethods = config.pluginManager.getCustomMethods(context);
 
     if (customMethods.length === 0) {
       return "";
     }
 
-    return customMethods.map((method: CustomMethod) => {
-      const jsDoc = method.jsDoc || '';
-      return `${jsDoc}  ${method.name}${method.signature}: ${builderName}${genericConstraints};`;
-    }).join("\n");
-  }
-
-  /**
-   * Generates custom methods from plugins
-   */
-  private async generateCustomMethods(
-    builderName: string,
-    genericConstraints: string,
-    config: MethodGeneratorConfig,
-    typeName: string,
-    typeInfo: TypeInfo
-  ): Promise<string> {
-    if (!config.pluginManager || !this.isObjectType(typeInfo)) {
-      return "";
-    }
-
-    const context: BuilderContext = {
-      typeName,
-      builderName,
-      typeInfo,
-      properties: typeInfo.properties,
-      genericParams: this.typeStringGenerator.formatGenericParams(typeInfo.genericParams),
-      genericConstraints
-    };
-
-    const customMethods = await config.pluginManager.getCustomMethods(context);
-
-    if (customMethods.length === 0) {
-      return "";
-    }
-
-    return customMethods.map((method: CustomMethod) => {
-      const jsDoc = method.jsDoc || '';
-      return `${jsDoc}
-  ${method.name}${method.signature}: ${builderName}${genericConstraints} {
-    ${method.implementation}
-  }`;
-    }).join("\n\n");
+    return customMethods
+      .map((method: CustomMethod) => {
+        const jsDoc = method.jsDoc || "";
+        return `${jsDoc}  ${method.name}${method.signature}: ${builderName}${genericConstraints};`;
+      })
+      .join("\n");
   }
 
   /**
@@ -388,9 +374,10 @@ ${methods}
     }
 
     return typeInfo.properties.some(
-      (prop) => !prop.optional &&
-      prop.type.kind !== TypeKind.Object &&
-      prop.type.kind !== TypeKind.Reference
+      (prop) =>
+        !prop.optional &&
+        prop.type.kind !== TypeKind.Object &&
+        prop.type.kind !== TypeKind.Reference,
     );
   }
 
@@ -403,3 +390,4 @@ ${methods}
     return typeInfo.kind === TypeKind.Object;
   }
 }
+

@@ -6,7 +6,6 @@
 import type { TypeInfo } from "../core/types.js";
 import { TypeKind } from "../core/types.js";
 import { PrimitiveType } from "./types.js";
-import { TypeStringGenerator } from "./type-string-generator.js";
 
 /**
  * Configuration for default value generation
@@ -22,14 +21,15 @@ export interface DefaultGeneratorConfig {
  * Generates default values for TypeScript types
  */
 export class DefaultValueGenerator {
-  private readonly typeStringGenerator = new TypeStringGenerator();
-
   /**
    * Generates a defaults object for a type
    * @param typeInfo - The type information
    * @param config - Default generation configuration
    */
-  generateDefaultsObject(typeInfo: TypeInfo, config: DefaultGeneratorConfig): string | null {
+  generateDefaultsObject(
+    typeInfo: TypeInfo,
+    config: DefaultGeneratorConfig,
+  ): string | null {
     if (!config.useDefaults || !this.isObjectType(typeInfo)) {
       return null;
     }
@@ -60,7 +60,10 @@ export class DefaultValueGenerator {
    * @param typeInfo - The type to generate a default for
    * @param config - Default generation configuration
    */
-  getDefaultValueForType(typeInfo: TypeInfo, config?: DefaultGeneratorConfig): string {
+  getDefaultValueForType(
+    typeInfo: TypeInfo,
+    config?: DefaultGeneratorConfig,
+  ): string {
     // Check for custom defaults first
     if (config?.customDefaults && typeInfo.kind === TypeKind.Primitive) {
       const customDefault = config.customDefaults.get(typeInfo.name);
@@ -127,7 +130,9 @@ export class DefaultValueGenerator {
   /**
    * Gets default value for literal types
    */
-  private getLiteralDefault(typeInfo: Extract<TypeInfo, { kind: TypeKind.Literal }>): string {
+  private getLiteralDefault(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Literal }>,
+  ): string {
     return typeof typeInfo.literal === "string"
       ? `"${typeInfo.literal}"`
       : String(typeInfo.literal);
@@ -136,7 +141,9 @@ export class DefaultValueGenerator {
   /**
    * Gets default value for union types
    */
-  private getUnionDefault(typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>): string {
+  private getUnionDefault(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>,
+  ): string {
     // For unions, pick the first non-undefined type
     if (typeInfo.unionTypes && typeInfo.unionTypes.length > 0) {
       const firstNonUndefined = typeInfo.unionTypes.find(
@@ -164,10 +171,7 @@ export class DefaultValueGenerator {
    * Determines if a type should skip default generation
    */
   private shouldSkipDefault(type: TypeInfo): boolean {
-    return (
-      type.kind === TypeKind.Object ||
-      type.kind === TypeKind.Reference
-    );
+    return type.kind === TypeKind.Object || type.kind === TypeKind.Reference;
   }
 
   /**
@@ -179,3 +183,4 @@ export class DefaultValueGenerator {
     return typeInfo.kind === TypeKind.Object;
   }
 }
+

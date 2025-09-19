@@ -1,7 +1,12 @@
 import { Type, ts } from "ts-morph";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
-import type { TypeInfo, PropertyInfo, GenericParam, IndexSignature } from "../core/types.js";
+import type {
+  TypeInfo,
+  PropertyInfo,
+  GenericParam,
+  IndexSignature,
+} from "../core/types.js";
 import { TypeKind } from "../core/types.js";
 import { TypeResolutionCache } from "../core/cache.js";
 import { PluginManager, HookType } from "../core/plugin.js";
@@ -22,6 +27,7 @@ export interface ResolverOptions {
 
 export class TypeResolver {
   private readonly maxDepth: number;
+  // TODO: verify if we should use the cache here or remove it
   private readonly cache: TypeResolutionCache;
   private readonly pluginManager: PluginManager;
   private readonly visitedTypes = new Set<string>();
@@ -43,10 +49,18 @@ export class TypeResolver {
     this.resolveConditionalTypes = options.resolveConditionalTypes ?? true;
     this.resolveTemplateLiterals = options.resolveTemplateLiterals ?? true;
 
-    this.utilityTypeExpander = new UtilityTypeExpander({ maxDepth: this.maxDepth });
-    this.mappedTypeResolver = new MappedTypeResolver({ maxDepth: this.maxDepth });
-    this.conditionalTypeResolver = new ConditionalTypeResolver({ maxDepth: this.maxDepth });
-    this.templateLiteralResolver = new TemplateLiteralResolver({ maxDepth: this.maxDepth });
+    this.utilityTypeExpander = new UtilityTypeExpander({
+      maxDepth: this.maxDepth,
+    });
+    this.mappedTypeResolver = new MappedTypeResolver({
+      maxDepth: this.maxDepth,
+    });
+    this.conditionalTypeResolver = new ConditionalTypeResolver({
+      maxDepth: this.maxDepth,
+    });
+    this.templateLiteralResolver = new TemplateLiteralResolver({
+      maxDepth: this.maxDepth,
+    });
   }
 
   async resolveType(type: Type, depth = 0): Promise<Result<TypeInfo>> {
@@ -78,11 +92,12 @@ export class TypeResolver {
 
       // First, try to expand utility types if enabled
       if (this.expandUtilityTypes) {
-        const utilityExpanded = await this.utilityTypeExpander.expandUtilityType(
-          type,
-          (t, d) => this.resolveType(t, d),
-          depth,
-        );
+        const utilityExpanded =
+          await this.utilityTypeExpander.expandUtilityType(
+            type,
+            (t, d) => this.resolveType(t, d),
+            depth,
+          );
         if (utilityExpanded.ok && utilityExpanded.value) {
           typeInfo = utilityExpanded.value;
           const afterHook = await this.pluginManager.executeHook(
@@ -97,11 +112,12 @@ export class TypeResolver {
 
       // Try to resolve conditional types if enabled
       if (this.resolveConditionalTypes) {
-        const conditionalResolved = await this.conditionalTypeResolver.resolveConditionalType(
-          type,
-          (t, d) => this.resolveType(t, d),
-          depth,
-        );
+        const conditionalResolved =
+          await this.conditionalTypeResolver.resolveConditionalType(
+            type,
+            (t, d) => this.resolveType(t, d),
+            depth,
+          );
         if (conditionalResolved.ok && conditionalResolved.value) {
           typeInfo = conditionalResolved.value;
           const afterHook = await this.pluginManager.executeHook(
@@ -135,11 +151,12 @@ export class TypeResolver {
 
       // Try to resolve template literal types if enabled
       if (this.resolveTemplateLiterals) {
-        const templateResolved = await this.templateLiteralResolver.resolveTemplateLiteral(
-          type,
-          (t, d) => this.resolveType(t, d),
-          depth,
-        );
+        const templateResolved =
+          await this.templateLiteralResolver.resolveTemplateLiteral(
+            type,
+            (t, d) => this.resolveType(t, d),
+            depth,
+          );
         if (templateResolved.ok && templateResolved.value) {
           typeInfo = templateResolved.value;
           const afterHook = await this.pluginManager.executeHook(
@@ -228,11 +245,12 @@ export class TypeResolver {
           if (aliasedType) {
             // Check if the aliased type is a utility type first
             if (this.expandUtilityTypes) {
-              const utilityExpanded = await this.utilityTypeExpander.expandUtilityType(
-                aliasedType,
-                (t, d) => this.resolveType(t, d),
-                depth + 1,
-              );
+              const utilityExpanded =
+                await this.utilityTypeExpander.expandUtilityType(
+                  aliasedType,
+                  (t, d) => this.resolveType(t, d),
+                  depth + 1,
+                );
               if (utilityExpanded.ok && utilityExpanded.value) {
                 this.visitedTypes.delete(typeString);
                 return ok(utilityExpanded.value);
@@ -240,7 +258,10 @@ export class TypeResolver {
             }
 
             // If not a utility type, recursively resolve the aliased type
-            const resolvedAlias = await this.resolveType(aliasedType, depth + 1);
+            const resolvedAlias = await this.resolveType(
+              aliasedType,
+              depth + 1,
+            );
             if (resolvedAlias.ok) {
               this.visitedTypes.delete(typeString);
               return resolvedAlias;
@@ -311,7 +332,9 @@ export class TypeResolver {
               try {
                 // Get a source file context to use as location
                 const parentSymbol = type.getSymbol();
-                const sourceFile = parentSymbol?.getDeclarations()?.[0]?.getSourceFile();
+                const sourceFile = parentSymbol
+                  ?.getDeclarations()?.[0]
+                  ?.getSourceFile();
                 if (sourceFile) {
                   propType = symbol.getTypeAtLocation(sourceFile);
                 }
@@ -323,7 +346,9 @@ export class TypeResolver {
             // Fallback: Just get the type at the source file level
             if (!propType) {
               const parentSymbol = type.getSymbol();
-              const sourceFile = parentSymbol?.getDeclarations()?.[0]?.getSourceFile();
+              const sourceFile = parentSymbol
+                ?.getDeclarations()?.[0]
+                ?.getSourceFile();
               if (sourceFile) {
                 try {
                   propType = symbol.getTypeAtLocation(sourceFile);
@@ -340,7 +365,10 @@ export class TypeResolver {
 
             const resolvedType = await this.resolveType(propType, depth + 1);
             if (!resolvedType.ok) {
-              console.log(`Failed to resolve type for ${propName}:`, resolvedType.error.message);
+              console.log(
+                `Failed to resolve type for ${propName}:`,
+                resolvedType.error.message,
+              );
               return resolvedType;
             }
 
@@ -355,7 +383,10 @@ export class TypeResolver {
             continue;
           } catch (error) {
             // If all approaches fail, log the error and skip this property
-            console.warn(`Failed to resolve property ${symbol.getName()}:`, error instanceof Error ? error.message : String(error));
+            console.warn(
+              `Failed to resolve property ${symbol.getName()}:`,
+              error instanceof Error ? error.message : String(error),
+            );
             continue;
           }
         }
@@ -541,7 +572,10 @@ export class TypeResolver {
       return ok(genericParams);
     } catch (error) {
       // Log error but return what we have so far
-      console.warn(`Failed to fully resolve generic parameters:`, error instanceof Error ? error.message : String(error));
+      console.warn(
+        `Failed to fully resolve generic parameters:`,
+        error instanceof Error ? error.message : String(error),
+      );
       return ok(genericParams);
     }
   }
@@ -597,11 +631,16 @@ export class TypeResolver {
           const members = decl.getMembers();
           for (const member of members) {
             // Check if this is an index signature
-            if (member.getKindName && member.getKindName() === "IndexSignature") {
+            if (
+              member.getKindName &&
+              member.getKindName() === "IndexSignature"
+            ) {
               // Check for readonly modifier
-              const modifiers = member.getModifiers ? member.getModifiers() : [];
-              isReadonly = modifiers.some((mod: any) =>
-                mod.getKind() === ts.SyntaxKind.ReadonlyKeyword
+              const modifiers = member.getModifiers
+                ? member.getModifiers()
+                : [];
+              isReadonly = modifiers.some(
+                (mod: any) => mod.getKind() === ts.SyntaxKind.ReadonlyKeyword,
               );
               break;
             }
