@@ -24,11 +24,10 @@ export class TemplateLiteralResolver {
       return err(new Error(`Max template literal resolution depth exceeded`));
     }
 
-    if (!this.isTemplateLiteralType(type)) {
-      return ok(null);
-    }
-
     try {
+      if (!this.isTemplateLiteralType(type)) {
+        return ok(null);
+      }
       // Try to extract the template literal pattern
       const pattern = this.extractTemplateLiteralPattern(type);
       if (!pattern) {

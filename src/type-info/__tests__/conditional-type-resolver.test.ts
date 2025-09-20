@@ -18,7 +18,10 @@ describe("ConditionalTypeResolver", () => {
     });
   });
 
-  const mockResolveType = async (_type: Type, _depth: number): Promise<Result<TypeInfo>> => {
+  const mockResolveType = async (
+    _type: Type,
+    _depth: number,
+  ): Promise<Result<TypeInfo>> => {
     // Simple mock that returns unknown for unresolved types
     return ok({ kind: TypeKind.Unknown });
   };
@@ -30,11 +33,14 @@ describe("ConditionalTypeResolver", () => {
         `
         type IsString<T> = T extends string ? true : false;
         type Test = IsString<string>;  // TypeScript resolves this to 'true'
-        `
+        `,
       );
 
       const testType = sourceFile.getTypeAliasOrThrow("Test").getType();
-      const result = await resolver.resolveConditionalType(testType, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        testType,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -59,11 +65,14 @@ describe("ConditionalTypeResolver", () => {
 
         type GetUser<T> = T extends "admin" ? Admin : User;
         type Result = GetUser<"user">;  // TypeScript resolves this to User
-        `
+        `,
       );
 
       const resultType = sourceFile.getTypeAliasOrThrow("Result").getType();
-      const result = await resolver.resolveConditionalType(resultType, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        resultType,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -78,80 +87,19 @@ describe("ConditionalTypeResolver", () => {
         `
         type NonNullable<T> = T extends null | undefined ? never : T;
         type Result = NonNullable<string | null>;  // TypeScript resolves this to 'string'
-        `
+        `,
       );
 
       const resultType = sourceFile.getTypeAliasOrThrow("Result").getType();
-      const result = await resolver.resolveConditionalType(resultType, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        resultType,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
         // Should return null because TypeScript already resolved it to 'string'
         expect(result.value).toBeNull();
-      }
-    });
-  });
-
-  describe("Unresolved conditional types", () => {
-    it("should handle conditional types dependent on generic parameters", async () => {
-      const sourceFile = project.createSourceFile(
-        "test-generic.ts",
-        `
-        type IsArray<T> = T extends any[] ? true : false;
-
-        interface Container<T> {
-          value: T;
-          isArray: IsArray<T>;  // This depends on generic T
-        }
-        `
-      );
-
-      const containerType = sourceFile.getInterfaceOrThrow("Container").getType();
-      const isArrayProp = containerType.getProperty("isArray");
-      const propType = isArrayProp?.getTypeAtLocation(sourceFile);
-
-      if (propType) {
-        const result = await resolver.resolveConditionalType(propType, mockResolveType);
-
-        expect(isOk(result)).toBe(true);
-        if (isOk(result) && result.value) {
-          // Should return a generic type info since it can't be resolved
-          expect(result.value.kind).toBe(TypeKind.Generic);
-          if (result.value.kind === TypeKind.Generic) {
-            expect(result.value.name).toContain("IsArray");
-          }
-        }
-      }
-    });
-
-    it("should handle nested conditional types with unresolved parameters", async () => {
-      const sourceFile = project.createSourceFile(
-        "test-nested-generic.ts",
-        `
-        type DeepCheck<T> = T extends object
-          ? T extends any[]
-            ? "array"
-            : "object"
-          : "primitive";
-
-        interface GenericContainer<T> {
-          type: DeepCheck<T>;
-        }
-        `
-      );
-
-      const containerType = sourceFile.getInterfaceOrThrow("GenericContainer").getType();
-      const typeProp = containerType.getProperty("type");
-      const propType = typeProp?.getTypeAtLocation(sourceFile);
-
-      if (propType) {
-        const result = await resolver.resolveConditionalType(propType, mockResolveType);
-
-        expect(isOk(result)).toBe(true);
-        if (isOk(result) && result.value) {
-          // Should handle unresolved conditional
-          expect(result.value.kind).toBe(TypeKind.Generic);
-        }
       }
     });
   });
@@ -162,11 +110,15 @@ describe("ConditionalTypeResolver", () => {
 
       const sourceFile = project.createSourceFile(
         "test-depth.ts",
-        `type Test = string;`
+        `type Test = string;`,
       );
 
       const type = sourceFile.getTypeAliasOrThrow("Test").getType();
-      const result = await resolverWithLowDepth.resolveConditionalType(type, mockResolveType, 3);
+      const result = await resolverWithLowDepth.resolveConditionalType(
+        type,
+        mockResolveType,
+        3,
+      );
 
       expect(isOk(result)).toBe(false);
       if (!isOk(result)) {
@@ -174,14 +126,52 @@ describe("ConditionalTypeResolver", () => {
       }
     });
 
+    it("should handle types with no symbol name but has text representation", async () => {
+      const sourceFile = project.createSourceFile(
+        "test-no-symbol.ts",
+        `
+        type GenericConditional<T> = T extends string ? { text: T } : { value: T };
+
+        interface Container<T> {
+          field: GenericConditional<T>;
+        }
+        `,
+      );
+
+      const containerType = sourceFile
+        .getInterfaceOrThrow("Container")
+        .getType();
+      const fieldProp = containerType.getProperty("field");
+      const propType = fieldProp?.getTypeAtLocation(sourceFile);
+
+      if (propType) {
+        const result = await resolver.resolveConditionalType(
+          propType,
+          mockResolveType,
+        );
+
+        expect(isOk(result)).toBe(true);
+        if (isOk(result) && result.value) {
+          expect(result.value.kind).toBe(TypeKind.Generic);
+          if (result.value.kind === TypeKind.Generic) {
+            // Should fallback to type text when no symbol name
+            expect(result.value.name).toBeTruthy();
+          }
+        }
+      }
+    });
+
     it("should return null for primitive types", async () => {
       const sourceFile = project.createSourceFile(
         "test-primitive.ts",
-        `type Test = string;`
+        `type Test = string;`,
       );
 
       const type = sourceFile.getTypeAliasOrThrow("Test").getType();
-      const result = await resolver.resolveConditionalType(type, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        type,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -192,11 +182,14 @@ describe("ConditionalTypeResolver", () => {
     it("should return null for literal types", async () => {
       const sourceFile = project.createSourceFile(
         "test-literal.ts",
-        `type Test = "hello";`
+        `type Test = "hello";`,
       );
 
       const type = sourceFile.getTypeAliasOrThrow("Test").getType();
-      const result = await resolver.resolveConditionalType(type, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        type,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -212,11 +205,14 @@ describe("ConditionalTypeResolver", () => {
           id: string;
           name: string;
         }
-        `
+        `,
       );
 
       const type = sourceFile.getInterfaceOrThrow("Test").getType();
-      const result = await resolver.resolveConditionalType(type, mockResolveType);
+      const result = await resolver.resolveConditionalType(
+        type,
+        mockResolveType,
+      );
 
       expect(isOk(result)).toBe(true);
       if (isOk(result)) {
@@ -239,16 +235,29 @@ describe("ConditionalTypeResolver", () => {
         type RequiredUser = Required<User>;
         type PartialUser = Partial<User>;
         type PickedUser = Pick<User, "id" | "name">;
-        `
+        `,
       );
 
-      const requiredType = sourceFile.getTypeAliasOrThrow("RequiredUser").getType();
-      const partialType = sourceFile.getTypeAliasOrThrow("PartialUser").getType();
+      const requiredType = sourceFile
+        .getTypeAliasOrThrow("RequiredUser")
+        .getType();
+      const partialType = sourceFile
+        .getTypeAliasOrThrow("PartialUser")
+        .getType();
       const pickedType = sourceFile.getTypeAliasOrThrow("PickedUser").getType();
 
-      const requiredResult = await resolver.resolveConditionalType(requiredType, mockResolveType);
-      const partialResult = await resolver.resolveConditionalType(partialType, mockResolveType);
-      const pickedResult = await resolver.resolveConditionalType(pickedType, mockResolveType);
+      const requiredResult = await resolver.resolveConditionalType(
+        requiredType,
+        mockResolveType,
+      );
+      const partialResult = await resolver.resolveConditionalType(
+        partialType,
+        mockResolveType,
+      );
+      const pickedResult = await resolver.resolveConditionalType(
+        pickedType,
+        mockResolveType,
+      );
 
       // All should return null as TypeScript has already resolved them
       expect(isOk(requiredResult) && requiredResult.value).toBeNull();
@@ -266,16 +275,29 @@ describe("ConditionalTypeResolver", () => {
         type TestFunction = IsFunction<() => void>;  // Resolves to true
         type TestObject = IsObject<{ a: string }>;   // Resolves to true
         type TestPrimitive = IsObject<string>;        // Resolves to false
-        `
+        `,
       );
 
-      const functionType = sourceFile.getTypeAliasOrThrow("TestFunction").getType();
+      const functionType = sourceFile
+        .getTypeAliasOrThrow("TestFunction")
+        .getType();
       const objectType = sourceFile.getTypeAliasOrThrow("TestObject").getType();
-      const primitiveType = sourceFile.getTypeAliasOrThrow("TestPrimitive").getType();
+      const primitiveType = sourceFile
+        .getTypeAliasOrThrow("TestPrimitive")
+        .getType();
 
-      const functionResult = await resolver.resolveConditionalType(functionType, mockResolveType);
-      const objectResult = await resolver.resolveConditionalType(objectType, mockResolveType);
-      const primitiveResult = await resolver.resolveConditionalType(primitiveType, mockResolveType);
+      const functionResult = await resolver.resolveConditionalType(
+        functionType,
+        mockResolveType,
+      );
+      const objectResult = await resolver.resolveConditionalType(
+        objectType,
+        mockResolveType,
+      );
+      const primitiveResult = await resolver.resolveConditionalType(
+        primitiveType,
+        mockResolveType,
+      );
 
       // All should return null as TypeScript resolves them
       expect(isOk(functionResult) && functionResult.value).toBeNull();

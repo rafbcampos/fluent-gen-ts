@@ -66,6 +66,7 @@ export class TypeExtractor {
       ...(options.maxDepth && { maxDepth: options.maxDepth }),
       cache: this.cache,
       pluginManager: this.pluginManager,
+      project: this.parser.getProject(),
     });
   }
 

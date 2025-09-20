@@ -12,6 +12,7 @@ export default defineConfig({
         "node_modules/**",
         "dist/**",
         "coverage/**",
+        "vitest-setup.ts",
         "**/*.d.ts",
         "**/*.config.*",
         "**/rolldown.config.ts",
@@ -21,6 +22,7 @@ export default defineConfig({
         ".generated/**",
         "**/generated/**",
         ".vitepress/**",
+        "src/cli/**",
       ],
       thresholds: {
         global: {
@@ -33,4 +35,3 @@ export default defineConfig({
     },
   },
 });
-

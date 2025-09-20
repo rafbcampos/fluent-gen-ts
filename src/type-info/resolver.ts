@@ -1,4 +1,5 @@
 import { Type, ts, Symbol as TsSymbol } from "ts-morph";
+import type { Project } from "ts-morph";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
 import type {
@@ -14,6 +15,7 @@ import { UtilityTypeExpander } from "./utility-type-expander.js";
 import { MappedTypeResolver } from "./mapped-type-resolver.js";
 import { ConditionalTypeResolver } from "./conditional-type-resolver.js";
 import { TemplateLiteralResolver } from "./template-literal-resolver.js";
+import { GenericContext } from "./generic-context.js";
 
 export interface ResolverOptions {
   readonly maxDepth?: number;
@@ -23,11 +25,17 @@ export interface ResolverOptions {
   readonly resolveMappedTypes?: boolean;
   readonly resolveConditionalTypes?: boolean;
   readonly resolveTemplateLiterals?: boolean;
+  readonly project?: Project;
 }
 
 export class TypeResolver {
   private readonly maxDepth: number;
-  // TODO: verify if we should use the cache here or remove it
+  /**
+   * Cache for type resolution within a single extraction session.
+   * Helps avoid redundant resolution of the same types and improves performance.
+   * The cache is scoped to a single TypeResolver instance and should be cleared
+   * if the underlying source files change.
+   */
   private readonly cache: TypeResolutionCache;
   private readonly pluginManager: PluginManager;
   private readonly visitedTypes = new Set<string>();
@@ -39,6 +47,7 @@ export class TypeResolver {
   private readonly resolveMappedTypes: boolean;
   private readonly resolveConditionalTypes: boolean;
   private readonly resolveTemplateLiterals: boolean;
+  private genericContext: GenericContext;
 
   constructor(options: ResolverOptions = {}) {
     this.maxDepth = options.maxDepth ?? 10;
@@ -51,6 +60,7 @@ export class TypeResolver {
 
     this.utilityTypeExpander = new UtilityTypeExpander({
       maxDepth: this.maxDepth,
+      ...(options.project && { project: options.project }),
     });
     this.mappedTypeResolver = new MappedTypeResolver({
       maxDepth: this.maxDepth,
@@ -61,9 +71,17 @@ export class TypeResolver {
     this.templateLiteralResolver = new TemplateLiteralResolver({
       maxDepth: this.maxDepth,
     });
+
+    this.genericContext = new GenericContext();
   }
 
-  async resolveType(type: Type, depth = 0): Promise<Result<TypeInfo>> {
+  async resolveType(
+    type: Type,
+    depth = 0,
+    context?: GenericContext,
+  ): Promise<Result<TypeInfo>> {
+    // Use provided context or create a new one
+    const genericContext = context ?? this.genericContext;
     if (depth > this.maxDepth) {
       return err(new Error(`Max resolution depth (${this.maxDepth}) exceeded`));
     }
@@ -183,13 +201,57 @@ export class TypeResolver {
         typeInfo = { kind: TypeKind.Primitive, name: "any" };
       } else if (type.isTypeParameter()) {
         const paramName = type.getSymbol()?.getName() || "T";
-        typeInfo = { kind: TypeKind.Generic, name: paramName };
+
+        // Check if we have a resolved type for this generic in context
+        const resolvedInContext = genericContext.getResolvedType(paramName);
+        if (resolvedInContext) {
+          typeInfo = resolvedInContext;
+        } else {
+          // Register as unresolved generic
+          const constraint = type.getConstraint();
+          const defaultType = type.getDefault();
+
+          let constraintInfo: TypeInfo | undefined;
+          let defaultInfo: TypeInfo | undefined;
+
+          if (constraint) {
+            const constraintResult = await this.resolveType(
+              constraint,
+              depth + 1,
+              genericContext,
+            );
+            if (constraintResult.ok) {
+              constraintInfo = constraintResult.value;
+            }
+          }
+
+          if (defaultType) {
+            const defaultResult = await this.resolveType(
+              defaultType,
+              depth + 1,
+              genericContext,
+            );
+            if (defaultResult.ok) {
+              defaultInfo = defaultResult.value;
+            }
+          }
+
+          // Register the generic parameter in context
+          genericContext.registerGenericParam({
+            name: paramName,
+            ...(constraintInfo && { constraint: constraintInfo }),
+            ...(defaultInfo && { default: defaultInfo }),
+          });
+
+          typeInfo = { kind: TypeKind.Generic, name: paramName };
+        }
       } else if (type.isArray()) {
         const elementType = type.getArrayElementType();
         if (elementType) {
           const resolvedElement = await this.resolveType(
             elementType,
             depth + 1,
+            genericContext,
           );
           if (!resolvedElement.ok) return resolvedElement;
           typeInfo = {
@@ -200,7 +262,7 @@ export class TypeResolver {
           typeInfo = { kind: TypeKind.Unknown };
         }
       } else if (type.isUnion()) {
-        const unionTypes = await this.resolveUnionTypes(type, depth);
+        const unionTypes = await this.resolveUnionTypes(type, depth, genericContext);
         if (!unionTypes.ok) return unionTypes;
         typeInfo = {
           kind: TypeKind.Union,
@@ -210,6 +272,7 @@ export class TypeResolver {
         const intersectionTypes = await this.resolveIntersectionTypes(
           type,
           depth,
+          genericContext,
         );
         if (!intersectionTypes.ok) return intersectionTypes;
         typeInfo = {
@@ -222,7 +285,7 @@ export class TypeResolver {
           literal: type.getLiteralValue(),
         };
       } else if (type.isTuple()) {
-        const tupleTypes = await this.resolveTupleTypes(type, depth);
+        const tupleTypes = await this.resolveTupleTypes(type, depth, genericContext);
         if (!tupleTypes.ok) return tupleTypes;
         typeInfo = {
           kind: TypeKind.Tuple,
@@ -234,6 +297,18 @@ export class TypeResolver {
           kind: TypeKind.Enum,
           name: enumName || "UnknownEnum",
         };
+      } else if (this.isKeyofType(type)) {
+        const keyofResult = await this.resolveKeyofType(type);
+        if (!keyofResult.ok) return keyofResult;
+        typeInfo = keyofResult.value;
+      } else if (this.isTypeofType(type)) {
+        const typeofResult = await this.resolveTypeofType(type);
+        if (!typeofResult.ok) return typeofResult;
+        typeInfo = typeofResult.value;
+      } else if (this.isIndexAccessType(type)) {
+        const indexResult = await this.resolveIndexAccessType(type);
+        if (!indexResult.ok) return indexResult;
+        typeInfo = indexResult.value;
       } else if (type.isObject() || type.isInterface()) {
         // Check for type references that need expansion
         const symbol = type.getSymbol();
@@ -248,7 +323,7 @@ export class TypeResolver {
               const utilityExpanded =
                 await this.utilityTypeExpander.expandUtilityType(
                   aliasedType,
-                  (t, d) => this.resolveType(t, d),
+                  (t, d) => this.resolveType(t, d, genericContext),
                   depth + 1,
                 );
               if (utilityExpanded.ok && utilityExpanded.value) {
@@ -261,6 +336,7 @@ export class TypeResolver {
             const resolvedAlias = await this.resolveType(
               aliasedType,
               depth + 1,
+              genericContext,
             );
             if (resolvedAlias.ok) {
               this.visitedTypes.delete(typeString);
@@ -269,16 +345,18 @@ export class TypeResolver {
           }
         }
 
-        const properties = await this.resolveProperties(type, depth);
+        const properties = await this.resolveProperties(type, depth, genericContext);
         if (!properties.ok) return properties;
 
         const genericParams = await this.resolveGenericParams(type);
         if (!genericParams.ok) return genericParams;
 
-        const indexSignature = await this.resolveIndexSignature(type, depth);
+        const indexSignature = await this.resolveIndexSignature(type, depth, genericContext);
         if (!indexSignature.ok) return indexSignature;
 
         const objectName = type.getSymbol()?.getName();
+        const unresolvedGenerics = genericContext.getUnresolvedGenerics();
+
         typeInfo = {
           kind: TypeKind.Object,
           ...(objectName && { name: objectName }),
@@ -288,6 +366,9 @@ export class TypeResolver {
           }),
           ...(indexSignature.value && {
             indexSignature: indexSignature.value,
+          }),
+          ...(unresolvedGenerics.length > 0 && {
+            unresolvedGenerics,
           }),
         };
       } else {
@@ -312,6 +393,7 @@ export class TypeResolver {
   private async resolveProperties(
     type: Type,
     depth: number,
+    context?: GenericContext,
   ): Promise<Result<PropertyInfo[]>> {
     const properties: PropertyInfo[] = [];
 
@@ -359,16 +441,11 @@ export class TypeResolver {
             }
 
             if (!propType) {
-              console.log(`No property type found for ${propName}, skipping`);
               continue;
             }
 
-            const resolvedType = await this.resolveType(propType, depth + 1);
+            const resolvedType = await this.resolveType(propType, depth + 1, context);
             if (!resolvedType.ok) {
-              console.log(
-                `Failed to resolve type for ${propName}:`,
-                resolvedType.error.message,
-              );
               return resolvedType;
             }
 
@@ -381,18 +458,14 @@ export class TypeResolver {
 
             properties.push(property);
             continue;
-          } catch (error) {
-            // If all approaches fail, log the error and skip this property
-            console.warn(
-              `Failed to resolve property ${symbol.getName()}:`,
-              error instanceof Error ? error.message : String(error),
-            );
+          } catch {
+            // If all approaches fail, skip this property
             continue;
           }
         }
 
         const propType = symbol.getTypeAtLocation(valueDeclaration);
-        const resolvedType = await this.resolveType(propType, depth + 1);
+        const resolvedType = await this.resolveType(propType, depth + 1, context);
 
         if (!resolvedType.ok) return resolvedType;
 
@@ -465,11 +538,16 @@ export class TypeResolver {
   private async resolveUnionTypes(
     type: Type,
     depth: number,
+    context?: GenericContext,
   ): Promise<Result<TypeInfo[]>> {
     const unionTypes: TypeInfo[] = [];
 
     for (const unionType of type.getUnionTypes()) {
-      const resolved = await this.resolveType(unionType, depth + 1);
+      const resolved = await this.resolveType(
+        unionType,
+        depth + 1,
+        context,
+      );
       if (!resolved.ok) return resolved;
       unionTypes.push(resolved.value);
     }
@@ -480,11 +558,12 @@ export class TypeResolver {
   private async resolveIntersectionTypes(
     type: Type,
     depth: number,
+    context?: GenericContext,
   ): Promise<Result<TypeInfo[]>> {
     const intersectionTypes: TypeInfo[] = [];
 
     for (const intersectionType of type.getIntersectionTypes()) {
-      const resolved = await this.resolveType(intersectionType, depth + 1);
+      const resolved = await this.resolveType(intersectionType, depth + 1, context);
       if (!resolved.ok) return resolved;
       intersectionTypes.push(resolved.value);
     }
@@ -495,12 +574,13 @@ export class TypeResolver {
   private async resolveTupleTypes(
     type: Type,
     depth: number,
+    context?: GenericContext,
   ): Promise<Result<TypeInfo[]>> {
     const tupleTypes: TypeInfo[] = [];
     const typeArgs = type.getTupleElements();
 
     for (const tupleType of typeArgs) {
-      const resolved = await this.resolveType(tupleType, depth + 1);
+      const resolved = await this.resolveType(tupleType, depth + 1, context);
       if (!resolved.ok) return resolved;
       tupleTypes.push(resolved.value);
     }
@@ -568,17 +648,32 @@ export class TypeResolver {
 
       return ok(genericParams);
     } catch (error) {
-      // Log error but return what we have so far
-      console.warn(
-        `Failed to fully resolve generic parameters:`,
-        error instanceof Error ? error.message : String(error),
+      return err(
+        new Error(
+          `Failed to resolve generic parameters: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
       );
-      return ok(genericParams);
     }
   }
 
   clearVisited(): void {
     this.visitedTypes.clear();
+  }
+
+  /**
+   * Get the current generic context for accessing unresolved generics
+   */
+  getGenericContext(): GenericContext {
+    return this.genericContext;
+  }
+
+  /**
+   * Reset the generic context for a new resolution session
+   */
+  resetGenericContext(): void {
+    this.genericContext = new GenericContext();
   }
 
   private isTypeAlias(symbol: any): boolean {
@@ -611,6 +706,7 @@ export class TypeResolver {
   private async resolveIndexSignature(
     type: Type,
     depth: number,
+    context?: GenericContext,
   ): Promise<Result<IndexSignature | null>> {
     try {
       // Get the symbol to access more detailed information
@@ -648,7 +744,7 @@ export class TypeResolver {
       // Check for string index signature
       const stringIndexType = type.getStringIndexType();
       if (stringIndexType) {
-        const valueType = await this.resolveType(stringIndexType, depth + 1);
+        const valueType = await this.resolveType(stringIndexType, depth + 1, context);
         if (!valueType.ok) return valueType;
 
         return ok({
@@ -661,7 +757,7 @@ export class TypeResolver {
       // Check for number index signature
       const numberIndexType = type.getNumberIndexType();
       if (numberIndexType) {
-        const valueType = await this.resolveType(numberIndexType, depth + 1);
+        const valueType = await this.resolveType(numberIndexType, depth + 1, context);
         if (!valueType.ok) return valueType;
 
         return ok({
@@ -690,5 +786,97 @@ export class TypeResolver {
     }
 
     return false;
+  }
+
+  private isKeyofType(type: Type): boolean {
+    // Check if this is a keyof operator type
+    const tsType = type.compilerType as ts.Type;
+    if (tsType && "flags" in tsType) {
+      // TypeScript TypeFlags.Index = 4194304
+      return (tsType.flags & ts.TypeFlags.Index) !== 0;
+    }
+    return false;
+  }
+
+  private isTypeofType(type: Type): boolean {
+    // Check if this is a typeof operator type
+    const symbol = type.getSymbol();
+    const typeText = type.getText();
+
+    // Look for typeof pattern in the type text
+    return typeText.startsWith("typeof ") ||
+           (symbol?.getName()?.startsWith("typeof ") ?? false);
+  }
+
+  private isIndexAccessType(type: Type): boolean {
+    // Check if this is an indexed access type (T[K])
+    const tsType = type.compilerType as ts.Type;
+    if (tsType && "flags" in tsType) {
+      // TypeScript TypeFlags.IndexedAccess = 8388608
+      return (tsType.flags & ts.TypeFlags.IndexedAccess) !== 0;
+    }
+    return false;
+  }
+
+  private async resolveKeyofType(
+    type: Type,
+  ): Promise<Result<TypeInfo>> {
+    // keyof T should extract the keys of T as a union of string literals
+    // For now, return the keyof representation - actual resolution would
+    // require analyzing the target type's properties
+
+    // Try to get the target type from the keyof
+    const typeText = type.getText();
+    const keyofMatch = typeText.match(/keyof\s+(.+)/);
+
+    if (keyofMatch && keyofMatch[1]) {
+      // For unresolved keyof types, store the structure
+      return ok({
+        kind: TypeKind.Keyof,
+        target: { kind: TypeKind.Reference, name: keyofMatch[1] },
+      });
+    }
+
+    // If we can't parse it, return as unknown
+    return ok({ kind: TypeKind.Unknown });
+  }
+
+  private async resolveTypeofType(
+    type: Type,
+  ): Promise<Result<TypeInfo>> {
+    // typeof should resolve to the type of the target expression
+    const typeText = type.getText();
+    const typeofMatch = typeText.match(/typeof\s+(.+)/);
+
+    if (typeofMatch && typeofMatch[1]) {
+      // For unresolved typeof types, store the structure
+      return ok({
+        kind: TypeKind.Typeof,
+        target: { kind: TypeKind.Reference, name: typeofMatch[1] },
+      });
+    }
+
+    // If we can't parse it, return as unknown
+    return ok({ kind: TypeKind.Unknown });
+  }
+
+  private async resolveIndexAccessType(
+    type: Type,
+  ): Promise<Result<TypeInfo>> {
+    // T[K] should resolve to the type of property K in T
+    const typeText = type.getText();
+    const indexMatch = typeText.match(/(.+)\[(.+)\]/);
+
+    if (indexMatch && indexMatch[1] && indexMatch[2]) {
+      // For unresolved index access types, store the structure
+      return ok({
+        kind: TypeKind.Index,
+        object: { kind: TypeKind.Reference, name: indexMatch[1] },
+        index: { kind: TypeKind.Reference, name: indexMatch[2] },
+      });
+    }
+
+    // If we can't parse it, return as unknown
+    return ok({ kind: TypeKind.Unknown });
   }
 }

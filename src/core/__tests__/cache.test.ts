@@ -90,6 +90,41 @@ describe("Cache", () => {
       expect(ttlCache.get("key1")).toBeUndefined();
       expect(ttlCache.has("key1")).toBe(false);
     });
+
+    it("should clean up expired entries on has() check", async () => {
+      const ttlCache = new Cache<string, number>(10, 50);
+      ttlCache.set("expired", 100);
+
+      // Verify it exists initially
+      expect(ttlCache.has("expired")).toBe(true);
+
+      // Wait for expiration
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // The has() check should clean up the expired entry
+      expect(ttlCache.has("expired")).toBe(false);
+
+      // Verify it was actually removed from the internal cache
+      expect(ttlCache.get("expired")).toBeUndefined();
+    });
+  });
+
+  describe("edge cases", () => {
+    it("should handle corrupted cache state gracefully", () => {
+      const cache = new Cache<string, number>(10);
+
+      // Manually corrupt the cache state to test the has() method's robustness
+      cache.set("test", 100);
+
+      // Access the internal cache and set an entry to null/undefined
+      // This tests the !entry check in has() method
+      const internalCache = (cache as any).cache;
+      internalCache.set("corrupted", null);
+
+      // The has() method should handle this gracefully
+      expect(cache.has("corrupted")).toBe(false);
+      expect(cache.get("corrupted")).toBeUndefined();
+    });
   });
 });
 

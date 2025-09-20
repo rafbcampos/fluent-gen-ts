@@ -1,4 +1,4 @@
-import { Type } from "ts-morph";
+import { Type, Project } from "ts-morph";
 import type { Result } from "../core/result.js";
 import { ok, err } from "../core/result.js";
 import type { TypeInfo, PropertyInfo, IndexSignature } from "../core/types.js";
@@ -6,13 +6,27 @@ import { TypeKind } from "../core/types.js";
 
 export interface UtilityTypeExpanderOptions {
   readonly maxDepth?: number;
+  readonly project?: Project;
 }
 
 export class UtilityTypeExpander {
   private readonly maxDepth: number;
+  private readonly project: Project | undefined;
+  private typeChecker?: any; // TypeScript's type checker when available
 
   constructor(options: UtilityTypeExpanderOptions = {}) {
     this.maxDepth = options.maxDepth ?? 10;
+    this.project = options.project;
+
+    // Try to get TypeScript's type checker if project is available
+    if (this.project) {
+      try {
+        const program = this.project.getProgram();
+        this.typeChecker = program.getTypeChecker().compilerObject;
+      } catch {
+        // Type checker not available, fall back to manual checks
+      }
+    }
   }
 
   async expandUtilityType(
@@ -105,6 +119,54 @@ export class UtilityTypeExpander {
       const targetType = typeArgs[0];
       if (targetType) {
         return this.expandNonNullable(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle Parameters<T>
+    if (name === "Parameters" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandParameters(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle ReturnType<T>
+    if (name === "ReturnType" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandReturnType(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle ConstructorParameters<T>
+    if (name === "ConstructorParameters" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandConstructorParameters(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle InstanceType<T>
+    if (name === "InstanceType" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandInstanceType(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle Awaited<T>
+    if (name === "Awaited" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandAwaited(targetType, resolveType, depth);
+      }
+    }
+
+    // Handle ThisType<T>
+    if (name === "ThisType" && typeArgs.length === 1) {
+      const targetType = typeArgs[0];
+      if (targetType) {
+        return this.expandThisType(targetType, resolveType, depth);
       }
     }
 
@@ -405,6 +467,162 @@ export class UtilityTypeExpander {
     return resolveType(targetType, depth + 1);
   }
 
+  private async expandParameters(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // Parameters<T> extracts parameter types from a function type
+    const signatures = targetType.getCallSignatures();
+    if (signatures.length === 0) {
+      return ok({ kind: TypeKind.Primitive, name: "never" });
+    }
+
+    // Use the first signature
+    const signature = signatures[0];
+    if (!signature) {
+      return ok({ kind: TypeKind.Primitive, name: "never" });
+    }
+
+    const parameters = signature.getParameters();
+    const parameterTypes: TypeInfo[] = [];
+
+    for (const param of parameters) {
+      const paramType = param.getValueDeclaration();
+      if (paramType && "getType" in paramType && typeof paramType.getType === "function") {
+        const type = paramType.getType();
+        const resolved = await resolveType(type, depth + 1);
+        if (!resolved.ok) return resolved;
+        parameterTypes.push(resolved.value);
+      }
+    }
+
+    return ok({
+      kind: TypeKind.Tuple,
+      elements: parameterTypes,
+    });
+  }
+
+  private async expandReturnType(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // ReturnType<T> extracts the return type from a function type
+    const signatures = targetType.getCallSignatures();
+    if (signatures.length === 0) {
+      return ok({ kind: TypeKind.Primitive, name: "any" });
+    }
+
+    const signature = signatures[0];
+    if (!signature) {
+      return ok({ kind: TypeKind.Primitive, name: "any" });
+    }
+
+    const returnType = signature.getReturnType();
+    return resolveType(returnType, depth + 1);
+  }
+
+  private async expandConstructorParameters(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // ConstructorParameters<T> extracts parameter types from a constructor
+    const constructSignatures = targetType.getConstructSignatures();
+    if (constructSignatures.length === 0) {
+      return ok({ kind: TypeKind.Primitive, name: "never" });
+    }
+
+    const signature = constructSignatures[0];
+    if (!signature) {
+      return ok({ kind: TypeKind.Primitive, name: "never" });
+    }
+
+    const parameters = signature.getParameters();
+    const parameterTypes: TypeInfo[] = [];
+
+    for (const param of parameters) {
+      const paramType = param.getValueDeclaration();
+      if (paramType && "getType" in paramType && typeof paramType.getType === "function") {
+        const type = paramType.getType();
+        const resolved = await resolveType(type, depth + 1);
+        if (!resolved.ok) return resolved;
+        parameterTypes.push(resolved.value);
+      }
+    }
+
+    return ok({
+      kind: TypeKind.Tuple,
+      elements: parameterTypes,
+    });
+  }
+
+  private async expandInstanceType(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // InstanceType<T> extracts the instance type from a constructor
+    const constructSignatures = targetType.getConstructSignatures();
+    if (constructSignatures.length === 0) {
+      return ok({ kind: TypeKind.Primitive, name: "any" });
+    }
+
+    const signature = constructSignatures[0];
+    if (!signature) {
+      return ok({ kind: TypeKind.Primitive, name: "any" });
+    }
+
+    const returnType = signature.getReturnType();
+    return resolveType(returnType, depth + 1);
+  }
+
+  private async expandAwaited(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // Awaited<T> recursively unwraps Promise-like types
+    // If T is Promise<U>, return Awaited<U>
+    // If T is not Promise-like, return T
+
+    // Check if this is a Promise type
+    const symbol = targetType.getSymbol();
+    if (symbol?.getName() === "Promise") {
+      const typeArgs = targetType.getTypeArguments();
+      if (typeArgs.length > 0 && typeArgs[0]) {
+        // Recursively await the inner type
+        return this.expandAwaited(typeArgs[0], resolveType, depth + 1);
+      }
+    }
+
+    // Check for other thenable types by looking for 'then' method
+    const thenProperty = targetType.getProperty("then");
+    if (thenProperty) {
+      // This is a thenable, try to extract the resolved type
+      // This is a simplified implementation
+      const thenType = thenProperty.getValueDeclaration();
+      if (thenType && "getType" in thenType && typeof thenType.getType === "function") {
+        // For now, return the type itself for complex thenables
+        return resolveType(targetType, depth + 1);
+      }
+    }
+
+    // Not a Promise-like type, return as-is
+    return resolveType(targetType, depth + 1);
+  }
+
+  private async expandThisType(
+    targetType: Type,
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+    depth: number,
+  ): Promise<Result<TypeInfo>> {
+    // ThisType<T> is a marker utility type that sets the this context
+    // It doesn't change the actual type, so we resolve the target type
+    return resolveType(targetType, depth + 1);
+  }
+
   private extractLiteralKeys(type: Type): Result<string[]> {
     const keys: string[] = [];
 
@@ -454,20 +672,58 @@ export class UtilityTypeExpander {
   }
 
   private isTypeAssignableTo(source: Type, target: Type): boolean {
-    // This is a simplified check - in a real implementation,
-    // we'd use TypeScript's type checker more thoroughly
-    if (source.getText() === target.getText()) return true;
+    // Try to use TypeScript's type checker if available
+    if (this.typeChecker) {
+      try {
+        const sourceType = source.compilerType;
+        const targetType = target.compilerType;
+        if (sourceType && targetType) {
+          return this.typeChecker.isTypeAssignableTo(sourceType, targetType);
+        }
+      } catch {
+        // Fall back to manual checks if type checker fails
+      }
+    }
 
-    // Check if source is assignable to target
-    // This is a simplified version - real implementation would use TS compiler API
+    // Manual fallback checks
+    // First check if types are literally the same
+    if (source === target) return true;
+
+    // Handle basic type relationships
     if (target.isAny()) return true;
     if (source.isNever()) return true;
+    if (source.isAny()) return false;
+    if (target.isNever()) return false;
 
+    // Check union types
     if (target.isUnion()) {
       const unionTypes = target.getUnionTypes();
       return unionTypes.some(t => this.isTypeAssignableTo(source, t));
     }
 
+    // If source is a union, all members must be assignable to target
+    if (source.isUnion()) {
+      const unionTypes = source.getUnionTypes();
+      return unionTypes.every(t => this.isTypeAssignableTo(t, target));
+    }
+
+    // Check if both are literals and compare values
+    if (source.isLiteral() && target.isLiteral()) {
+      return source.getLiteralValue() === target.getLiteralValue();
+    }
+
+    // Check primitive type compatibility
+    if (source.isString() && target.isString()) return true;
+    if (source.isNumber() && target.isNumber()) return true;
+    if (source.isBoolean() && target.isBoolean()) return true;
+
+    // Check if literal is assignable to its base type
+    if (source.isStringLiteral() && target.isString()) return true;
+    if (source.isNumberLiteral() && target.isNumber()) return true;
+    if (source.isBooleanLiteral() && target.isBoolean()) return true;
+
+    // For object types, we would need deeper structural comparison
+    // For now, return false for unhandled cases
     return false;
   }
 }

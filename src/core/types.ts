@@ -51,6 +51,7 @@ export type TypeInfo =
       readonly properties: readonly PropertyInfo[];
       readonly genericParams?: readonly GenericParam[];
       readonly indexSignature?: IndexSignature;
+      readonly unresolvedGenerics?: readonly GenericParam[];
     }
   | {
       readonly kind: TypeKind.Array;
@@ -68,6 +69,9 @@ export type TypeInfo =
       readonly kind: TypeKind.Generic;
       readonly name: string;
       readonly typeArguments?: readonly TypeInfo[];
+      readonly constraint?: TypeInfo;
+      readonly default?: TypeInfo;
+      readonly unresolvedGenerics?: readonly GenericParam[];
     }
   | {
       readonly kind: TypeKind.Literal;
@@ -93,6 +97,27 @@ export type TypeInfo =
       readonly kind: TypeKind.Enum;
       readonly name: string;
       readonly values?: readonly unknown[];
+    }
+  | {
+      readonly kind: TypeKind.Keyof;
+      readonly target: TypeInfo;
+    }
+  | {
+      readonly kind: TypeKind.Typeof;
+      readonly target: TypeInfo;
+    }
+  | {
+      readonly kind: TypeKind.Index;
+      readonly object: TypeInfo;
+      readonly index: TypeInfo;
+    }
+  | {
+      readonly kind: TypeKind.Conditional;
+      readonly checkType: TypeInfo;
+      readonly extendsType: TypeInfo;
+      readonly trueType: TypeInfo;
+      readonly falseType: TypeInfo;
+      readonly inferredTypes?: Record<string, TypeInfo>;
     };
 
 export interface GenericParam {
@@ -114,6 +139,10 @@ export enum TypeKind {
   Function = "function",
   Tuple = "tuple",
   Enum = "enum",
+  Keyof = "keyof",
+  Typeof = "typeof",
+  Index = "index",
+  Conditional = "conditional",
 }
 
 export interface ResolvedType {
