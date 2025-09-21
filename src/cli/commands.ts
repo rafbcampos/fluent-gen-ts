@@ -1,13 +1,8 @@
-import type {
-  BatchOptions,
-  GenerateOptions,
-  InitOptions,
-  ScanOptions,
-} from "./types.js";
-import { GenerateCommand } from "./commands/generate-command.js";
-import { BatchCommand } from "./commands/batch-command.js";
-import { ScanCommand } from "./commands/scan-command.js";
-import { InitCommand } from "./commands/init-command.js";
+import type { BatchOptions, GenerateOptions, InitOptions, ScanOptions } from './types.js';
+import { GenerateCommand } from './commands/generate-command.js';
+import { BatchCommand } from './commands/batch-command.js';
+import { ScanCommand } from './commands/scan-command.js';
+import { InitCommand } from './commands/init-command.js';
 
 export class Commands {
   private generateCommand = new GenerateCommand();
@@ -15,11 +10,7 @@ export class Commands {
   private scanCommand = new ScanCommand();
   private initCommand = new InitCommand();
 
-  async generate(
-    file: string,
-    typeName: string,
-    options: GenerateOptions = {}
-  ): Promise<void> {
+  async generate(file: string, typeName: string, options: GenerateOptions = {}): Promise<void> {
     return this.generateCommand.execute(file, typeName, options);
   }
 

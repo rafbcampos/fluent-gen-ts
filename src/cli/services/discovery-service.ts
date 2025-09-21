@@ -1,6 +1,6 @@
-import { glob } from "glob";
-import { TypeExtractor } from "../../type-info/index.js";
-import { isOk } from "../../core/result.js";
+import { glob } from 'glob';
+import { TypeExtractor } from '../../type-info/index.js';
+import { isOk } from '../../core/result.js';
 
 export interface DiscoveredInterface {
   file: string;

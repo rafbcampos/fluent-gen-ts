@@ -1,7 +1,7 @@
-import inquirer from "inquirer";
-import { FileService } from "./file-service.js";
-import { DiscoveryService, type DiscoveredInterface } from "./discovery-service.js";
-import { NamingService, type NamingConvention, type FileNamingConfig } from "./naming-service.js";
+import inquirer from 'inquirer';
+import { FileService } from './file-service.js';
+import { DiscoveryService, type DiscoveredInterface } from './discovery-service.js';
+import { NamingService, type NamingConvention, type FileNamingConfig } from './naming-service.js';
 
 export interface InputPatternsAnswers {
   patterns: string;
@@ -35,54 +35,54 @@ export class InteractiveService {
   async askInputPatterns(): Promise<InputPatternsAnswers> {
     return inquirer.prompt([
       {
-        type: "input",
-        name: "patterns",
-        message: "Where are your TypeScript files? (comma-separated paths/globs):",
-        default: "src/**/*.ts",
+        type: 'input',
+        name: 'patterns',
+        message: 'Where are your TypeScript files? (comma-separated paths/globs):',
+        default: 'src/**/*.ts',
         validate: (input: string) => {
           const patterns = this.discoveryService.parsePatterns(input);
           const { valid, invalid } = this.discoveryService.validatePatterns(patterns);
 
           if (invalid.length > 0) {
-            return `Invalid patterns: ${invalid.join(", ")}. Patterns should contain .ts or wildcards.`;
+            return `Invalid patterns: ${invalid.join(', ')}. Patterns should contain .ts or wildcards.`;
           }
 
-          return valid.length > 0 || "Please provide at least one valid pattern.";
+          return valid.length > 0 || 'Please provide at least one valid pattern.';
         },
       },
     ]);
   }
 
   async askInterfaceSelection(
-    interfaces: DiscoveredInterface[]
+    interfaces: DiscoveredInterface[],
   ): Promise<InterfaceSelectionAnswers> {
     if (interfaces.length === 0) {
-      throw new Error("No interfaces found in the specified files.");
+      throw new Error('No interfaces found in the specified files.');
     }
 
     // Group interfaces by file for better organization
     const groupedChoices = this.groupInterfacesByFile(interfaces);
 
-    const result = await inquirer.prompt({
-      type: "checkbox",
-      name: "selectedInterfaces",
-      message: "Select interfaces to generate builders for:",
+    const result = (await inquirer.prompt({
+      type: 'checkbox',
+      name: 'selectedInterfaces',
+      message: 'Select interfaces to generate builders for:',
       choices: [
-        { name: "🚀 Select All", value: "__SELECT_ALL__" },
+        { name: '🚀 Select All', value: '__SELECT_ALL__' },
         new inquirer.Separator(),
         ...groupedChoices,
       ],
       validate: (input: readonly any[]) => {
-        const filtered = (input as any[]).filter(item => item !== "__SELECT_ALL__");
-        return filtered.length > 0 || "Please select at least one interface.";
+        const filtered = (input as any[]).filter(item => item !== '__SELECT_ALL__');
+        return filtered.length > 0 || 'Please select at least one interface.';
       },
       filter: (input: readonly any[]) => {
-        if ((input as any[]).includes("__SELECT_ALL__")) {
+        if ((input as any[]).includes('__SELECT_ALL__')) {
           return interfaces;
         }
-        return (input as any[]).filter(item => item !== "__SELECT_ALL__");
+        return (input as any[]).filter(item => item !== '__SELECT_ALL__');
       },
-    }) as InterfaceSelectionAnswers;
+    })) as InterfaceSelectionAnswers;
 
     return result;
   }
@@ -90,13 +90,13 @@ export class InteractiveService {
   async askOutputConfig(): Promise<OutputConfigAnswers> {
     return inquirer.prompt([
       {
-        type: "input",
-        name: "outputDir",
-        message: "Where should generated builders be saved?",
-        default: "./src/builders/",
+        type: 'input',
+        name: 'outputDir',
+        message: 'Where should generated builders be saved?',
+        default: './src/builders/',
         validate: (input: string) => {
           const trimmed = input.trim();
-          return trimmed.length > 0 || "Output directory is required.";
+          return trimmed.length > 0 || 'Output directory is required.';
         },
         filter: (input: string) => {
           const trimmed = input.trim();
@@ -104,19 +104,19 @@ export class InteractiveService {
         },
       },
       {
-        type: "list",
-        name: "namingConvention",
-        message: "File naming convention:",
+        type: 'list',
+        name: 'namingConvention',
+        message: 'File naming convention:',
         choices: this.namingService.getConventionChoices(),
       },
       {
-        type: "input",
-        name: "suffix",
+        type: 'input',
+        name: 'suffix',
         message: "File suffix (e.g., 'builder' for user.builder.ts):",
-        default: "builder",
+        default: 'builder',
         validate: (input: string) => {
           const trimmed = input.trim();
-          return trimmed.length > 0 || "Suffix is required.";
+          return trimmed.length > 0 || 'Suffix is required.';
         },
       },
     ]);
@@ -125,9 +125,9 @@ export class InteractiveService {
   async askPluginConfig(): Promise<PluginConfigAnswers> {
     const result = await inquirer.prompt<{ hasPlugins: boolean }>([
       {
-        type: "confirm",
-        name: "hasPlugins",
-        message: "Do you have any plugins to configure?",
+        type: 'confirm',
+        name: 'hasPlugins',
+        message: 'Do you have any plugins to configure?',
         default: false,
       },
     ]);
@@ -138,11 +138,14 @@ export class InteractiveService {
 
     const pluginAnswers = await inquirer.prompt<{ plugins: string }>([
       {
-        type: "input",
-        name: "plugins",
-        message: "Plugin file paths (comma-separated):",
+        type: 'input',
+        name: 'plugins',
+        message: 'Plugin file paths (comma-separated):',
         validate: (input: string) => {
-          const plugins = input.split(',').map(p => p.trim()).filter(Boolean);
+          const plugins = input
+            .split(',')
+            .map(p => p.trim())
+            .filter(Boolean);
 
           for (const plugin of plugins) {
             if (!this.fileService.fileExists(plugin)) {
@@ -150,10 +153,13 @@ export class InteractiveService {
             }
           }
 
-          return plugins.length > 0 || "Please provide at least one plugin path.";
+          return plugins.length > 0 || 'Please provide at least one plugin path.';
         },
         filter: (input: string) =>
-          input.split(',').map(p => p.trim()).filter(Boolean),
+          input
+            .split(',')
+            .map(p => p.trim())
+            .filter(Boolean),
       },
     ]);
 
@@ -166,9 +172,9 @@ export class InteractiveService {
   async confirmConfig(): Promise<boolean> {
     const result = await inquirer.prompt<{ confirm: boolean }>([
       {
-        type: "confirm",
-        name: "confirm",
-        message: "\nSave this configuration?",
+        type: 'confirm',
+        name: 'confirm',
+        message: '\nSave this configuration?',
         default: true,
       },
     ]);
@@ -178,9 +184,9 @@ export class InteractiveService {
   async askRunBatch(): Promise<boolean> {
     const result = await inquirer.prompt<{ runBatch: boolean }>([
       {
-        type: "confirm",
-        name: "runBatch",
-        message: "Generate builders now?",
+        type: 'confirm',
+        name: 'runBatch',
+        message: 'Generate builders now?',
         default: true,
       },
     ]);
@@ -195,9 +201,9 @@ export class InteractiveService {
   async selectTypes(types: TypeSelection[]): Promise<TypeSelection[]> {
     const result = await inquirer.prompt<{ selected: TypeSelection[] }>([
       {
-        type: "checkbox",
-        name: "selected",
-        message: "Select types to generate:",
+        type: 'checkbox',
+        name: 'selected',
+        message: 'Select types to generate:',
         choices: types.map(t => ({
           name: `${t.type} (${t.file})`,
           value: t,

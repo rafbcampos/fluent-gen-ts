@@ -1,14 +1,14 @@
 // Main programmatic API
-export { FluentGen } from "./gen/index.js";
-export type { FluentGenOptions } from "./gen/index.js";
+export { FluentGen } from './gen/index.js';
+export type { FluentGenOptions } from './gen/index.js';
 
 // Code generation
-export { BuilderGenerator } from "./gen/index.js";
-export type { GeneratorConfig } from "./gen/index.js";
+export { BuilderGenerator } from './gen/index.js';
+export type { GeneratorConfig } from './gen/index.js';
 
 // Type extraction and analysis
-export { TypeExtractor } from "./type-info/index.js";
-export type { TypeExtractorOptions } from "./type-info/index.js";
+export { TypeExtractor } from './type-info/index.js';
+export type { TypeExtractorOptions } from './type-info/index.js';
 
 // Core types for programmatic usage
 export type {
@@ -19,15 +19,15 @@ export type {
   GenericParam,
   IndexSignature,
   GeneratorOptions,
-} from "./core/types.js";
+} from './core/types.js';
 
 // Result handling
-export { ok, err, isOk, isErr } from "./core/result.js";
-export type { Result } from "./core/result.js";
+export { ok, err, isOk, isErr } from './core/result.js';
+export type { Result } from './core/result.js';
 
 // Plugin system
-export { PluginManager, HookType } from "./core/plugin.js";
-export type { Plugin, ParseContext, ResolveContext, GenerateContext } from "./core/plugin.js";
+export { PluginManager, HookType } from './core/plugin.js';
+export type { Plugin, ParseContext, ResolveContext, GenerateContext } from './core/plugin.js';
 
 // Runtime utilities for generated builders
 export {
@@ -36,8 +36,5 @@ export {
   isBuilderArray,
   createNestedContext,
   resolveValue,
-} from "./gen/builder-utilities.js";
-export type {
-  FluentBuilder,
-  BaseBuildContext,
-} from "./gen/builder-utilities.js";
+} from './gen/builder-utilities.js';
+export type { FluentBuilder, BaseBuildContext } from './gen/builder-utilities.js';

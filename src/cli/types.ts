@@ -1,4 +1,4 @@
-import type { Result } from "../core/result.js";
+import type { Result } from '../core/result.js';
 
 export interface GenerateOptions {
   output?: string;
@@ -43,14 +43,14 @@ export interface CommandOptions {
 }
 
 export type GenerateTask = {
-  type: "generate";
+  type: 'generate';
   file: string;
   typeName: string;
   outputFile: string | undefined;
 };
 
 export type ScanTask = {
-  type: "scan";
+  type: 'scan';
   file: string;
   outputFile: string | undefined;
 };

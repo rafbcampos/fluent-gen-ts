@@ -1,8 +1,8 @@
-import { Type, ts } from "ts-morph";
-import type { Result } from "../core/result.js";
-import { ok, err } from "../core/result.js";
-import type { TypeInfo, IndexSignature } from "../core/types.js";
-import { TypeKind } from "../core/types.js";
+import { Type, ts, Node } from 'ts-morph';
+import type { Result } from '../core/result.js';
+import { ok, err } from '../core/result.js';
+import type { TypeInfo, IndexSignature } from '../core/types.js';
+import { TypeKind } from '../core/types.js';
 
 export interface MappedTypeResolverOptions {
   readonly maxDepth?: number;
@@ -24,18 +24,22 @@ export class MappedTypeResolver {
     this.maxDepth = options.maxDepth ?? 10;
   }
 
-  async resolveMappedType(
-    type: Type,
-    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
+  async resolveMappedType({
+    type,
+    resolveType,
     depth = 0,
-  ): Promise<Result<TypeInfo | null>> {
+  }: {
+    type: Type;
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>;
+    depth?: number;
+  }): Promise<Result<TypeInfo | null>> {
     if (depth > this.maxDepth) {
       return err(new Error(`Max mapped type resolution depth exceeded`));
     }
 
     // Check for index signature types
     if (this.hasIndexSignature(type)) {
-      return this.expandIndexSignatureType(type, resolveType, depth);
+      return this.expandIndexSignatureType({ type, resolveType, depth });
     }
 
     // Check if this is an unresolved generic mapped type
@@ -53,44 +57,63 @@ export class MappedTypeResolver {
   }
 
   private isUnresolvedMappedType(type: Type): boolean {
+    return this.checkUnresolvedMappedType({ type });
+  }
+
+  private checkUnresolvedMappedType({ type }: { type: Type }): boolean {
     // If the type has properties, it's already been expanded by TypeScript
     if (type.getProperties().length > 0) {
       return false;
     }
 
-    // Check if this looks like an unresolved mapped type
     const typeText = type.getText();
     const symbol = type.getSymbol();
-    const symbolName = symbol?.getName();
 
-    // Patterns that indicate unresolved mapped types:
-    // - Type alias with generic parameters (e.g., "MyPartial<T>")
-    // - Contains angle brackets
-    // - Not an anonymous/expanded type
-    if (symbolName && typeText.includes("<") && typeText.includes(">")) {
-      // Exclude already resolved types
-      if (symbolName === "__type" || symbolName === "Anonymous") {
-        return false;
-      }
-
-      // Check using TypeScript's internal flags as a fallback
-      const tsType = type.compilerType as ts.Type;
-      if (
-        tsType &&
-        "objectFlags" in tsType &&
-        typeof tsType.objectFlags === "number"
-      ) {
-        // TypeScript ObjectFlags.Mapped = 32
-        // ObjectFlags.InstantiatedMapped = 96 (already instantiated)
-        return (
-          (tsType.objectFlags & 32) !== 0 && (tsType.objectFlags & 96) !== 96
-        );
-      }
-
-      return true;
+    // Check if this looks like an unresolved mapped type with generics
+    if (this.hasGenericParameters({ typeText }) && symbol) {
+      return this.isUnresolvedGenericMappedType({ type, symbol });
     }
 
     return false;
+  }
+
+  private hasGenericParameters({ typeText }: { typeText: string }): boolean {
+    return typeText.includes('<') && typeText.includes('>');
+  }
+
+  private isUnresolvedGenericMappedType({
+    type,
+    symbol,
+  }: {
+    type: Type;
+    symbol: NonNullable<ReturnType<Type['getSymbol']>>;
+  }): boolean {
+    // Anonymous types have __type symbol name
+    // Already resolved types are excluded by having properties > 0
+    if (this.isAnonymousTypeSymbol({ symbol })) {
+      return false;
+    }
+
+    // Check using TypeScript's internal flags for mapped types
+    if (this.hasObjectFlags(type)) {
+      const tsType = type.compilerType as ts.Type & { objectFlags: number };
+      return (
+        this.hasObjectFlag(tsType, ts.ObjectFlags.Mapped) &&
+        !this.hasObjectFlag(tsType, ts.ObjectFlags.Mapped | ts.ObjectFlags.Instantiated)
+      );
+    }
+
+    return true;
+  }
+
+  private isAnonymousTypeSymbol({
+    symbol,
+  }: {
+    symbol: NonNullable<ReturnType<Type['getSymbol']>>;
+  }): boolean {
+    const symbolName = symbol.getName();
+    // Based on debug test findings: anonymous types have these specific names
+    return symbolName === '__type' || symbolName === 'Anonymous';
   }
 
   private hasIndexSignature(type: Type): boolean {
@@ -113,11 +136,15 @@ export class MappedTypeResolver {
     return properties.length === 0;
   }
 
-  private async expandIndexSignatureType(
-    type: Type,
-    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>,
-    depth: number,
-  ): Promise<Result<TypeInfo>> {
+  private async expandIndexSignatureType({
+    type,
+    resolveType,
+    depth,
+  }: {
+    type: Type;
+    resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>;
+    depth: number;
+  }): Promise<Result<TypeInfo>> {
     const stringIndexType = type.getStringIndexType();
     const numberIndexType = type.getNumberIndexType();
 
@@ -128,7 +155,7 @@ export class MappedTypeResolver {
       const resolved = await resolveType(stringIndexType, depth + 1);
       if (resolved.ok) {
         indexSignature = {
-          keyType: "string",
+          keyType: 'string',
           valueType: resolved.value,
           readonly: this.isReadonlyIndexSignature(type),
         };
@@ -137,7 +164,7 @@ export class MappedTypeResolver {
       const resolved = await resolveType(numberIndexType, depth + 1);
       if (resolved.ok) {
         indexSignature = {
-          keyType: "number",
+          keyType: 'number',
           valueType: resolved.value,
           readonly: this.isReadonlyIndexSignature(type),
         };
@@ -156,40 +183,53 @@ export class MappedTypeResolver {
     });
   }
 
-
   private isReadonlyIndexSignature(type: Type): boolean {
-    // Check if the index signature is readonly
+    return this.checkIndexSignatureReadonly({ type });
+  }
+
+  private checkIndexSignatureReadonly({ type }: { type: Type }): boolean {
     const symbol = type.getSymbol();
     if (!symbol) return false;
 
     const declarations = symbol.getDeclarations() || [];
+    return declarations.some(decl => this.declarationHasReadonlyIndexSignature({ decl }));
+  }
 
-    // Check declarations for index signatures and readonly modifiers
-    for (const decl of declarations) {
-      if (!decl) continue;
+  private declarationHasReadonlyIndexSignature({ decl }: { decl: Node | undefined }): boolean {
+    if (!decl || !this.hasGetMembersMethod(decl)) return false;
 
-      // Try to access the members to find index signatures
-      if ("getMembers" in decl && typeof decl.getMembers === "function") {
-        const members = decl.getMembers();
-        for (const member of members) {
-          // Check if this is an index signature
-          if (
-            member.getKindName &&
-            member.getKindName() === "IndexSignature"
-          ) {
-            // Check for readonly modifier
-            const modifiers = member.getModifiers
-              ? member.getModifiers()
-              : [];
-            return modifiers.some(
-              (mod: any) => mod.getKind() === ts.SyntaxKind.ReadonlyKeyword,
-            );
-          }
-        }
-      }
-    }
+    const members = decl.getMembers();
+    return members.some(member => this.isReadonlyIndexSignatureMember({ member }));
+  }
 
-    return false;
+  private isReadonlyIndexSignatureMember({ member }: { member: Node }): boolean {
+    return this.isIndexSignatureNode(member) && this.hasReadonlyModifier({ member });
+  }
+
+  private isIndexSignatureNode(member: Node): boolean {
+    return member.getKindName && member.getKindName() === 'IndexSignature';
+  }
+
+  private hasReadonlyModifier({ member }: { member: Node }): boolean {
+    if (!this.hasGetModifiersMethod(member)) return false;
+    const modifiers = member.getModifiers();
+    return modifiers.some((mod: Node) => mod.getKind() === ts.SyntaxKind.ReadonlyKeyword);
+  }
+
+  private hasGetModifiersMethod(member: Node): member is Node & { getModifiers(): Node[] } {
+    return 'getModifiers' in member && typeof member.getModifiers === 'function';
+  }
+
+  private hasGetMembersMethod(decl: Node): decl is Node & { getMembers(): Node[] } {
+    return 'getMembers' in decl && typeof decl.getMembers === 'function';
+  }
+
+  private hasObjectFlags(type: Type): boolean {
+    const tsType = type.compilerType as ts.Type;
+    return tsType && 'objectFlags' in tsType && typeof tsType.objectFlags === 'number';
+  }
+
+  private hasObjectFlag(tsType: ts.Type & { objectFlags: number }, flag: ts.ObjectFlags): boolean {
+    return (tsType.objectFlags & flag) !== 0;
   }
 }
-

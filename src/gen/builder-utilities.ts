@@ -7,7 +7,7 @@
  * Unique symbol for identifying fluent builders
  * Used across module boundaries for proper type identification
  */
-export const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
+export const FLUENT_BUILDER_SYMBOL = Symbol.for('fluent-builder');
 
 /**
  * Base context interface for builder operations
@@ -47,7 +47,7 @@ export interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext>
 export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, C> {
-  if (value === null || typeof value !== "object") {
+  if (value === null || typeof value !== 'object') {
     return false;
   }
 
@@ -60,10 +60,7 @@ export function isFluentBuilder<T = unknown, C extends BaseBuildContext = BaseBu
   // Type narrowing: at this point we know it's an object with our symbol
   const obj = value as { [FLUENT_BUILDER_SYMBOL]: unknown; build?: unknown };
 
-  return (
-    obj[FLUENT_BUILDER_SYMBOL] === true &&
-    typeof obj.build === "function"
-  );
+  return obj[FLUENT_BUILDER_SYMBOL] === true && typeof obj.build === 'function';
 }
 
 /**
@@ -102,10 +99,7 @@ export function createNestedContext<C extends BaseBuildContext>(
  * @param context - Optional build context
  * @returns Resolved value with all builders built
  */
-export function resolveValue<T, C extends BaseBuildContext>(
-  value: unknown,
-  context?: C
-): unknown {
+export function resolveValue<T, C extends BaseBuildContext>(value: unknown, context?: C): unknown {
   if (isFluentBuilder<T, C>(value)) {
     return value.build(context);
   }
@@ -169,8 +163,11 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
       delete this.values[key];
     } else if (Array.isArray(value)) {
       // Handle mixed arrays (builders + static values)
-      const hasBuilders = value.some((item) => isFluentBuilder(item) ||
-        (typeof item === 'object' && item !== null && this.containsBuilder(item)));
+      const hasBuilders = value.some(
+        item =>
+          isFluentBuilder(item) ||
+          (typeof item === 'object' && item !== null && this.containsBuilder(item)),
+      );
 
       if (hasBuilders) {
         // Store the array for mixed processing
@@ -209,13 +206,20 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   /**
    * Checks if an object contains any builders recursively
    */
-  private containsBuilder(obj: unknown): boolean {
+  private containsBuilder(obj: unknown, visited: WeakSet<object> = new WeakSet()): boolean {
     if (isFluentBuilder(obj)) return true;
+
+    // Handle circular references by tracking visited objects
+    if (obj && typeof obj === 'object') {
+      if (visited.has(obj)) return false; // Already checked this object
+      visited.add(obj);
+    }
+
     if (Array.isArray(obj)) {
-      return obj.some((item) => this.containsBuilder(item));
+      return obj.some(item => this.containsBuilder(item, visited));
     }
     if (obj && typeof obj === 'object' && obj.constructor === Object) {
-      return Object.values(obj).some((val) => this.containsBuilder(val));
+      return Object.values(obj).some(val => this.containsBuilder(val, visited));
     }
     return false;
   }
@@ -274,13 +278,14 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   public if<K extends keyof T>(
     predicate: (builder: this) => boolean,
     property: K,
-    value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+    value: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
   ): this {
     if (predicate(this)) {
       // Type guard: check if it's a function that's not a builder
-      const resolvedValue = typeof value === 'function' && !isFluentBuilder(value)
-        ? (value as () => T[K] | FluentBuilder<T[K], C>)()
-        : value;
+      const resolvedValue =
+        typeof value === 'function' && !isFluentBuilder(value)
+          ? (value as () => T[K] | FluentBuilder<T[K], C>)()
+          : value;
       this.set(property, resolvedValue);
     }
     return this;
@@ -297,13 +302,14 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
     predicate: (builder: this) => boolean,
     property: K,
     trueValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
-    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>)
+    falseValue: T[K] | FluentBuilder<T[K], C> | (() => T[K] | FluentBuilder<T[K], C>),
   ): this {
     const valueToUse = predicate(this) ? trueValue : falseValue;
     // Type guard: check if it's a function that's not a builder
-    const resolvedValue = typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
-      ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
-      : valueToUse;
+    const resolvedValue =
+      typeof valueToUse === 'function' && !isFluentBuilder(valueToUse)
+        ? (valueToUse as () => T[K] | FluentBuilder<T[K], C>)()
+        : valueToUse;
     this.set(property, resolvedValue);
     return this;
   }
@@ -339,6 +345,9 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
  * @param properties - Current builder properties
  * @returns Formatted string for inspection
  */
-export function createInspectMethod(builderName: string, properties: Record<string, unknown>): string {
+export function createInspectMethod(
+  builderName: string,
+  properties: Record<string, unknown>,
+): string {
   return `${builderName} { properties: ${JSON.stringify(properties, null, 2)} }`;
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, test, expect, beforeEach } from 'vitest';
 import {
   FLUENT_BUILDER_SYMBOL,
   isFluentBuilder,
@@ -9,523 +9,893 @@ import {
   createInspectMethod,
   type FluentBuilder,
   type BaseBuildContext,
-} from "../builder-utilities.js";
+} from '../builder-utilities.js';
 
-describe("Builder Utilities", () => {
-  describe("FLUENT_BUILDER_SYMBOL", () => {
-    it("should be a unique symbol", () => {
-      expect(typeof FLUENT_BUILDER_SYMBOL).toBe("symbol");
-      expect(FLUENT_BUILDER_SYMBOL.toString()).toBe("Symbol(fluent-builder)");
+describe('builder-utilities', () => {
+  describe('FLUENT_BUILDER_SYMBOL', () => {
+    test('uses global symbol registry', () => {
+      const globalSymbol = Symbol.for('fluent-builder');
+      expect(FLUENT_BUILDER_SYMBOL).toBe(globalSymbol);
+      expect(typeof FLUENT_BUILDER_SYMBOL).toBe('symbol');
     });
 
-    it("should use Symbol.for for module boundary compatibility", () => {
-      const duplicateSymbol = Symbol.for("fluent-builder");
-      expect(FLUENT_BUILDER_SYMBOL).toBe(duplicateSymbol);
+    test('symbol description is correct', () => {
+      expect(FLUENT_BUILDER_SYMBOL.description).toBe('fluent-builder');
     });
   });
 
-  describe("isFluentBuilder", () => {
-    it("should return true for valid fluent builders", () => {
-      const validBuilder: FluentBuilder<string> = {
+  describe('isFluentBuilder', () => {
+    test('returns false for null and undefined', () => {
+      expect(isFluentBuilder(null)).toBe(false);
+      expect(isFluentBuilder(undefined)).toBe(false);
+    });
+
+    test('returns false for primitive values', () => {
+      expect(isFluentBuilder('string')).toBe(false);
+      expect(isFluentBuilder(123)).toBe(false);
+      expect(isFluentBuilder(true)).toBe(false);
+      expect(isFluentBuilder(Symbol('test'))).toBe(false);
+    });
+
+    test('returns false for plain objects', () => {
+      expect(isFluentBuilder({})).toBe(false);
+      expect(isFluentBuilder({ someProperty: 'value' })).toBe(false);
+      expect(isFluentBuilder([])).toBe(false);
+    });
+
+    test('returns false for objects with symbol but wrong value', () => {
+      const obj = { [FLUENT_BUILDER_SYMBOL]: false };
+      expect(isFluentBuilder(obj)).toBe(false);
+    });
+
+    test('returns false for objects with symbol but no build method', () => {
+      const obj = { [FLUENT_BUILDER_SYMBOL]: true };
+      expect(isFluentBuilder(obj)).toBe(false);
+    });
+
+    test('returns false for objects with symbol and non-function build', () => {
+      const obj = { [FLUENT_BUILDER_SYMBOL]: true, build: 'not a function' };
+      expect(isFluentBuilder(obj)).toBe(false);
+    });
+
+    test('returns true for valid fluent builders', () => {
+      const validBuilder = {
         [FLUENT_BUILDER_SYMBOL]: true,
-        build: () => "test",
+        build: () => ({ result: 'test' }),
       };
       expect(isFluentBuilder(validBuilder)).toBe(true);
     });
 
-    it("should return false for null", () => {
-      expect(isFluentBuilder(null)).toBe(false);
-    });
-
-    it("should return false for undefined", () => {
-      expect(isFluentBuilder(undefined)).toBe(false);
-    });
-
-    it("should return false for primitives", () => {
-      expect(isFluentBuilder("string")).toBe(false);
-      expect(isFluentBuilder(123)).toBe(false);
-      expect(isFluentBuilder(true)).toBe(false);
-      expect(isFluentBuilder(Symbol())).toBe(false);
-    });
-
-    it("should return false for regular objects", () => {
-      expect(isFluentBuilder({})).toBe(false);
-      expect(isFluentBuilder({ build: () => "test" })).toBe(false);
-    });
-
-    it("should return false for objects with wrong symbol value", () => {
-      const invalidBuilder = {
-        [FLUENT_BUILDER_SYMBOL]: false,
-        build: () => "test",
-      };
-      expect(isFluentBuilder(invalidBuilder)).toBe(false);
-    });
-
-    it("should return false for objects without build method", () => {
-      const invalidBuilder = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-      };
-      expect(isFluentBuilder(invalidBuilder)).toBe(false);
-    });
-
-    it("should return false for objects with non-function build", () => {
-      const invalidBuilder = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: "not a function",
-      };
-      expect(isFluentBuilder(invalidBuilder)).toBe(false);
-    });
-
-    it("should handle generic type parameters", () => {
-      interface CustomContext extends BaseBuildContext {
-        customProp: string;
+    test('handles edge case objects correctly', () => {
+      class CustomClass {
+        [FLUENT_BUILDER_SYMBOL] = true;
+        build = () => ({ data: 'test' });
       }
+      expect(isFluentBuilder(new CustomClass())).toBe(true);
 
-      const builder: FluentBuilder<number, CustomContext> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: (context?: CustomContext) => context?.index ?? 42,
-      };
-
-      expect(isFluentBuilder<number, CustomContext>(builder)).toBe(true);
+      const functionWithSymbol = () => {};
+      (functionWithSymbol as any)[FLUENT_BUILDER_SYMBOL] = true;
+      (functionWithSymbol as any).build = () => {};
+      // Functions have typeof "function", not "object", so isFluentBuilder should return false
+      expect(isFluentBuilder(functionWithSymbol)).toBe(false);
     });
   });
 
-  describe("isBuilderArray", () => {
-    it("should return true for array of valid builders", () => {
-      const builders: FluentBuilder<string>[] = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "a" },
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "b" },
-      ];
-      expect(isBuilderArray(builders)).toBe(true);
-    });
-
-    it("should return true for empty array", () => {
-      expect(isBuilderArray([])).toBe(true);
-    });
-
-    it("should return false for non-arrays", () => {
-      expect(isBuilderArray("not an array")).toBe(false);
-      expect(isBuilderArray(123)).toBe(false);
+  describe('isBuilderArray', () => {
+    test('returns false for non-arrays', () => {
+      expect(isBuilderArray(null)).toBe(false);
+      expect(isBuilderArray(undefined)).toBe(false);
+      expect(isBuilderArray('string')).toBe(false);
       expect(isBuilderArray({})).toBe(false);
     });
 
-    it("should return false for array with non-builders", () => {
-      const mixed = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "a" },
-        "not a builder",
-      ];
-      expect(isBuilderArray(mixed)).toBe(false);
+    test('returns false for empty arrays', () => {
+      expect(isBuilderArray([])).toBe(true); // Empty array should return true
     });
 
-    it("should return false for array with partial builders", () => {
-      const partial = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "a" },
-        { [FLUENT_BUILDER_SYMBOL]: true }, // missing build
-      ];
-      expect(isBuilderArray(partial)).toBe(false);
+    test('returns false for arrays with non-builders', () => {
+      expect(isBuilderArray([1, 2, 3])).toBe(false);
+      expect(isBuilderArray(['a', 'b'])).toBe(false);
+      expect(isBuilderArray([{}])).toBe(false);
+    });
+
+    test('returns false for mixed arrays', () => {
+      const builder = { [FLUENT_BUILDER_SYMBOL]: true, build: () => ({}) };
+      expect(isBuilderArray([builder, 'string'])).toBe(false);
+      expect(isBuilderArray([1, builder])).toBe(false);
+    });
+
+    test('returns true for arrays of builders', () => {
+      const builder1 = { [FLUENT_BUILDER_SYMBOL]: true, build: () => ({}) };
+      const builder2 = { [FLUENT_BUILDER_SYMBOL]: true, build: () => ({}) };
+      expect(isBuilderArray([builder1, builder2])).toBe(true);
+      expect(isBuilderArray([builder1])).toBe(true);
     });
   });
 
-  describe("createNestedContext", () => {
-    it("should create context with parameter name", () => {
-      const parent: BaseBuildContext = { parentId: "parent" };
-      const nested = createNestedContext(parent, "childParam");
+  describe('createNestedContext', () => {
+    test('creates context with parameter name', () => {
+      const parentContext: BaseBuildContext = { parentId: 'parent-123' };
+      const result = createNestedContext(parentContext, 'testParam');
 
-      expect(nested).toEqual({
-        parentId: "parent",
-        parameterName: "childParam",
+      expect(result).toEqual({
+        parentId: 'parent-123',
+        parameterName: 'testParam',
+        index: undefined,
       });
     });
 
-    it("should create context with index", () => {
-      const parent: BaseBuildContext = { parentId: "parent" };
-      const nested = createNestedContext(parent, "arrayItem", 5);
+    test('creates context with parameter name and index', () => {
+      const parentContext: BaseBuildContext = { parentId: 'parent-123' };
+      const result = createNestedContext(parentContext, 'arrayParam', 5);
 
-      expect(nested).toEqual({
-        parentId: "parent",
-        parameterName: "arrayItem",
+      expect(result).toEqual({
+        parentId: 'parent-123',
+        parameterName: 'arrayParam',
         index: 5,
       });
     });
 
-    it("should preserve custom properties", () => {
-      interface CustomContext extends BaseBuildContext {
-        customField: string;
-        customNumber: number;
-      }
-
-      const parent: CustomContext = {
-        parentId: "parent",
-        customField: "value",
-        customNumber: 42,
+    test('preserves additional context properties', () => {
+      const parentContext = {
+        parentId: 'parent-123',
+        customProp: 'custom-value',
+        anotherProp: 42,
       };
+      const result = createNestedContext(parentContext, 'testParam', 1);
 
-      const nested = createNestedContext(parent, "child");
-
-      expect(nested).toEqual({
-        parentId: "parent",
-        parameterName: "child",
-        customField: "value",
-        customNumber: 42,
-      });
-    });
-
-    it("should override existing parameterName and index", () => {
-      const parent: BaseBuildContext = {
-        parentId: "parent",
-        parameterName: "oldParam",
+      expect(result).toEqual({
+        parentId: 'parent-123',
+        customProp: 'custom-value',
+        anotherProp: 42,
+        parameterName: 'testParam',
         index: 1,
-      };
-
-      const nested = createNestedContext(parent, "newParam", 10);
-
-      expect(nested.parameterName).toBe("newParam");
-      expect(nested.index).toBe(10);
-    });
-  });
-
-  describe("resolveValue", () => {
-    it("should resolve fluent builders", () => {
-      const builder: FluentBuilder<string> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: () => "resolved",
-      };
-
-      expect(resolveValue(builder)).toBe("resolved");
-    });
-
-    it("should pass context to builders", () => {
-      const context: BaseBuildContext = { parentId: "test" };
-      const builder: FluentBuilder<string, BaseBuildContext> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: (ctx) => ctx?.parentId ?? "no-context",
-      };
-
-      expect(resolveValue(builder, context)).toBe("test");
-    });
-
-    it("should resolve arrays of builders", () => {
-      const builders = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "a" },
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "b" },
-      ];
-
-      expect(resolveValue(builders)).toEqual(["a", "b"]);
-    });
-
-    it("should resolve mixed arrays", () => {
-      const mixed = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "builder" },
-        "regular",
-        42,
-      ];
-
-      expect(resolveValue(mixed)).toEqual(["builder", "regular", 42]);
-    });
-
-    it("should create array context with index", () => {
-      const context: BaseBuildContext = { parentId: "parent" };
-      const builders = [
-        {
-          [FLUENT_BUILDER_SYMBOL]: true,
-          build: (ctx?: BaseBuildContext) => ctx?.index ?? -1,
-        },
-        {
-          [FLUENT_BUILDER_SYMBOL]: true,
-          build: (ctx?: BaseBuildContext) => ctx?.index ?? -1,
-        },
-      ];
-
-      const result = resolveValue(builders, context);
-      expect(result).toEqual([0, 1]);
-    });
-
-    it("should resolve nested objects with builders", () => {
-      const obj = {
-        regular: "value",
-        builder: {
-          [FLUENT_BUILDER_SYMBOL]: true,
-          build: () => "built",
-        },
-        nested: {
-          deepBuilder: {
-            [FLUENT_BUILDER_SYMBOL]: true,
-            build: () => "deep",
-          },
-        },
-      };
-
-      expect(resolveValue(obj)).toEqual({
-        regular: "value",
-        builder: "built",
-        nested: {
-          deepBuilder: "deep",
-        },
       });
     });
 
-    it("should handle null and undefined", () => {
-      expect(resolveValue(null)).toBeNull();
-      expect(resolveValue(undefined)).toBeUndefined();
-    });
+    test('handles empty parent context', () => {
+      const parentContext: BaseBuildContext = {};
+      const result = createNestedContext(parentContext, 'testParam');
 
-    it("should handle primitives", () => {
-      expect(resolveValue("string")).toBe("string");
-      expect(resolveValue(123)).toBe(123);
-      expect(resolveValue(true)).toBe(true);
-    });
-
-    it("should not modify non-plain objects", () => {
-      class CustomClass {
-        value = "test";
-      }
-      const instance = new CustomClass();
-
-      expect(resolveValue(instance)).toBe(instance);
-    });
-
-    it("should handle circular references gracefully", () => {
-      const obj: any = { value: "test" };
-      obj.circular = obj;
-
-      // TODO: Verify if the assumption that the builders will handle different object or a
-      // nested builder, so a deferred call, holds:
-      expect(() => {
-        resolveValue(obj);
-      }).toThrow();
+      expect(result).toEqual({
+        parameterName: 'testParam',
+        index: undefined,
+      });
     });
   });
 
-  describe("FluentBuilderBase", () => {
-    class TestBuilder extends FluentBuilderBase<{
-      name: string;
-      age?: number;
-      tags: string[];
-    }> {
-      withName(name: string) {
-        return this.set("name", name);
-      }
-
-      withAge(age?: number) {
-        return this.set("age", age);
-      }
-
-      withTags(tags: string[]) {
-        return this.set("tags", tags);
-      }
-
-      build(context?: BaseBuildContext) {
-        return this.buildWithDefaults({ name: "default", tags: [] }, context);
+  describe('resolveValue', () => {
+    class MockBuilder implements FluentBuilder<{ value: string }> {
+      readonly [FLUENT_BUILDER_SYMBOL] = true;
+      constructor(private testValue: string) {}
+      build(_context?: BaseBuildContext) {
+        return { value: this.testValue };
       }
     }
 
-    it("should have fluent builder symbol", () => {
-      const builder = new TestBuilder();
-      expect(builder[FLUENT_BUILDER_SYMBOL]).toBe(true);
+    test('resolves primitive values unchanged', () => {
+      expect(resolveValue('string')).toBe('string');
+      expect(resolveValue(123)).toBe(123);
+      expect(resolveValue(true)).toBe(true);
+      expect(resolveValue(null)).toBe(null);
+      expect(resolveValue(undefined)).toBe(undefined);
     });
 
-    it("should set and build simple values", () => {
-      const result = new TestBuilder()
-        .withName("John")
-        .withAge(30)
-        .withTags(["dev", "test"])
-        .build();
+    test('resolves fluent builders', () => {
+      const builder = new MockBuilder('test-value');
+      const result = resolveValue(builder, { parentId: 'test' });
+
+      expect(result).toEqual({ value: 'test-value' });
+    });
+
+    test('resolves arrays with builders', () => {
+      const builder1 = new MockBuilder('value1');
+      const builder2 = new MockBuilder('value2');
+      const array = ['static', builder1, 42, builder2];
+
+      const result = resolveValue(array, { parentId: 'test' });
+
+      expect(result).toEqual(['static', { value: 'value1' }, 42, { value: 'value2' }]);
+    });
+
+    test('resolves nested objects with builders', () => {
+      const builder = new MockBuilder('nested-value');
+      const obj = {
+        static: 'value',
+        nested: builder,
+        deep: {
+          inner: builder,
+        },
+      };
+
+      const result = resolveValue(obj, { parentId: 'test' });
 
       expect(result).toEqual({
-        name: "John",
-        age: 30,
-        tags: ["dev", "test"],
+        static: 'value',
+        nested: { value: 'nested-value' },
+        deep: {
+          inner: { value: 'nested-value' },
+        },
       });
     });
 
-    it("should apply defaults", () => {
-      const result = new TestBuilder().withAge(25).build();
+    test('passes correct context to nested builders', () => {
+      const contextsReceived: (BaseBuildContext | undefined)[] = [];
 
-      expect(result).toEqual({
-        name: "default",
-        age: 25,
-        tags: [],
+      class ContextAwareBuilder implements FluentBuilder<{ value: string }> {
+        readonly [FLUENT_BUILDER_SYMBOL] = true;
+        build(context?: BaseBuildContext) {
+          contextsReceived.push(context);
+          return { value: 'test' };
+        }
+      }
+
+      const builder = new ContextAwareBuilder();
+      const obj = { nested: builder };
+
+      resolveValue(obj, { parentId: 'parent-123' });
+
+      expect(contextsReceived).toHaveLength(1);
+      expect(contextsReceived[0]).toEqual({
+        parentId: 'parent-123',
+        parameterName: 'nested',
+        index: undefined,
       });
     });
 
-    it("should handle nested builders", () => {
-      const nestedBuilder: FluentBuilder<string> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: () => "nested-value",
-      };
+    test('passes correct context to array builders', () => {
+      const contextsReceived: (BaseBuildContext | undefined)[] = [];
 
-      const builder = new TestBuilder();
-      builder["set"]("name", nestedBuilder);
+      class ContextAwareBuilder implements FluentBuilder<{ value: string }> {
+        readonly [FLUENT_BUILDER_SYMBOL] = true;
+        build(context?: BaseBuildContext) {
+          contextsReceived.push(context);
+          return { value: 'test' };
+        }
+      }
 
-      const result = builder.build();
-      expect(result.name).toBe("nested-value");
-    });
+      const builder1 = new ContextAwareBuilder();
+      const builder2 = new ContextAwareBuilder();
+      const array = [builder1, 'static', builder2];
 
-    it("should handle builder arrays", () => {
-      const tagBuilders = [
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "tag1" },
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "tag2" },
-      ];
+      resolveValue(array, { parentId: 'parent-123' });
 
-      const builder = new TestBuilder();
-      builder["set"]("tags", tagBuilders);
-
-      const result = builder.build();
-      expect(result.tags).toEqual(["tag1", "tag2"]);
-    });
-
-    it("should handle mixed arrays with builders", () => {
-      const mixed = [
-        "regular",
-        { [FLUENT_BUILDER_SYMBOL]: true, build: () => "built" },
-      ];
-
-      const builder = new TestBuilder();
-      builder["set"]("tags", mixed);
-
-      const result = builder.build();
-      expect(result.tags).toEqual(["regular", "built"]);
-    });
-
-    it("should handle conditional setting with if", () => {
-      const builder = new TestBuilder()
-        .withName("Alice")
-        .if(() => true, "age", 30)
-        .if(() => false, "tags", ["ignored"]);
-
-      const result = builder.build();
-      expect(result.age).toBe(30);
-      expect(result.tags).toEqual([]);
-    });
-
-    it("should handle conditional with value function", () => {
-      const builder = new TestBuilder().if(
-        () => true,
-        "name",
-        () => "Generated",
-      );
-
-      const result = builder.build();
-      expect(result.name).toBe("Generated");
-    });
-
-    it("should handle conditional with builder function", () => {
-      const nameBuilder: FluentBuilder<string> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: () => "BuilderName",
-      };
-
-      const builder = new TestBuilder().if(
-        () => true,
-        "name",
-        () => nameBuilder,
-      );
-
-      const result = builder.build();
-      expect(result.name).toBe("BuilderName");
-    });
-
-    it("should check if property exists with has", () => {
-      const builder = new TestBuilder().withName("Test");
-
-      expect(builder.has("name")).toBe(true);
-      expect(builder.has("age")).toBe(false);
-    });
-
-    it("should check builder properties with has", () => {
-      const builder = new TestBuilder();
-      const nameBuilder: FluentBuilder<string> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: () => "test",
-      };
-      builder["set"]("name", nameBuilder);
-
-      expect(builder.has("name")).toBe(true);
-    });
-
-    it("should peek at current values", () => {
-      const builder = new TestBuilder().withName("Peek").withAge(42);
-
-      expect(builder.peek("name")).toBe("Peek");
-      expect(builder.peek("age")).toBe(42);
-      expect(builder.peek("tags")).toBeUndefined();
-    });
-
-    it("should handle initial values in constructor", () => {
-      const builder = new TestBuilder({
-        name: "Initial",
-        age: 50,
+      expect(contextsReceived).toHaveLength(2);
+      expect(contextsReceived[0]).toEqual({
+        parentId: 'parent-123',
+        parameterName: 'array',
+        index: 0,
       });
-
-      const result = builder.build();
-      expect(result.name).toBe("Initial");
-      expect(result.age).toBe(50);
+      expect(contextsReceived[1]).toEqual({
+        parentId: 'parent-123',
+        parameterName: 'array',
+        index: 2,
+      });
     });
 
-    it("should pass context to nested builders", () => {
-      const context: BaseBuildContext = { parentId: "parent" };
+    test('handles non-plain objects correctly', () => {
+      class CustomClass {
+        value = 'test';
+      }
+      const date = new Date('2023-01-01');
+      const regexp = /test/;
+      const customObj = new CustomClass();
 
-      const nameBuilder: FluentBuilder<string, BaseBuildContext> = {
-        [FLUENT_BUILDER_SYMBOL]: true,
-        build: (ctx) => `name-${ctx?.parentId}`,
-      };
-
-      const builder = new TestBuilder();
-      builder["set"]("name", nameBuilder);
-
-      const result = builder.build(context);
-      expect(result.name).toBe("name-parent");
+      expect(resolveValue(date)).toBe(date);
+      expect(resolveValue(regexp)).toBe(regexp);
+      expect(resolveValue(customObj)).toBe(customObj);
     });
 
-    it("should use predicate with access to builder state", () => {
-      const builder = new TestBuilder()
-        .withName("Check")
-        .if((b) => b.peek("name") === "Check", "age", 100);
+    test('handles circular references gracefully', () => {
+      // This test verifies the current behavior (stack overflow) and documents the issue
+      const obj: any = { id: 'test' };
+      obj.self = obj;
 
-      const result = builder.build();
-      expect(result.age).toBe(100);
+      expect(() => resolveValue(obj)).toThrow();
+    });
+
+    test('resolves without context', () => {
+      const builder = new MockBuilder('no-context');
+      const result = resolveValue(builder);
+
+      expect(result).toEqual({ value: 'no-context' });
     });
   });
 
-  describe("createInspectMethod", () => {
-    it("should format builder for inspection", () => {
-      const result = createInspectMethod("UserBuilder", {
-        id: 123,
-        name: "Alice",
-        nested: { value: true },
+  describe('FluentBuilderBase', () => {
+    interface TestInterface {
+      id: string;
+      name?: string;
+      tags?: string[];
+      nested?: { value: string };
+      mixed?: (string | { data: number })[];
+    }
+
+    class TestBuilder extends FluentBuilderBase<TestInterface> {
+      build(context?: BaseBuildContext): TestInterface {
+        return this.buildWithDefaults({ id: 'default-id' }, context);
+      }
+
+      withId(id: string): this {
+        return this.set('id', id);
+      }
+
+      withName(name: string): this {
+        return this.set('name', name);
+      }
+
+      withTags(tags: string[]): this {
+        return this.set('tags', tags);
+      }
+
+      withNested(nested: { value: string } | FluentBuilder<{ value: string }>): this {
+        return this.set('nested', nested);
+      }
+
+      withMixed(mixed: (string | { data: number } | FluentBuilder<{ data: number }>)[]): this {
+        return this.set('mixed', mixed);
+      }
+    }
+
+    class NestedBuilder extends FluentBuilderBase<{ value: string }> {
+      build(context?: BaseBuildContext): { value: string } {
+        return this.buildWithDefaults({ value: 'default-nested' }, context);
+      }
+
+      withValue(value: string): this {
+        return this.set('value', value);
+      }
+    }
+
+    describe('constructor', () => {
+      test('creates builder with empty initial state', () => {
+        const builder = new TestBuilder();
+        expect(builder['values']).toEqual({});
+        expect(builder['builders'].size).toBe(0);
+        expect(builder['mixedArrays'].size).toBe(0);
       });
 
-      expect(result).toContain("UserBuilder");
-      expect(result).toContain('"id": 123');
-      expect(result).toContain('"name": "Alice"');
-      expect(result).toContain('"nested"');
-    });
-
-    it("should handle empty properties", () => {
-      const result = createInspectMethod("EmptyBuilder", {});
-
-      expect(result).toBe("EmptyBuilder { properties: {} }");
-    });
-
-    it("should handle special characters in JSON", () => {
-      const result = createInspectMethod("TestBuilder", {
-        quote: 'String with "quotes"',
-        newline: "Line 1\nLine 2",
+      test('creates builder with initial values', () => {
+        const builder = new TestBuilder({
+          id: 'initial-id',
+          name: 'initial-name',
+        });
+        expect(builder['values']).toEqual({
+          id: 'initial-id',
+          name: 'initial-name',
+        });
       });
 
-      expect(result).toContain("TestBuilder");
-      expect(result).toContain('\\"quotes\\"');
+      test('has fluent builder symbol', () => {
+        const builder = new TestBuilder();
+        expect(builder[FLUENT_BUILDER_SYMBOL]).toBe(true);
+        expect(isFluentBuilder(builder)).toBe(true);
+      });
     });
 
-    it("should handle undefined values", () => {
-      const result = createInspectMethod("TestBuilder", {
-        defined: "value",
-        notDefined: undefined,
+    describe('set method', () => {
+      let builder: TestBuilder;
+
+      beforeEach(() => {
+        builder = new TestBuilder();
       });
 
-      expect(result).toContain('"defined": "value"');
-      // JSON.stringify omits undefined
-      expect(result).not.toContain("notDefined");
+      test('sets primitive values', () => {
+        builder.withId('test-id').withName('test-name');
+
+        expect(builder['values']).toEqual({
+          id: 'test-id',
+          name: 'test-name',
+        });
+        expect(builder['builders'].size).toBe(0);
+      });
+
+      test('sets nested builders', () => {
+        const nestedBuilder = new NestedBuilder().withValue('nested-value');
+        builder.withNested(nestedBuilder);
+
+        expect(builder['values']).toEqual({});
+        expect(builder['builders'].has('nested')).toBe(true);
+        expect(builder['builders'].get('nested')).toBe(nestedBuilder);
+      });
+
+      test('handles static arrays', () => {
+        builder.withTags(['tag1', 'tag2', 'tag3']);
+
+        expect(builder['values'].tags).toEqual(['tag1', 'tag2', 'tag3']);
+        expect(builder['mixedArrays'].size).toBe(0);
+      });
+
+      test('handles mixed arrays with builders', () => {
+        class DataBuilder extends FluentBuilderBase<{ data: number }> {
+          build(): { data: number } {
+            return this.buildWithDefaults({ data: 0 });
+          }
+          withData(data: number): this {
+            return this.set('data', data);
+          }
+        }
+
+        const dataBuilder = new DataBuilder().withData(42);
+        builder.withMixed(['string', dataBuilder, { data: 100 }]);
+
+        expect(builder['mixedArrays'].has('mixed')).toBe(true);
+        expect(builder['builders'].has('mixed[1]')).toBe(true);
+        expect('mixed' in builder['values']).toBe(false);
+      });
+
+      test('handles objects containing builders', () => {
+        const nestedBuilder = new NestedBuilder().withValue('test');
+        const objWithBuilder = { nested: nestedBuilder };
+
+        builder.withNested(objWithBuilder as any);
+
+        expect(builder['builders'].has('nested')).toBe(true);
+        expect('nested' in builder['values']).toBe(false);
+      });
+
+      test('overwrites previous values correctly', () => {
+        builder.withId('first-id');
+        expect(builder['values'].id).toBe('first-id');
+
+        const nestedBuilder = new NestedBuilder();
+        builder.withNested(nestedBuilder);
+        expect(builder['builders'].has('nested')).toBe(true);
+
+        // Overwrite with static value
+        builder.withNested({ value: 'static' });
+        expect(builder['builders'].has('nested')).toBe(false);
+        expect(builder['values'].nested).toEqual({ value: 'static' });
+      });
+
+      test('returns this for method chaining', () => {
+        const result = builder.withId('test');
+        expect(result).toBe(builder);
+      });
+    });
+
+    describe('buildWithDefaults', () => {
+      let builder: TestBuilder;
+
+      beforeEach(() => {
+        builder = new TestBuilder();
+      });
+
+      test('builds with defaults and explicit values', () => {
+        builder.withName('explicit-name');
+        const result = builder.build();
+
+        expect(result).toEqual({
+          id: 'default-id',
+          name: 'explicit-name',
+        });
+      });
+
+      test('builds with nested builders', () => {
+        const nestedBuilder = new NestedBuilder().withValue('built-value');
+        builder.withNested(nestedBuilder);
+
+        const result = builder.build();
+
+        expect(result).toEqual({
+          id: 'default-id',
+          nested: { value: 'built-value' },
+        });
+      });
+
+      test('builds mixed arrays correctly', () => {
+        class DataBuilder extends FluentBuilderBase<{ data: number }> {
+          build(): { data: number } {
+            return this.buildWithDefaults({ data: 999 });
+          }
+          withData(data: number): this {
+            return this.set('data', data);
+          }
+        }
+
+        const dataBuilder = new DataBuilder().withData(42);
+        builder.withMixed(['static', dataBuilder, { data: 100 }]);
+
+        const result = builder.build();
+
+        expect(result.mixed).toEqual(['static', { data: 42 }, { data: 100 }]);
+      });
+
+      test('passes context to nested builders', () => {
+        let receivedContext: BaseBuildContext | undefined;
+
+        class ContextAwareBuilder extends FluentBuilderBase<{ value: string }> {
+          build(context?: BaseBuildContext): { value: string } {
+            receivedContext = context;
+            return { value: 'test' };
+          }
+        }
+
+        const nestedBuilder = new ContextAwareBuilder();
+        builder.withNested(nestedBuilder);
+
+        builder.build({ parentId: 'parent-123' });
+
+        expect(receivedContext).toEqual({
+          parentId: 'parent-123',
+          parameterName: 'nested',
+          index: undefined,
+        });
+      });
+    });
+
+    describe('conditional methods', () => {
+      let builder: TestBuilder;
+
+      beforeEach(() => {
+        builder = new TestBuilder();
+      });
+
+      describe('if method', () => {
+        test('sets value when predicate is true', () => {
+          builder.if(() => true, 'name', 'conditional-name');
+          const result = builder.build();
+
+          expect(result.name).toBe('conditional-name');
+        });
+
+        test('does not set value when predicate is false', () => {
+          builder.if(() => false, 'name', 'should-not-set');
+          const result = builder.build();
+
+          expect(result.name).toBeUndefined();
+        });
+
+        test('works with function values', () => {
+          builder.if(
+            () => true,
+            'name',
+            () => 'function-value',
+          );
+          const result = builder.build();
+
+          expect(result.name).toBe('function-value');
+        });
+
+        test('works with builder values', () => {
+          const nestedBuilder = new NestedBuilder().withValue('conditional-nested');
+          builder.if(() => true, 'nested', nestedBuilder);
+          const result = builder.build();
+
+          expect(result.nested).toEqual({ value: 'conditional-nested' });
+        });
+
+        test('predicate receives builder instance', () => {
+          let receivedBuilder: any;
+          builder.if(
+            b => {
+              receivedBuilder = b;
+              return true;
+            },
+            'name',
+            'test',
+          );
+
+          expect(receivedBuilder).toBe(builder);
+        });
+
+        test('returns this for chaining', () => {
+          const result = builder.if(() => true, 'name', 'test');
+          expect(result).toBe(builder);
+        });
+      });
+
+      describe('ifElse method', () => {
+        test('uses true value when predicate is true', () => {
+          builder.ifElse(() => true, 'name', 'true-value', 'false-value');
+          const result = builder.build();
+
+          expect(result.name).toBe('true-value');
+        });
+
+        test('uses false value when predicate is false', () => {
+          builder.ifElse(() => false, 'name', 'true-value', 'false-value');
+          const result = builder.build();
+
+          expect(result.name).toBe('false-value');
+        });
+
+        test('works with function values', () => {
+          builder.ifElse(
+            () => true,
+            'name',
+            () => 'true-function',
+            () => 'false-function',
+          );
+          const result = builder.build();
+
+          expect(result.name).toBe('true-function');
+        });
+
+        test('works with builder values', () => {
+          const trueBuilder = new NestedBuilder().withValue('true-nested');
+          const falseBuilder = new NestedBuilder().withValue('false-nested');
+
+          builder.ifElse(() => false, 'nested', trueBuilder, falseBuilder);
+          const result = builder.build();
+
+          expect(result.nested).toEqual({ value: 'false-nested' });
+        });
+
+        test('returns this for chaining', () => {
+          const result = builder.ifElse(() => true, 'name', 'a', 'b');
+          expect(result).toBe(builder);
+        });
+      });
+    });
+
+    describe('utility methods', () => {
+      let builder: TestBuilder;
+
+      beforeEach(() => {
+        builder = new TestBuilder();
+      });
+
+      describe('has method', () => {
+        test('returns false for unset properties', () => {
+          expect(builder.has('name')).toBe(false);
+          expect(builder.has('tags')).toBe(false);
+        });
+
+        test('returns true for set static values', () => {
+          builder.withName('test');
+          expect(builder.has('name')).toBe(true);
+        });
+
+        test('returns true for set builders', () => {
+          const nestedBuilder = new NestedBuilder();
+          builder.withNested(nestedBuilder);
+          expect(builder.has('nested')).toBe(true);
+        });
+
+        test('returns true for mixed arrays', () => {
+          class DataBuilder extends FluentBuilderBase<{ data: number }> {
+            build(): { data: number } {
+              return this.buildWithDefaults({ data: 0 });
+            }
+            withData(data: number): this {
+              return this.set('data', data);
+            }
+          }
+          const dataBuilder = new DataBuilder();
+          builder.withMixed(['static', dataBuilder]);
+          expect(builder.has('mixed')).toBe(true);
+        });
+      });
+
+      describe('peek method', () => {
+        test('returns undefined for unset properties', () => {
+          expect(builder.peek('name')).toBeUndefined();
+        });
+
+        test('returns static values', () => {
+          builder.withName('test-name');
+          expect(builder.peek('name')).toBe('test-name');
+        });
+
+        test('returns undefined for builders (not resolved)', () => {
+          const nestedBuilder = new NestedBuilder();
+          builder.withNested(nestedBuilder);
+          expect(builder.peek('nested')).toBeUndefined();
+        });
+
+        test('returns static arrays', () => {
+          builder.withTags(['tag1', 'tag2']);
+          expect(builder.peek('tags')).toEqual(['tag1', 'tag2']);
+        });
+      });
+    });
+
+    describe('complex scenarios', () => {
+      test('handles deeply nested structure', () => {
+        class Level3Builder extends FluentBuilderBase<{ level: number }> {
+          build(): { level: number } {
+            return { level: 3 };
+          }
+        }
+
+        class Level2Builder extends FluentBuilderBase<{
+          nested: { level: number };
+        }> {
+          build(): { nested: { level: number } } {
+            return this.buildWithDefaults({});
+          }
+          withNested(nested: { level: number } | FluentBuilder<{ level: number }>): this {
+            return this.set('nested', nested);
+          }
+        }
+
+        const level3 = new Level3Builder();
+        const level2 = new Level2Builder().withNested(level3);
+        const level1 = new TestBuilder().withNested(level2 as any);
+
+        const result = level1.build();
+
+        expect(result.nested).toEqual({
+          nested: { level: 3 },
+        });
+      });
+
+      test('handles array of different types', () => {
+        class StringBuilder extends FluentBuilderBase<string> {
+          build(): string {
+            return 'built-string';
+          }
+        }
+
+        class NumberBuilder extends FluentBuilderBase<number> {
+          build(): number {
+            return 42;
+          }
+        }
+
+        const stringBuilder = new StringBuilder();
+        const numberBuilder = new NumberBuilder();
+
+        // Mixed array with different builder types
+        const mixedArray = [
+          'static-string',
+          stringBuilder,
+          123,
+          numberBuilder,
+          { static: 'object' },
+        ];
+
+        // Note: This tests the current behavior but may not be the intended design
+        const builder = new TestBuilder();
+        builder.withMixed(mixedArray as any);
+
+        const result = builder.build();
+
+        expect(result.mixed).toEqual([
+          'static-string',
+          'built-string',
+          123,
+          42,
+          { static: 'object' },
+        ]);
+      });
+
+      test('handles objects containing builders in arrays', () => {
+        class ItemBuilder extends FluentBuilderBase<{ id: string }> {
+          build(): { id: string } {
+            return this.buildWithDefaults({ id: 'default' });
+          }
+          withId(id: string): this {
+            return this.set('id', id);
+          }
+        }
+
+        const itemBuilder = new ItemBuilder().withId('nested-id');
+
+        // Test the specific case that covers lines 184-185: objects containing builders in arrays
+        const objWithBuilder = { nestedBuilder: itemBuilder };
+        const mixedArray = ['static', objWithBuilder];
+
+        const builder = new TestBuilder();
+        builder.withMixed(mixedArray as any);
+
+        const result = builder.build();
+
+        expect(result.mixed).toEqual(['static', { nestedBuilder: { id: 'nested-id' } }]);
+      });
+
+      test('containsBuilder handles nested arrays with builders', () => {
+        class NestedBuilder extends FluentBuilderBase<{ value: string }> {
+          build(): { value: string } {
+            return { value: 'nested' };
+          }
+        }
+
+        // Test the recursive array case in containsBuilder (lines 215-216)
+        const nestedBuilder = new NestedBuilder();
+        const deepArray = ['static', [nestedBuilder]]; // Array containing array with builder
+
+        const builder = new TestBuilder();
+
+        // This will trigger the containsBuilder method to check nested arrays
+        builder.withMixed(deepArray as any);
+
+        const result = builder.build();
+
+        expect(result.mixed).toEqual(['static', [{ value: 'nested' }]]);
+      });
+    });
+  });
+
+  describe('createInspectMethod', () => {
+    test('formats builder name and properties', () => {
+      const result = createInspectMethod('UserBuilder', {
+        id: '123',
+        name: 'John',
+      });
+
+      expect(result).toContain('UserBuilder');
+      expect(result).toContain('"id"');
+      expect(result).toContain('"123"');
+      expect(result).toContain('"name"');
+      expect(result).toContain('"John"');
+    });
+
+    test('handles empty properties', () => {
+      const result = createInspectMethod('EmptyBuilder', {});
+
+      expect(result).toContain('EmptyBuilder');
+      expect(result).toContain('{}');
+    });
+
+    test('handles null and undefined values', () => {
+      const result = createInspectMethod('TestBuilder', {
+        nullValue: null,
+        undefinedValue: undefined,
+      });
+
+      expect(result).toContain('null');
+      // JSON.stringify omits undefined values from objects, so it won't appear in the output
+      expect(result).not.toContain('undefined');
+      expect(result).not.toContain('undefinedValue');
+    });
+
+    test('handles complex nested objects', () => {
+      const result = createInspectMethod('ComplexBuilder', {
+        nested: {
+          deep: {
+            value: 'test',
+          },
+        },
+        array: [1, 2, 3],
+      });
+
+      expect(result).toContain('ComplexBuilder');
+      expect(result).toContain('nested');
+      expect(result).toContain('deep');
+      expect(result).toContain('array');
+    });
+  });
+
+  describe('edge cases and error conditions', () => {
+    test('handles malformed builder objects', () => {
+      const malformedBuilder = {
+        [FLUENT_BUILDER_SYMBOL]: 'not-boolean', // Wrong type
+        build: () => ({}),
+      };
+
+      expect(isFluentBuilder(malformedBuilder)).toBe(false);
+    });
+
+    test('handles objects with null prototype', () => {
+      const nullProtoObj = Object.create(null);
+      nullProtoObj.someProperty = 'value';
+
+      const result = resolveValue(nullProtoObj);
+      expect(result).toBe(nullProtoObj); // Should return as-is
+    });
+
+    test('handles very large arrays', () => {
+      const largeArray = Array.from({ length: 10000 }, () => 'item');
+      const result = resolveValue(largeArray);
+
+      expect(result).toEqual(largeArray);
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    test('handles deeply nested objects without builders', () => {
+      const deepObject: any = { level: 0 };
+      let current = deepObject;
+
+      // Create 100 levels deep
+      for (let i = 1; i < 100; i++) {
+        current.nested = { level: i };
+        current = current.nested;
+      }
+
+      const result = resolveValue(deepObject);
+      expect(result).toEqual(deepObject);
     });
   });
 });

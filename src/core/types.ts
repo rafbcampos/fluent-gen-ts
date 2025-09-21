@@ -1,4 +1,4 @@
-export const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
+export const FLUENT_BUILDER_SYMBOL = Symbol.for('fluent-builder');
 
 export interface BuildContext {
   readonly parentId?: string;
@@ -12,14 +12,11 @@ export interface FluentBuilder<T, Ctx extends BuildContext = BuildContext> {
   (context?: Ctx): T;
 }
 
-export const isFluentBuilder = <
-  T = unknown,
-  Ctx extends BuildContext = BuildContext,
->(
+export const isFluentBuilder = <T = unknown, Ctx extends BuildContext = BuildContext>(
   value: unknown,
 ): value is FluentBuilder<T, Ctx> => {
   return (
-    typeof value === "function" &&
+    typeof value === 'function' &&
     FLUENT_BUILDER_SYMBOL in value &&
     value[FLUENT_BUILDER_SYMBOL] === true
   );
@@ -34,7 +31,7 @@ export interface PropertyInfo {
 }
 
 export interface IndexSignature {
-  readonly keyType: "string" | "number" | "symbol";
+  readonly keyType: 'string' | 'number' | 'symbol';
   readonly valueType: TypeInfo;
   readonly readonly?: boolean;
 }
@@ -52,6 +49,7 @@ export type TypeInfo =
       readonly genericParams?: readonly GenericParam[];
       readonly indexSignature?: IndexSignature;
       readonly unresolvedGenerics?: readonly GenericParam[];
+      readonly typeArguments?: readonly TypeInfo[];
     }
   | {
       readonly kind: TypeKind.Array;
@@ -118,6 +116,9 @@ export type TypeInfo =
       readonly trueType: TypeInfo;
       readonly falseType: TypeInfo;
       readonly inferredTypes?: Record<string, TypeInfo>;
+    }
+  | {
+      readonly kind: TypeKind.Never;
     };
 
 export interface GenericParam {
@@ -127,22 +128,23 @@ export interface GenericParam {
 }
 
 export enum TypeKind {
-  Primitive = "primitive",
-  Object = "object",
-  Array = "array",
-  Union = "union",
-  Intersection = "intersection",
-  Generic = "generic",
-  Literal = "literal",
-  Unknown = "unknown",
-  Reference = "reference",
-  Function = "function",
-  Tuple = "tuple",
-  Enum = "enum",
-  Keyof = "keyof",
-  Typeof = "typeof",
-  Index = "index",
-  Conditional = "conditional",
+  Primitive = 'primitive',
+  Object = 'object',
+  Array = 'array',
+  Union = 'union',
+  Intersection = 'intersection',
+  Generic = 'generic',
+  Literal = 'literal',
+  Unknown = 'unknown',
+  Reference = 'reference',
+  Function = 'function',
+  Tuple = 'tuple',
+  Enum = 'enum',
+  Keyof = 'keyof',
+  Typeof = 'typeof',
+  Index = 'index',
+  Conditional = 'conditional',
+  Never = 'never',
 }
 
 export interface ResolvedType {
@@ -158,6 +160,4 @@ export interface GeneratorOptions {
   useDefaults?: boolean;
   contextType?: string;
   importPath?: string;
-  indentSize?: number;
-  useTab?: boolean;
 }

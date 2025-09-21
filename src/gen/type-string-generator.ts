@@ -3,14 +3,35 @@
  * Converts TypeInfo structures to TypeScript type strings
  */
 
-import type { TypeInfo, PropertyInfo, GenericParam } from "../core/types.js";
-import { TypeKind } from "../core/types.js";
-import { isValidImportableTypeName, isPrimitiveTypeName } from "./types.js";
+import type { TypeInfo, PropertyInfo, GenericParam } from '../core/types.js';
+import { TypeKind } from '../core/types.js';
+import { isValidImportableTypeName } from './types.js';
+
+/**
+ * Configuration options for TypeStringGenerator
+ */
+export interface TypeStringGeneratorOptions {
+  /** Name of the FluentBuilder type to use */
+  readonly builderTypeName?: string;
+  /** Name of the base build context type to use */
+  readonly contextTypeName?: string;
+  /** Whether to include builder types for object properties */
+  readonly includeBuilderTypes?: boolean;
+}
 
 /**
  * Generates TypeScript type strings from TypeInfo structures
  */
 export class TypeStringGenerator {
+  private readonly options: Required<TypeStringGeneratorOptions>;
+
+  constructor(options: TypeStringGeneratorOptions = {}) {
+    this.options = {
+      builderTypeName: options.builderTypeName ?? 'FluentBuilder',
+      contextTypeName: options.contextTypeName ?? 'BaseBuildContext',
+      includeBuilderTypes: options.includeBuilderTypes ?? true,
+    };
+  }
   /**
    * Converts TypeInfo to a TypeScript type string
    * @param typeInfo - The type information to convert
@@ -32,17 +53,31 @@ export class TypeStringGenerator {
       case TypeKind.Reference:
         return typeInfo.name;
       case TypeKind.Generic:
+        if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
+          const args = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg)).join(', ');
+          return `${typeInfo.name}<${args}>`;
+        }
         return typeInfo.name;
       case TypeKind.Function:
-        return typeInfo.name ?? "Function";
+        return typeInfo.name ?? 'Function';
       case TypeKind.Tuple:
-        return `[${typeInfo.elements.map(element => this.typeInfoToString(element)).join(", ")}]`;
+        return `[${typeInfo.elements.map(element => this.typeInfoToString(element)).join(', ')}]`;
       case TypeKind.Enum:
         return typeInfo.name;
+      case TypeKind.Keyof:
+        return this.handleKeyofType(typeInfo);
+      case TypeKind.Typeof:
+        return this.handleTypeofType(typeInfo);
+      case TypeKind.Index:
+        return this.handleIndexType(typeInfo);
+      case TypeKind.Conditional:
+        return this.handleConditionalType(typeInfo);
       case TypeKind.Unknown:
-        return "unknown";
+        return 'unknown';
+      case TypeKind.Never:
+        return 'never';
       default:
-        return "unknown";
+        return 'unknown';
     }
   }
 
@@ -51,6 +86,38 @@ export class TypeStringGenerator {
    * @param prop - The property information
    */
   getPropertyType(prop: PropertyInfo): string {
+    const baseType = this.getCleanPropertyType(prop);
+
+    // Handle arrays with nested builders
+    if (prop.type.kind === TypeKind.Array) {
+      const elementBuilderType = this.getBuilderTypeIfApplicable(prop.type.elementType);
+      if (elementBuilderType) {
+        // Generate array type that accepts both plain objects and builders
+        const elementType = this.typeInfoToString(prop.type.elementType);
+        return `Array<${elementType} | ${elementBuilderType}>`;
+      }
+    }
+
+    // Handle tuples with nested builders
+    if (prop.type.kind === TypeKind.Tuple) {
+      const tupleElements = prop.type.elements.map(element => {
+        const elementTypeStr = this.typeInfoToString(element);
+        const elementBuilder = this.getBuilderTypeIfApplicable(element);
+        return elementBuilder ? `${elementTypeStr} | ${elementBuilder}` : elementTypeStr;
+      });
+      return `[${tupleElements.join(', ')}]`;
+    }
+
+    // Handle direct builder types
+    const builderType = this.getBuilderTypeIfApplicable(prop.type);
+    return builderType ? `${baseType} | ${builderType}` : baseType;
+  }
+
+  /**
+   * Gets the clean property type string without builder support
+   * @param prop - The property information
+   */
+  private getCleanPropertyType(prop: PropertyInfo): string {
     let baseType = this.typeInfoToString(prop.type);
 
     // For optional properties, remove undefined from union types
@@ -58,13 +125,33 @@ export class TypeStringGenerator {
       baseType = this.removeUndefinedFromType(prop, baseType);
     }
 
-    // Add builder support for object types
-    if (this.isObjectType(prop.type) && prop.type.name && isValidImportableTypeName(prop.type.name)) {
-      const builderType = `FluentBuilder<${prop.type.name}, BaseBuildContext>`;
-      return `${baseType} | ${builderType}`;
+    return baseType;
+  }
+
+  /**
+   * Gets the builder type string if applicable for the given type
+   * @param typeInfo - The type information
+   * @returns Builder type string or null if not applicable
+   */
+  private getBuilderTypeIfApplicable(typeInfo: TypeInfo): string | null {
+    if (!this.options.includeBuilderTypes) {
+      return null;
     }
 
-    return baseType;
+    if (this.isObjectType(typeInfo) && typeInfo.name && isValidImportableTypeName(typeInfo.name)) {
+      // For resolved generic instantiations, reconstruct the original generic signature
+      // (e.g., PagedData<User>) instead of the expanded structure
+      let builderTypeString = typeInfo.name;
+
+      if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
+        // Reconstruct generic signature: TypeName<Arg1, Arg2, ...>
+        const typeArgStrings = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg));
+        builderTypeString = `${typeInfo.name}<${typeArgStrings.join(', ')}>`;
+      }
+
+      return `${this.options.builderTypeName}<${builderTypeString}, ${this.options.contextTypeName}>`;
+    }
+    return null;
   }
 
   /**
@@ -72,9 +159,9 @@ export class TypeStringGenerator {
    * @param params - The generic parameters
    */
   formatGenericParams(params?: readonly GenericParam[]): string {
-    if (!params || params.length === 0) return "";
+    if (!params || params.length === 0) return '';
 
-    const formatted = params.map((p) => {
+    const formatted = params.map(p => {
       let param = p.name;
       if (p.constraint) {
         param += ` extends ${this.typeInfoToString(p.constraint)}`;
@@ -85,7 +172,7 @@ export class TypeStringGenerator {
       return param;
     });
 
-    return `<${formatted.join(", ")}>`;
+    return `<${formatted.join(', ')}>`;
   }
 
   /**
@@ -93,18 +180,14 @@ export class TypeStringGenerator {
    * @param params - The generic parameters
    */
   formatGenericConstraints(params?: readonly GenericParam[]): string {
-    if (!params || params.length === 0) return "";
-    return `<${params.map((p) => p.name).join(", ")}>`;
+    if (!params || params.length === 0) return '';
+    return `<${params.map(p => p.name).join(', ')}>`;
   }
 
   /**
    * Handles primitive type conversion
    */
   private handlePrimitiveType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Primitive }>): string {
-    // Use proper type classification
-    if (isPrimitiveTypeName(typeInfo.name)) {
-      return typeInfo.name;
-    }
     return typeInfo.name;
   }
 
@@ -112,25 +195,23 @@ export class TypeStringGenerator {
    * Handles union type conversion
    */
   private handleUnionType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>): string {
-    return typeInfo.unionTypes
-      .map((t) => this.typeInfoToString(t))
-      .join(" | ");
+    return typeInfo.unionTypes.map(t => this.typeInfoToString(t)).join(' | ');
   }
 
   /**
    * Handles intersection type conversion
    */
-  private handleIntersectionType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Intersection }>): string {
-    return typeInfo.intersectionTypes
-      .map((t) => this.typeInfoToString(t))
-      .join(" & ");
+  private handleIntersectionType(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Intersection }>,
+  ): string {
+    return typeInfo.intersectionTypes.map(t => this.typeInfoToString(t)).join(' & ');
   }
 
   /**
    * Handles literal type conversion
    */
   private handleLiteralType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Literal }>): string {
-    return typeof typeInfo.literal === "string"
+    return typeof typeInfo.literal === 'string'
       ? `"${typeInfo.literal}"`
       : String(typeInfo.literal);
   }
@@ -140,9 +221,17 @@ export class TypeStringGenerator {
    */
   private handleObjectType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>): string {
     // For internal TypeScript types like "__type", use "object" instead
-    return typeInfo.name && isValidImportableTypeName(typeInfo.name)
-      ? typeInfo.name
-      : "object";
+    if (!typeInfo.name || !isValidImportableTypeName(typeInfo.name)) {
+      return 'object';
+    }
+
+    // For resolved generic instantiations, reconstruct the original generic signature
+    if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
+      const typeArgStrings = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg));
+      return `${typeInfo.name}<${typeArgStrings.join(', ')}>`;
+    }
+
+    return typeInfo.name;
   }
 
   /**
@@ -151,12 +240,10 @@ export class TypeStringGenerator {
   private removeUndefinedFromType(prop: PropertyInfo, baseType: string): string {
     if (prop.type.kind === TypeKind.Union) {
       const nonUndefinedTypes = prop.type.unionTypes?.filter(
-        (t) => !(t.kind === TypeKind.Primitive && t.name === "undefined"),
+        t => !(t.kind === TypeKind.Primitive && t.name === 'undefined'),
       );
       if (nonUndefinedTypes && nonUndefinedTypes.length > 0) {
-        return nonUndefinedTypes
-          .map((t) => this.typeInfoToString(t))
-          .join(" | ");
+        return nonUndefinedTypes.map(t => this.typeInfoToString(t)).join(' | ');
       }
     }
     return baseType;
@@ -169,5 +256,39 @@ export class TypeStringGenerator {
     typeInfo: TypeInfo,
   ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Object }> {
     return typeInfo.kind === TypeKind.Object;
+  }
+
+  /**
+   * Handles keyof type conversion
+   */
+  private handleKeyofType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Keyof }>): string {
+    return `keyof ${this.typeInfoToString(typeInfo.target)}`;
+  }
+
+  /**
+   * Handles typeof type conversion
+   */
+  private handleTypeofType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Typeof }>): string {
+    return `typeof ${this.typeInfoToString(typeInfo.target)}`;
+  }
+
+  /**
+   * Handles index access type conversion
+   */
+  private handleIndexType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Index }>): string {
+    return `${this.typeInfoToString(typeInfo.object)}[${this.typeInfoToString(typeInfo.index)}]`;
+  }
+
+  /**
+   * Handles conditional type conversion
+   */
+  private handleConditionalType(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Conditional }>,
+  ): string {
+    const checkType = this.typeInfoToString(typeInfo.checkType);
+    const extendsType = this.typeInfoToString(typeInfo.extendsType);
+    const trueType = this.typeInfoToString(typeInfo.trueType);
+    const falseType = this.typeInfoToString(typeInfo.falseType);
+    return `${checkType} extends ${extendsType} ? ${trueType} : ${falseType}`;
   }
 }

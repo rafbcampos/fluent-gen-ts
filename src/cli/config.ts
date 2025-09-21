@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { cosmiconfigSync } from "cosmiconfig";
-import type { Result } from "../core/result.js";
-import { ok, err } from "../core/result.js";
+import { z } from 'zod';
+import { cosmiconfigSync } from 'cosmiconfig';
+import type { Result } from '../core/result.js';
+import { ok, err } from '../core/result.js';
 
 export const GeneratorConfigSchema = z.object({
   outputDir: z.string().optional(),
@@ -31,25 +31,23 @@ export type Target = z.infer<typeof TargetSchema>;
 export type GeneratorConfig = z.infer<typeof GeneratorConfigSchema>;
 
 export class ConfigLoader {
-  private readonly explorer = cosmiconfigSync("fluentgen", {
+  private readonly explorer = cosmiconfigSync('fluentgen', {
     searchPlaces: [
-      ".fluentgenrc",
-      ".fluentgenrc.json",
-      ".fluentgenrc.yaml",
-      ".fluentgenrc.yml",
-      ".fluentgenrc.js",
-      ".fluentgenrc.cjs",
-      "fluentgen.config.js",
-      "fluentgen.config.cjs",
-      "package.json",
+      '.fluentgenrc',
+      '.fluentgenrc.json',
+      '.fluentgenrc.yaml',
+      '.fluentgenrc.yml',
+      '.fluentgenrc.js',
+      '.fluentgenrc.cjs',
+      'fluentgen.config.js',
+      'fluentgen.config.cjs',
+      'package.json',
     ],
   });
 
   load(configPath?: string): Result<Config> {
     try {
-      const result = configPath
-        ? this.explorer.load(configPath)
-        : this.explorer.search();
+      const result = configPath ? this.explorer.load(configPath) : this.explorer.search();
 
       if (!result) {
         return ok({});
@@ -77,4 +75,3 @@ export class ConfigLoader {
     return ok(parsed.data);
   }
 }
-

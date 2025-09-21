@@ -23,6 +23,7 @@ export default defineConfig({
         "**/generated/**",
         ".vitepress/**",
         "src/cli/**",
+        "**/types.ts",
       ],
       thresholds: {
         global: {

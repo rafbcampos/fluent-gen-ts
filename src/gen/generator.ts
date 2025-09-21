@@ -1,24 +1,18 @@
-import type { Result } from "../core/result.js";
-import { ok, err } from "../core/result.js";
-import type {
-  ResolvedType,
-  TypeInfo,
-  GeneratorOptions,
-} from "../core/types.js";
-import { TypeKind } from "../core/types.js";
-import {
-  PluginManager,
-  HookType,
-  type BuildMethodContext,
-} from "../core/plugin.js";
-import {
-  getCommonFileTemplate,
-  getSingleFileUtilitiesTemplate,
-} from "./template-generator.js";
-import { ImportGenerator } from "./import-generator.js";
-import { TypeStringGenerator } from "./type-string-generator.js";
-import { DefaultValueGenerator } from "./default-value-generator.js";
-import { MethodGenerator } from "./method-generator.js";
+import type { Result } from '../core/result.js';
+import { ok, err } from '../core/result.js';
+import type { ResolvedType, TypeInfo, GeneratorOptions } from '../core/types.js';
+import { TypeKind } from '../core/types.js';
+import { PluginManager, HookType, type BuildMethodContext } from '../core/plugin.js';
+import { getCommonFileTemplate, getSingleFileUtilitiesTemplate } from './template-generator.js';
+import { ImportGenerator } from './import-generator.js';
+import { TypeStringGenerator } from './type-string-generator.js';
+import { DefaultValueGenerator } from './default-value-generator.js';
+import { MethodGenerator } from './method-generator.js';
+
+// Constants
+const DEFAULT_OUTPUT_PATH = './generated';
+const DEFAULT_CONTEXT_TYPE = 'BaseBuildContext';
+const DEFAULT_IMPORT_PATH = './common';
 
 /**
  * Type guard to check if typeInfo is an object type
@@ -50,13 +44,11 @@ export class BuilderGenerator {
 
   constructor(config: GeneratorConfig = {}, pluginManager?: PluginManager) {
     this.config = {
-      outputPath: config.outputPath ?? "./generated",
+      outputPath: config.outputPath ?? DEFAULT_OUTPUT_PATH,
       useDefaults: config.useDefaults ?? true,
-      contextType: config.contextType ?? "BaseBuildContext",
-      importPath: "./common", // Always use ./common for consistency
+      contextType: config.contextType ?? DEFAULT_CONTEXT_TYPE,
+      importPath: DEFAULT_IMPORT_PATH,
       addComments: config.addComments ?? true,
-      indentSize: config.indentSize ?? 2,
-      useTab: config.useTab ?? false,
       generateCommonFile: false, // Will be determined by isGeneratingMultiple
     };
     this.pluginManager = pluginManager ?? new PluginManager();
@@ -68,39 +60,26 @@ export class BuilderGenerator {
 
   async generate(resolvedType: ResolvedType): Promise<Result<string>> {
     if (resolvedType.typeInfo.kind === TypeKind.Enum) {
-      return err(
-        new Error(
-          `Cannot generate builder for enum type: ${resolvedType.name}`,
-        ),
-      );
+      return err(new Error(`Cannot generate builder for enum type: ${resolvedType.name}`));
     }
 
-    const hookResult = await this.pluginManager.executeHook(
-      HookType.BeforeGenerate,
-      { resolvedType, options: this.config },
-    );
+    const hookResult = await this.pluginManager.executeHook({
+      hookType: HookType.BeforeGenerate,
+      input: { resolvedType, options: this.config },
+    });
 
     if (!hookResult.ok) {
-      return hookResult;
+      return err(new Error(`BeforeGenerate hook failed`));
     }
 
     try {
       const code = await this.generateBuilder(resolvedType);
 
-      // TODO: Re-enable prettier formatting when standalone bundle issue is resolved
-      // const formattedCode = await prettier.format(code, {
-      //   parser: "typescript",
-      //   semi: true,
-      //   singleQuote: false,
-      //   trailingComma: "all",
-      //   printWidth: 100,
-      // });
-
-      const afterHook = await this.pluginManager.executeHook(
-        HookType.AfterGenerate,
-        code, // Using unformatted code temporarily
-        { resolvedType, options: this.config },
-      );
+      const afterHook = await this.pluginManager.executeHook({
+        hookType: HookType.AfterGenerate,
+        input: code,
+        additionalArgs: [{ resolvedType, options: this.config }],
+      });
 
       if (!afterHook.ok) {
         return afterHook;
@@ -139,7 +118,7 @@ export class BuilderGenerator {
     const { name, typeInfo } = resolvedType;
 
     if (this.generatedBuilders.has(name)) {
-      return "";
+      return '';
     }
 
     this.generatedBuilders.add(name);
@@ -163,27 +142,33 @@ export class BuilderGenerator {
     // Each type should have its builder generated explicitly when requested
     // Properties will accept FluentBuilder<T> | T to handle both cases
 
-    return parts.filter(Boolean).join("\n\n");
+    return parts.filter(Boolean).join('\n\n');
   }
 
   /**
    * Generates import statements for the builder
    */
   private generateImports(resolvedType: ResolvedType): string {
-    return this.importGenerator.generateAllImports(resolvedType, {
-      isGeneratingMultiple: this.isGeneratingMultiple,
-      commonImportPath: "./common.js",
-      pluginManager: this.pluginManager,
+    const result = this.importGenerator.generateAllImports({
+      resolvedType,
+      config: {
+        isGeneratingMultiple: this.isGeneratingMultiple,
+        commonImportPath: './common.js',
+        pluginManager: this.pluginManager,
+      },
     });
+
+    if (!result.ok) {
+      throw new Error(`Failed to generate imports: ${result.error.message}`);
+    }
+
+    return result.value;
   }
 
   /**
    * Generates the builder interface
    */
-  private async generateBuilderInterface(
-    name: string,
-    typeInfo: TypeInfo,
-  ): Promise<string> {
+  private async generateBuilderInterface(name: string, typeInfo: TypeInfo): Promise<string> {
     return this.methodGenerator.generateBuilderInterface(name, typeInfo, {
       addComments: this.config.addComments,
       contextType: this.config.contextType,
@@ -200,28 +185,167 @@ export class BuilderGenerator {
     resolvedType: ResolvedType,
   ): Promise<string> {
     const builderName = this.getBuilderName(name);
-    const genericParams = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
-      : "";
-    const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(
-          typeInfo.genericParams,
-        )
-      : "";
+    const { genericParams, genericConstraints } = this.extractGenericInfo(typeInfo);
 
-    // Generate static defaults
-    const defaults = this.defaultValueGenerator.generateDefaultsObject(
+    const defaultsCode = this.generateDefaultsCode(typeInfo);
+    const methods = await this.generateMethodsCode(typeInfo, builderName, genericConstraints, name);
+    const buildMethod = await this.generateBuildMethodWithPlugins(name, typeInfo, resolvedType);
+
+    return this.formatBuilderClass({
+      builderName,
+      genericParams,
+      genericConstraints,
+      name,
+      defaultsCode,
+      methods,
+      buildMethod,
+    });
+  }
+
+  /**
+   * Extracts generic parameter information from TypeInfo
+   */
+  private extractGenericInfo(typeInfo: TypeInfo): {
+    genericParams: string;
+    genericConstraints: string;
+  } {
+    if (!isObjectType(typeInfo)) {
+      return { genericParams: '', genericConstraints: '' };
+    }
+
+    // If there are no generic parameters at all, return empty
+    if (!typeInfo.genericParams || typeInfo.genericParams.length === 0) {
+      return { genericParams: '', genericConstraints: '' };
+    }
+
+    // The fundamental question: does this type actually need parameterization?
+    // Check if all the type's properties are fully resolved (no unresolved generics)
+    if (this.areAllTypeParametersResolved(typeInfo)) {
+      return { genericParams: '', genericConstraints: '' };
+    }
+
+    return {
+      genericParams: this.typeStringGenerator.formatGenericParams(typeInfo.genericParams),
+      genericConstraints: this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams),
+    };
+  }
+
+  /**
+   * Checks if all type parameters in the resolved type are actually resolved
+   * to concrete types, meaning the builder doesn't need generic parameters
+   */
+  private areAllTypeParametersResolved(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
+  ): boolean {
+    // Walk through all properties and check if any still reference unresolved generics
+    return this.checkPropertiesForUnresolvedGenerics(typeInfo.properties);
+  }
+
+  /**
+   * Recursively checks if properties contain any unresolved generic references
+   */
+  private checkPropertiesForUnresolvedGenerics(properties: readonly any[], depth = 0): boolean {
+    // Prevent excessive recursion, especially for complex types like Date
+    if (depth > 2) {
+      return true;
+    }
+
+    for (const property of properties) {
+      const isResolved = this.isTypeFullyResolved(property.type, depth + 1);
+      if (!isResolved) {
+        return false; // Found an unresolved generic, so we need type parameters
+      }
+    }
+
+    return true; // All properties are fully resolved
+  }
+
+  /**
+   * Checks if a type is fully resolved (no generic type references)
+   */
+  private isTypeFullyResolved(typeInfo: TypeInfo, depth = 0): boolean {
+    // Prevent excessive recursion
+    if (depth > 3) {
+      return true;
+    }
+
+    switch (typeInfo.kind) {
+      case TypeKind.Generic:
+        // Generic types are by definition unresolved type parameters
+        return false;
+
+      case TypeKind.Primitive:
+        // Primitives are always resolved unless they're generic type references
+        // A generic type reference would have a name that matches a type parameter
+        if ('name' in typeInfo && typeInfo.name) {
+          const looksLikeParam = this.looksLikeTypeParameter(typeInfo.name);
+          return !looksLikeParam;
+        }
+        return true;
+
+      case TypeKind.Object:
+        // For object types, check if they have unresolved generics in their properties
+        if ('properties' in typeInfo && typeInfo.properties) {
+          return this.checkPropertiesForUnresolvedGenerics(typeInfo.properties, depth);
+        }
+        return true;
+
+      case TypeKind.Array:
+        // Arrays are resolved if their element type is resolved
+        return this.isTypeFullyResolved(typeInfo.elementType, depth + 1);
+
+      case TypeKind.Union:
+        // Unions are resolved if all union members are resolved
+        return typeInfo.unionTypes.every(unionType =>
+          this.isTypeFullyResolved(unionType, depth + 1),
+        );
+
+      case TypeKind.Intersection:
+        // Intersections are resolved if all intersection members are resolved
+        return typeInfo.intersectionTypes.every(intersectionType =>
+          this.isTypeFullyResolved(intersectionType, depth + 1),
+        );
+
+      default:
+        // For any other type kinds, assume they're resolved
+        return true;
+    }
+  }
+
+  /**
+   * Heuristic to detect if a type name looks like a type parameter
+   */
+  private looksLikeTypeParameter(name: string): boolean {
+    // Common patterns for type parameters:
+    // - Single uppercase letters: T, U, V, K
+    // - Short uppercase combinations: TKey, TValue
+    // - Names starting with T followed by uppercase: TData, TResponse
+    return /^[A-Z]$/.test(name) || /^T[A-Z]/.test(name) || /^[A-Z]{1,3}$/.test(name);
+  }
+
+  /**
+   * Generates the defaults code for a builder
+   */
+  private generateDefaultsCode(typeInfo: TypeInfo): string {
+    const defaults = this.defaultValueGenerator.generateDefaultsObject({
       typeInfo,
-      {
-        useDefaults: this.config.useDefaults,
-      },
-    );
-    const defaultsCode = defaults
+      config: { useDefaults: this.config.useDefaults },
+    });
+    return defaults
       ? `  private static readonly defaults: Record<string, unknown> = ${defaults};`
-      : "";
+      : '';
+  }
 
-    // Generate methods
-    const methods = await this.methodGenerator.generateClassMethods(
+  /**
+   * Generates the methods code for a builder
+   */
+  private async generateMethodsCode(
+    typeInfo: TypeInfo,
+    builderName: string,
+    genericConstraints: string,
+    name: string,
+  ): Promise<string> {
+    return this.methodGenerator.generateClassMethods(
       typeInfo,
       builderName,
       genericConstraints,
@@ -232,12 +356,29 @@ export class BuilderGenerator {
       },
       name,
     );
+  }
 
-    const buildMethod = await this.generateBuildMethodWithPlugins(
+  /**
+   * Formats the complete builder class string
+   */
+  private formatBuilderClass(params: {
+    builderName: string;
+    genericParams: string;
+    genericConstraints: string;
+    name: string;
+    defaultsCode: string;
+    methods: string;
+    buildMethod: string;
+  }): string {
+    const {
+      builderName,
+      genericParams,
+      genericConstraints,
       name,
-      typeInfo,
-      resolvedType,
-    );
+      defaultsCode,
+      methods,
+      buildMethod,
+    } = params;
 
     return `
 export class ${builderName}${genericParams} extends FluentBuilderBase<${name}${genericConstraints}> implements ${builderName}Methods${genericConstraints}, FluentBuilder<${name}${genericConstraints}, BaseBuildContext> {
@@ -267,46 +408,60 @@ ${buildMethod}
     resolvedType: ResolvedType,
   ): Promise<string> {
     const builderName = this.getBuilderName(name);
-    const genericParams = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
-      : "";
-    const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(
-          typeInfo.genericParams,
-        )
-      : "";
+    const { genericParams, genericConstraints } = this.extractGenericInfo(typeInfo);
     const properties = isObjectType(typeInfo) ? typeInfo.properties : [];
 
-    // Generate enhanced build method with value transformations
     let buildMethodCode = await this.generateEnhancedBuildMethod(
       name,
       typeInfo,
       genericConstraints,
     );
 
-    // Apply plugin transformations if available
+    const context: BuildMethodContext = {
+      buildMethodCode,
+      typeInfo,
+      typeName: name,
+      builderName,
+      genericParams,
+      genericConstraints,
+      properties,
+      options: this.config,
+      resolvedType,
+    };
+
+    return this.applyPluginTransformations(buildMethodCode, context);
+  }
+
+  /**
+   * Applies plugin transformations to the build method
+   */
+  private applyPluginTransformations(
+    buildMethodCode: string,
+    baseContext: BuildMethodContext,
+  ): string {
+    let result = buildMethodCode;
+
     for (const plugin of this.pluginManager.getPlugins()) {
-      if (plugin.transformBuildMethod) {
+      if (!plugin.transformBuildMethod) continue;
+
+      try {
+        // Create a new context with current build method code
         const context: BuildMethodContext = {
-          buildMethodCode,
-          typeInfo,
-          typeName: name,
-          builderName,
-          genericParams,
-          genericConstraints,
-          properties,
-          options: this.config,
-          resolvedType,
+          ...baseContext,
+          buildMethodCode: result,
         };
 
-        const result = plugin.transformBuildMethod(context);
-        if (result.ok) {
-          buildMethodCode = result.value;
+        const transformed = plugin.transformBuildMethod(context);
+        if (transformed.ok) {
+          result = transformed.value;
         }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.warn(`Plugin '${plugin.name}' transformBuildMethod failed: ${errorMessage}`);
       }
     }
 
-    return buildMethodCode;
+    return result;
   }
 
   /**
@@ -319,9 +474,7 @@ ${buildMethod}
   ): Promise<string> {
     const builderName = this.getBuilderName(typeName);
     const hasDefaults = this.hasDefaultValues(typeInfo);
-    const defaultsReference = hasDefaults
-      ? `${builderName}.defaults`
-      : "undefined";
+    const defaultsReference = hasDefaults ? `${builderName}.defaults` : 'undefined';
 
     return `  /**
    * Builds the final ${typeName} object
@@ -337,8 +490,9 @@ ${buildMethod}
    */
   private hasDefaultValues(typeInfo: TypeInfo): boolean {
     return (
-      this.defaultValueGenerator.generateDefaultsObject(typeInfo, {
-        useDefaults: this.config.useDefaults,
+      this.defaultValueGenerator.generateDefaultsObject({
+        typeInfo,
+        config: { useDefaults: this.config.useDefaults },
       }) !== null
     );
   }
@@ -351,20 +505,16 @@ ${buildMethod}
     const funcName = this.lowerFirst(name);
     const genericParams = isObjectType(typeInfo)
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
-      : "";
+      : '';
     const genericConstraints = isObjectType(typeInfo)
-      ? this.typeStringGenerator.formatGenericConstraints(
-          typeInfo.genericParams,
-        )
-      : "";
+      ? this.typeStringGenerator.formatGenericConstraints(typeInfo.genericParams)
+      : '';
 
     // Add JSDoc for the factory function
     const jsDoc =
-      this.config.addComments &&
-      isObjectType(typeInfo) &&
-      typeInfo.properties.length
+      this.config.addComments && isObjectType(typeInfo) && typeInfo.properties.length
         ? `/**\n * Creates a new ${name} builder\n * @param initial Optional initial values\n * @returns A fluent builder for ${name}\n */\n`
-        : "";
+        : '';
 
     return `
 ${jsDoc}export function ${funcName}${genericParams}(initial?: Partial<${name}${genericConstraints}>): ${builderName}${genericConstraints} {
@@ -378,9 +528,51 @@ ${jsDoc}export function ${funcName}${genericParams}(initial?: Partial<${name}${g
   }
 
   /**
-   * Converts first character to lowercase
+   * Converts PascalCase to camelCase, properly handling acronyms
+   * Examples:
+   * - APIRoute -> apiRoute
+   * - UserAPI -> userAPI
+   * - XMLHttpRequest -> xmlHttpRequest
+   * - SimpleClass -> simpleClass
    */
   private lowerFirst(str: string): string {
-    return str.charAt(0).toLowerCase() + str.slice(1);
+    if (!str) return str;
+
+    // If the string is only 1 character, just lowercase it
+    if (str.length === 1) {
+      return str.toLowerCase();
+    }
+
+    // If the string starts with multiple uppercase letters (acronym)
+    // we need to lowercase them until we hit a non-uppercase letter
+    let i = 0;
+    while (i < str.length) {
+      const char = str[i];
+      if (char && char === char.toUpperCase() && /[A-Z]/.test(char)) {
+        i++;
+      } else {
+        break;
+      }
+    }
+
+    if (i === 0) {
+      // No uppercase letters at start, return as-is
+      return str;
+    }
+
+    if (i === 1) {
+      // Only first letter is uppercase, simple case
+      return str.charAt(0).toLowerCase() + str.slice(1);
+    }
+
+    if (i === str.length) {
+      // Entire string is uppercase (like "RGB"), lowercase entire string
+      return str.toLowerCase();
+    }
+
+    // Multiple uppercase letters followed by lowercase
+    // Keep last uppercase letter with the following lowercase part
+    // Example: "APIRoute" -> i=3, so "API" + "Route" -> "api" + "Route" = "apiRoute"
+    return str.slice(0, i - 1).toLowerCase() + str.slice(i - 1);
   }
 }

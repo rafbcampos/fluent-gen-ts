@@ -1,362 +1,468 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { FluentGen } from "../index.js";
-import type { FluentGenOptions } from "../index.js";
-import { isOk, isErr } from "../../core/result.js";
-import { PluginManager, HookType } from "../../core/plugin.js";
-import * as fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { FluentGen } from '../index.js';
+import { TypeExtractor } from '../../type-info/index.js';
+import { BuilderGenerator } from '../generator.js';
+import { PluginManager } from '../../core/plugin.js';
+import { ok, err } from '../../core/result.js';
+import type { ResolvedType } from '../../core/types.js';
+import { TypeKind } from '../../core/types.js';
+import type { Plugin } from '../../core/plugin.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Mock the dependencies
+vi.mock('../../type-info/index.js');
+vi.mock('../generator.js');
+vi.mock('../../core/plugin.js');
+vi.mock('node:fs/promises');
+vi.mock('node:path');
+vi.mock('glob');
 
-// Mock fs/promises for file writing tests
-vi.mock("node:fs/promises", () => ({
-  writeFile: vi.fn().mockResolvedValue(undefined),
-  mkdir: vi.fn().mockResolvedValue(undefined),
-}));
-
-describe("FluentGen", () => {
-  let fluentGen: FluentGen;
-  const fixturesPath = path.join(
-    __dirname,
-    "..",
-    "..",
-    "__tests__",
-    "fixtures",
-    "simple.ts",
-  );
+describe('FluentGen', () => {
+  let mockTypeExtractor: TypeExtractor;
+  let mockBuilderGenerator: BuilderGenerator;
+  let mockPluginManager: PluginManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    fluentGen = new FluentGen();
+
+    // Create proper mock objects
+    mockTypeExtractor = {
+      extractType: vi.fn(),
+      scanFile: vi.fn(),
+    } as unknown as TypeExtractor;
+
+    mockBuilderGenerator = {
+      generate: vi.fn(),
+      setGeneratingMultiple: vi.fn(),
+      generateCommonFile: vi.fn(),
+      clearCache: vi.fn(),
+    } as unknown as BuilderGenerator;
+
+    mockPluginManager = {
+      register: vi.fn(),
+    } as unknown as PluginManager;
+
+    // Mock constructors
+    vi.mocked(TypeExtractor).mockImplementation(() => mockTypeExtractor);
+    vi.mocked(BuilderGenerator).mockImplementation(() => mockBuilderGenerator);
+    vi.mocked(PluginManager).mockImplementation(() => mockPluginManager);
   });
 
-  describe("constructor", () => {
-    it("should initialize with default options", () => {
-      const gen = new FluentGen();
-      expect(gen).toBeDefined();
+  describe('constructor', () => {
+    test('should create instance with default options', () => {
+      const fluentGen = new FluentGen();
+      expect(fluentGen).toBeDefined();
+      expect(TypeExtractor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pluginManager: mockPluginManager,
+        }),
+      );
+      expect(BuilderGenerator).toHaveBeenCalledWith({}, mockPluginManager);
     });
 
-    it("should accept custom options", () => {
-      const options: FluentGenOptions = {
-        outputDir: "/custom/output",
-        fileName: "custom.builder.ts",
-        maxDepth: 5,
-        outputPath: "/custom/path",
+    test('should create instance with custom options', () => {
+      const options = {
+        outputDir: './custom',
+        fileName: 'custom.ts',
+        tsConfigPath: './tsconfig.json',
         useDefaults: false,
-        contextType: "CustomContext",
-        importPath: "@custom/core",
+        contextType: 'CustomContext',
         addComments: false,
+        maxDepth: 5,
       };
 
-      const gen = new FluentGen(options);
-      expect(gen).toBeDefined();
+      const fluentGen = new FluentGen(options);
+      expect(fluentGen).toBeDefined();
+      expect(TypeExtractor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tsConfigPath: './tsconfig.json',
+          maxDepth: 5,
+          pluginManager: mockPluginManager,
+        }),
+      );
+      expect(BuilderGenerator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          useDefaults: false,
+          contextType: 'CustomContext',
+          addComments: false,
+        }),
+        mockPluginManager,
+      );
     });
 
-    it("should use provided plugin manager", () => {
-      const pluginManager = new PluginManager();
-      const gen = new FluentGen({ pluginManager });
-      expect(gen).toBeDefined();
+    test('should throw error for invalid outputDir', () => {
+      expect(() => new FluentGen({ outputDir: '' })).toThrow(
+        'Invalid FluentGen options: outputDir must be a non-empty string if provided',
+      );
+    });
+
+    test('should throw error for invalid fileName', () => {
+      expect(() => new FluentGen({ fileName: '' })).toThrow(
+        'Invalid FluentGen options: fileName must be a non-empty string if provided',
+      );
+    });
+
+    test('should throw error for invalid maxDepth', () => {
+      expect(() => new FluentGen({ maxDepth: 0 })).toThrow(
+        'Invalid FluentGen options: maxDepth must be between 1 and 100',
+      );
+      expect(() => new FluentGen({ maxDepth: 101 })).toThrow(
+        'Invalid FluentGen options: maxDepth must be between 1 and 100',
+      );
+    });
+
+    test('should throw error for invalid tsConfigPath', () => {
+      expect(() => new FluentGen({ tsConfigPath: '' })).toThrow(
+        'Invalid FluentGen options: tsConfigPath must be a non-empty string if provided',
+      );
     });
   });
 
-  describe("generateBuilder", () => {
-    it("should generate builder for Address type", async () => {
-      const result = await fluentGen.generateBuilder(fixturesPath, "Address");
+  describe('generateBuilder', () => {
+    let fluentGen: FluentGen;
 
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
+    beforeEach(() => {
+      fluentGen = new FluentGen();
+    });
+
+    test('should generate builder successfully', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: {
+          kind: TypeKind.Object,
+          properties: [],
+          genericParams: [],
+        },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+
+      const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('generated code');
+      }
+      expect(mockTypeExtractor.extractType).toHaveBeenCalledWith('/test/file.ts', 'User');
+      expect(mockBuilderGenerator.generate).toHaveBeenCalledWith(mockResolvedType);
+    });
+
+    test('should return error for invalid filePath', async () => {
+      const result = await fluentGen.generateBuilder('', 'User');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('filePath must be a non-empty string');
       }
     });
 
-    it("should generate builder for User type with nested Address", async () => {
-      const result = await fluentGen.generateBuilder(fixturesPath, "User");
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-
-    it("should generate builder for generic ApiResponse type", async () => {
-      const result = await fluentGen.generateBuilder(
-        fixturesPath,
-        "ApiResponse",
-      );
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-
-    it("should handle non-existent type", async () => {
-      const result = await fluentGen.generateBuilder(
-        fixturesPath,
-        "NonExistentType",
-      );
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("not found");
-      }
-    });
-
-    it("should handle non-existent file", async () => {
-      const result = await fluentGen.generateBuilder(
-        "/nonexistent/file.ts",
-        "TestType",
-      );
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("File not found");
-      }
-    });
-  });
-
-  describe("generateBuilder with JSDoc", () => {
-    it("should include JSDoc comments when addComments is true", async () => {
-      const genWithComments = new FluentGen({ addComments: true });
-      const result = await genWithComments.generateBuilder(
-        fixturesPath,
-        "Address",
-      );
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-
-    it("should not include JSDoc comments when addComments is false", async () => {
-      const genNoComments = new FluentGen({ addComments: false });
-      const result = await genNoComments.generateBuilder(
-        fixturesPath,
-        "Address",
-      );
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-  });
-
-  describe("clearCache", () => {
-    it("should clear the generator cache", () => {
-      expect(() => fluentGen.clearCache()).not.toThrow();
-    });
-  });
-
-  describe("generateMultiple", () => {
-    it("should generate builders for multiple types", async () => {
-      const result = await fluentGen.generateMultiple(fixturesPath, [
-        "Address",
-        "Point",
-      ]);
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-
-    it("should handle errors in one of the types", async () => {
-      const result = await fluentGen.generateMultiple(fixturesPath, [
-        "Address",
-        "NonExistent",
-      ]);
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("not found");
-      }
-    });
-
-    it("should handle empty type list", async () => {
-      const result = await fluentGen.generateMultiple(fixturesPath, []);
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-  });
-
-  describe("generateToFile", () => {
-    it("should generate and write to file with default path", async () => {
-      const result = await fluentGen.generateToFile(fixturesPath, "Address");
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value).toContain("address.builder.ts");
-        expect(fs.mkdir).toHaveBeenCalledWith(
-          expect.stringContaining("generated"),
-          { recursive: true },
-        );
-        expect(fs.writeFile).toHaveBeenCalledWith(
-          expect.any(String),
-          expect.stringContaining("AddressBuilder"),
-          "utf-8",
+    test('should return error for invalid file extension', async () => {
+      const result = await fluentGen.generateBuilder('/test/file.js', 'User');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe(
+          'filePath must be a TypeScript file (.ts, .tsx, or .d.ts)',
         );
       }
     });
 
-    it("should use custom output path", async () => {
-      const customPath = "/custom/output/custom.builder.ts";
-      const result = await fluentGen.generateToFile(
-        fixturesPath,
-        "Address",
-        customPath,
-      );
+    test('should return error for invalid typeName', async () => {
+      const result = await fluentGen.generateBuilder('/test/file.ts', '');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('typeName must be a non-empty string');
+      }
+    });
 
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value).toBe(customPath);
-        expect(fs.mkdir).toHaveBeenCalledWith("/custom/output", {
-          recursive: true,
-        });
-        expect(fs.writeFile).toHaveBeenCalledWith(
-          customPath,
-          expect.stringContaining("AddressBuilder"),
-          "utf-8",
+    test('should return error for invalid TypeScript identifier', async () => {
+      const result = await fluentGen.generateBuilder('/test/file.ts', '123Invalid');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe(
+          "typeName '123Invalid' is not a valid TypeScript identifier",
         );
       }
     });
 
-    it("should handle generation errors", async () => {
-      const result = await fluentGen.generateToFile(
-        fixturesPath,
-        "NonExistent",
+    test('should return error when extractor fails', async () => {
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(
+        err(new Error('Extraction failed')),
       );
 
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("not found");
-      }
-      expect(fs.writeFile).not.toHaveBeenCalled();
-    });
-
-    it("should handle file write errors", async () => {
-      const writeError = new Error("Write failed");
-      vi.mocked(fs.writeFile).mockRejectedValueOnce(writeError);
-
-      const result = await fluentGen.generateToFile(fixturesPath, "Address");
-
-      expect(isErr(result)).toBe(true);
-      if (isErr(result)) {
-        expect(result.error.message).toContain("Failed to write file");
+      const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Extraction failed');
       }
     });
 
-    it("should use custom output dir and filename from options", async () => {
-      const customGen = new FluentGen({
-        outputDir: "/my/output",
-        fileName: "my-builder.ts",
+    test('should return error when generator fails', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(
+        err(new Error('Generation failed')),
+      );
+
+      const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('Generation failed');
+      }
+    });
+  });
+
+  describe('generateMultiple', () => {
+    let fluentGen: FluentGen;
+
+    beforeEach(() => {
+      fluentGen = new FluentGen();
+    });
+
+    test('should generate multiple builders successfully', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+
+      const result = await fluentGen.generateMultiple('/test/file.ts', ['User', 'Product']);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.size).toBe(3);
+        expect(result.value.get('common.ts')).toBe('common code');
+        expect(result.value.get('User.builder.ts')).toBe('generated code');
+        expect(result.value.get('Product.builder.ts')).toBe('generated code');
+      }
+
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(true);
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
+      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+    });
+
+    test('should return error for invalid filePath', async () => {
+      const result = await fluentGen.generateMultiple('', ['User']);
+      expect(result.ok).toBe(false);
+    });
+
+    test('should return error for invalid typeNames array', async () => {
+      const result = await fluentGen.generateMultiple('/test/file.ts', []);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('typeNames array cannot be empty');
+      }
+    });
+
+    test('should return error for invalid typeName in array', async () => {
+      const result = await fluentGen.generateMultiple('/test/file.ts', ['User', '']);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('typeName must be a non-empty string');
+      }
+    });
+
+    test('should cleanup state even when generation fails', async () => {
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(err(new Error('Failed')));
+
+      const result = await fluentGen.generateMultiple('/test/file.ts', ['User']);
+      expect(result.ok).toBe(false);
+
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
+      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+    });
+  });
+
+  describe('generateToFile', () => {
+    let fluentGen: FluentGen;
+
+    beforeEach(async () => {
+      fluentGen = new FluentGen();
+
+      // Mock path module
+      const mockPath = await import('node:path');
+      vi.mocked(mockPath.dirname).mockReturnValue('/output');
+      vi.mocked(mockPath.join).mockReturnValue('/output/user.builder.ts');
+
+      // Mock fs promises
+      const mockFs = await import('node:fs/promises');
+      vi.mocked(mockFs.mkdir).mockResolvedValue(undefined);
+      vi.mocked(mockFs.writeFile).mockResolvedValue(undefined);
+    });
+
+    test('should generate and write to file successfully', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+
+      const result = await fluentGen.generateToFile('/test/file.ts', 'User', '/custom/output.ts');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBe('/custom/output.ts');
+      }
+
+      const mockFs = await import('node:fs/promises');
+      expect(mockFs.writeFile).toHaveBeenCalledWith('/custom/output.ts', 'generated code', 'utf-8');
+    });
+
+    test('should return error for invalid outputPath', async () => {
+      const result = await fluentGen.generateToFile('/test/file.ts', 'User', '');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('outputPath must be a non-empty string if provided');
+      }
+    });
+
+    test('should handle file write errors', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+
+      const mockFs = await import('node:fs/promises');
+      vi.mocked(mockFs.writeFile).mockRejectedValue(new Error('Write failed'));
+
+      const result = await fluentGen.generateToFile('/test/file.ts', 'User');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Failed to write file');
+      }
+    });
+  });
+
+  describe('scanAndGenerate', () => {
+    let fluentGen: FluentGen;
+
+    beforeEach(() => {
+      fluentGen = new FluentGen();
+
+      // Mock glob module
+      vi.doMock('glob', () => ({
+        glob: vi.fn(),
+      }));
+    });
+
+    test('should scan and generate successfully', async () => {
+      const mockGlob = vi.fn().mockResolvedValue(['/test/file1.ts', '/test/file2.ts']);
+      vi.doMock('glob', () => ({ glob: mockGlob }));
+
+      vi.mocked(mockTypeExtractor.scanFile)
+        .mockResolvedValueOnce(ok(['User']))
+        .mockResolvedValueOnce(ok(['Product']));
+
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+
+      const result = await fluentGen.scanAndGenerate('**/*.ts');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.size).toBe(2);
+        expect(result.value.has('/test/file1.ts:User')).toBe(true);
+        expect(result.value.has('/test/file2.ts:Product')).toBe(true);
+      }
+    });
+
+    test('should return error for invalid pattern', async () => {
+      const result = await fluentGen.scanAndGenerate('');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('pattern must be a non-empty string');
+      }
+    });
+
+    test('should handle glob import errors', async () => {
+      vi.doMock('glob', () => {
+        throw new Error('Import failed');
       });
 
-      const result = await customGen.generateToFile(fixturesPath, "Address");
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value).toBe(path.join("/my/output", "my-builder.ts"));
+      const result = await fluentGen.scanAndGenerate('**/*.ts');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Failed to scan and generate');
       }
     });
   });
 
-  describe("scanAndGenerate", () => {
-    it("should scan and generate builders for fixture files", async () => {
-      const pattern = path.join(
-        __dirname,
-        "..",
-        "..",
-        "__tests__",
-        "fixtures",
-        "simple.ts",
-      );
-      const result = await fluentGen.scanAndGenerate(pattern);
+  describe('registerPlugin', () => {
+    let fluentGen: FluentGen;
 
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        // Should find multiple types in the fixture file
-        expect(result.value.size).toBeGreaterThan(0);
-        // Check for some expected types
-        const keys = Array.from(result.value.keys());
-        expect(keys.some((k) => k.includes("Address"))).toBe(true);
-      }
+    beforeEach(() => {
+      fluentGen = new FluentGen();
     });
 
-    it("should handle no matching files", async () => {
-      const result = await fluentGen.scanAndGenerate(
-        "/nonexistent/pattern/*.ts",
-      );
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result.value.size).toBe(0);
-      }
-    });
-  });
-
-  describe("registerPlugin", () => {
-    it("should register a plugin", () => {
-      const plugin = {
-        name: "test-plugin",
-        version: "1.0.0",
-        hooks: {
-          [HookType.BeforeGenerate]: vi.fn(),
-        },
+    test('should register plugin successfully', () => {
+      const mockPlugin: Plugin = {
+        name: 'test-plugin',
+        version: '1.0.0',
       };
 
-      expect(() => fluentGen.registerPlugin(plugin)).not.toThrow();
+      const result = fluentGen.registerPlugin(mockPlugin);
+
+      expect(result.ok).toBe(true);
+      expect(mockPluginManager.register).toHaveBeenCalledWith(mockPlugin);
     });
 
-    it("should apply plugin hooks during generation", async () => {
-      const genWithPlugin = new FluentGen();
-
-      const plugin = {
-        name: "test-plugin",
-        version: "1.0.0",
-        hooks: {
-          [HookType.BeforeGenerate]: vi.fn(),
-        },
+    test('should return error when plugin registration fails', () => {
+      const mockPlugin: Plugin = {
+        name: 'test-plugin',
+        version: '1.0.0',
       };
 
-      genWithPlugin.registerPlugin(plugin);
+      vi.mocked(mockPluginManager.register).mockImplementation(() => {
+        throw new Error('Registration failed');
+      });
 
-      const result = await genWithPlugin.generateBuilder(
-        fixturesPath,
-        "Address",
-      );
+      const result = fluentGen.registerPlugin(mockPlugin);
 
-      expect(isOk(result)).toBe(true);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Failed to register plugin');
+      }
     });
   });
 
-  describe("complex types", () => {
-    it("should generate builder for Result union type", async () => {
-      const result = await fluentGen.generateBuilder(fixturesPath, "Result");
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
-    });
-
-    it("should generate builder for ComplexType with various property types", async () => {
-      const result = await fluentGen.generateBuilder(
-        fixturesPath,
-        "ComplexType",
-      );
-
-      expect(isOk(result)).toBe(true);
-      if (isOk(result)) {
-        expect(result).toMatchSnapshot();
-      }
+  describe('clearCache', () => {
+    test('should clear generator cache', () => {
+      const fluentGen = new FluentGen();
+      fluentGen.clearCache();
+      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
     });
   });
 });
-

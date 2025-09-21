@@ -2,11 +2,14 @@
 
 ## Overview
 
-This guide explains how TypeScript resolves types and when our custom resolvers are needed for the fluent builder generation system.
+This guide explains how TypeScript resolves types and when our custom resolvers
+are needed for the fluent builder generation system.
 
 ## Key Understanding: TypeScript Does Most of the Work
 
-**Important**: TypeScript's compiler already resolves most conditional and mapped types to their final form. Our resolvers should primarily rely on TypeScript's built-in resolution and only handle special cases.
+**Important**: TypeScript's compiler already resolves most conditional and
+mapped types to their final form. Our resolvers should primarily rely on
+TypeScript's built-in resolution and only handle special cases.
 
 ## When TypeScript Resolves Types (Most Cases)
 
@@ -19,11 +22,12 @@ TypeScript automatically resolves conditional types when the condition is known:
 type IsString<T> = T extends string ? true : false;
 type Test = IsString<string>; // Resolved to: true
 
-type GetUser<T> = T extends "admin" ? AdminUser : BasicUser;
-type User = GetUser<"user">; // Resolved to: BasicUser
+type GetUser<T> = T extends 'admin' ? AdminUser : BasicUser;
+type User = GetUser<'user'>; // Resolved to: BasicUser
 ```
 
-In these cases, when we call `type.getProperties()`, we already get the resolved properties.
+In these cases, when we call `type.getProperties()`, we already get the resolved
+properties.
 
 ### Mapped Types
 
@@ -35,7 +39,7 @@ type Readonly<T> = { readonly [K in keyof T]: T[K] };
 type ReadonlyUser = Readonly<User>; // Expanded to object with readonly properties
 
 type Pick<T, K> = { [P in K]: T[P] };
-type BasicUser = Pick<User, "id" | "name">; // Filtered to just id and name
+type BasicUser = Pick<User, 'id' | 'name'>; // Filtered to just id and name
 ```
 
 Again, `type.getProperties()` returns the already-expanded properties.
@@ -54,7 +58,8 @@ interface Dictionary {
 
 **MappedTypeResolver** handles these by:
 
-- Detecting index signatures via `type.getStringIndexType()` or `type.getNumberIndexType()`
+- Detecting index signatures via `type.getStringIndexType()` or
+  `type.getNumberIndexType()`
 - Returning an object with `indexSignature` metadata
 
 ### 2. Unresolved Generic Types
@@ -70,7 +75,8 @@ interface Container<T> {
 
 **Our resolvers handle these by**:
 
-- Detecting unresolved generics (type text contains angle brackets, no properties)
+- Detecting unresolved generics (type text contains angle brackets, no
+  properties)
 - Returning `TypeKind.Generic` to indicate deferred resolution
 
 ## Implementation Strategy
@@ -113,7 +119,8 @@ async resolveMappedType(type: Type, ...) {
 When generating fluent builders:
 
 1. **Resolved Types**: Use the properties directly from TypeScript
-2. **Index Signatures**: Generate dynamic setter methods or a generic `set(key, value)` method
+2. **Index Signatures**: Generate dynamic setter methods or a generic
+   `set(key, value)` method
 3. **Unresolved Generics**: Defer resolution until the generic is instantiated
 
 ## Testing Guidelines
@@ -132,15 +139,17 @@ When generating fluent builders:
 
 ## Common Pitfalls to Avoid
 
-1. **Don't parse type text**: Avoid regex patterns like `/T extends .* \? .* : .*/`
+1. **Don't parse type text**: Avoid regex patterns like
+   `/T extends .* \? .* : .*/`
 2. **Don't re-implement TypeScript**: If TypeScript resolved it, use the result
 3. **Don't over-engineer**: Most types are already resolved
-4. **Trust TypeScript**: When `type.getProperties()` returns properties, they're correct
+4. **Trust TypeScript**: When `type.getProperties()` returns properties, they're
+   correct
 
 ## Summary
 
 - **95% of cases**: TypeScript has already done the work
-- **5% of cases**: Index signatures and unresolved generics need special handling
+- **5% of cases**: Index signatures and unresolved generics need special
+  handling
 - **Goal**: Generate builders for the final, resolved object shape
 - **Strategy**: Rely on TypeScript, handle only what it doesn't resolve
-

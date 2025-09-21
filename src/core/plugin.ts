@@ -1,20 +1,31 @@
-import type { Result } from "./result.js";
-import type {
-  TypeInfo,
-  ResolvedType,
-  PropertyInfo,
-  GeneratorOptions,
-} from "./types.js";
-import type { Type, Symbol } from "ts-morph";
+import type { Result } from './result.js';
+import type { TypeInfo, ResolvedType, PropertyInfo, GeneratorOptions } from './types.js';
+import type { Type, Symbol } from 'ts-morph';
+
+export interface BaseTypeContext {
+  readonly typeName: string;
+  readonly typeInfo: TypeInfo;
+}
+
+export interface BaseBuilderContext extends BaseTypeContext {
+  readonly builderName: string;
+}
+
+export interface BaseGenericsContext {
+  readonly genericParams: string;
+  readonly genericConstraints: string;
+}
 
 export interface ParseContext {
   readonly sourceFile: string;
   readonly typeName: string;
 }
 
-export interface ResolveContext extends ParseContext {
+export interface ResolveContext {
   readonly type: Type;
-  readonly symbol?: Symbol;
+  readonly symbol?: Symbol | undefined;
+  readonly sourceFile?: string;
+  readonly typeName?: string;
 }
 
 export interface GenerateContext {
@@ -22,24 +33,16 @@ export interface GenerateContext {
   readonly options: Record<string, unknown>;
 }
 
-export interface BuildMethodContext {
+export interface BuildMethodContext extends BaseBuilderContext, BaseGenericsContext {
   readonly buildMethodCode: string;
-  readonly typeInfo: TypeInfo;
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly genericParams: string;
-  readonly genericConstraints: string;
   readonly properties: readonly PropertyInfo[];
   readonly options: GeneratorOptions;
   readonly resolvedType: ResolvedType;
 }
 
-export interface PropertyMethodContext {
+export interface PropertyMethodContext extends BaseBuilderContext {
   readonly property: PropertyInfo;
   readonly originalType: string;
-  readonly builderName: string;
-  readonly typeName: string;
-  readonly typeInfo: TypeInfo;
 }
 
 export interface PropertyMethodTransform {
@@ -55,13 +58,8 @@ export interface CustomMethod {
   readonly jsDoc?: string;
 }
 
-export interface BuilderContext {
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly typeInfo: TypeInfo;
+export interface BuilderContext extends BaseBuilderContext, BaseGenericsContext {
   readonly properties: readonly PropertyInfo[];
-  readonly genericParams: string;
-  readonly genericConstraints: string;
 }
 
 export interface ValueContext {
@@ -82,18 +80,49 @@ export interface PluginImports {
 }
 
 export enum HookType {
-  BeforeParse = "beforeParse",
-  AfterParse = "afterParse",
-  BeforeResolve = "beforeResolve",
-  AfterResolve = "afterResolve",
-  BeforeGenerate = "beforeGenerate",
-  AfterGenerate = "afterGenerate",
-  TransformType = "transformType",
-  TransformProperty = "transformProperty",
-  TransformBuildMethod = "transformBuildMethod",
-  TransformPropertyMethod = "transformPropertyMethod",
-  AddCustomMethods = "addCustomMethods",
-  TransformValue = "transformValue",
+  BeforeParse = 'beforeParse',
+  AfterParse = 'afterParse',
+  BeforeResolve = 'beforeResolve',
+  AfterResolve = 'afterResolve',
+  BeforeGenerate = 'beforeGenerate',
+  AfterGenerate = 'afterGenerate',
+  TransformType = 'transformType',
+  TransformProperty = 'transformProperty',
+  TransformBuildMethod = 'transformBuildMethod',
+  TransformPropertyMethod = 'transformPropertyMethod',
+  AddCustomMethods = 'addCustomMethods',
+  TransformValue = 'transformValue',
+}
+
+type PluginHookMap = {
+  [HookType.BeforeParse]: (context: ParseContext) => Result<ParseContext>;
+  [HookType.AfterParse]: (context: ParseContext, type: Type) => Result<Type>;
+  [HookType.BeforeResolve]: (context: ResolveContext) => Result<ResolveContext>;
+  [HookType.AfterResolve]: (context: ResolveContext, typeInfo: TypeInfo) => Result<TypeInfo>;
+  [HookType.BeforeGenerate]: (context: GenerateContext) => Result<GenerateContext>;
+  [HookType.AfterGenerate]: (code: string, context: GenerateContext) => Result<string>;
+  [HookType.TransformType]: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>;
+  [HookType.TransformProperty]: (property: PropertyInfo) => Result<PropertyInfo>;
+  [HookType.TransformBuildMethod]: (context: BuildMethodContext) => Result<string>;
+  [HookType.TransformPropertyMethod]: (
+    context: PropertyMethodContext,
+  ) => Result<PropertyMethodTransform>;
+  [HookType.AddCustomMethods]: (context: BuilderContext) => Result<readonly CustomMethod[]>;
+  [HookType.TransformValue]: (context: ValueContext) => Result<ValueTransform | null>;
+};
+
+type GetHookReturnType<K extends HookType> =
+  ReturnType<PluginHookMap[K]> extends Result<infer R> ? R : never;
+
+type GetHookInputType<K extends HookType> = Parameters<PluginHookMap[K]>[0];
+
+type GetHookAdditionalArgs<K extends HookType> =
+  Parameters<PluginHookMap[K]> extends [unknown, ...infer Rest] ? Rest : [];
+
+interface ExecuteHookOptions<K extends HookType> {
+  readonly hookType: K;
+  readonly input: GetHookInputType<K>;
+  readonly additionalArgs?: GetHookAdditionalArgs<K>;
 }
 
 export interface Plugin {
@@ -103,38 +132,33 @@ export interface Plugin {
   /** Import dependencies this plugin requires */
   readonly imports?: PluginImports;
 
-  beforeParse?(context: ParseContext): Result<ParseContext>;
-  afterParse?(context: ParseContext, type: Type): Result<Type>;
-
-  beforeResolve?(context: ResolveContext): Result<ResolveContext>;
-  afterResolve?(context: ResolveContext, typeInfo: TypeInfo): Result<TypeInfo>;
-
-  beforeGenerate?(context: GenerateContext): Result<GenerateContext>;
-  afterGenerate?(code: string, context: GenerateContext): Result<string>;
-
-  transformType?(type: Type, typeInfo: TypeInfo): Result<TypeInfo>;
-  transformProperty?(property: PropertyInfo): Result<PropertyInfo>;
-  transformBuildMethod?(context: BuildMethodContext): Result<string>;
-
-  /** Transform the method signature for a property */
-  transformPropertyMethod?(
-    context: PropertyMethodContext,
-  ): Result<PropertyMethodTransform>;
-
-  /** Add custom methods to the builder */
-  addCustomMethods?(context: BuilderContext): Result<readonly CustomMethod[]>;
-
-  /** Transform values during the build process */
-  transformValue?(context: ValueContext): Result<ValueTransform | null>;
+  beforeParse?: PluginHookMap[HookType.BeforeParse];
+  afterParse?: PluginHookMap[HookType.AfterParse];
+  beforeResolve?: PluginHookMap[HookType.BeforeResolve];
+  afterResolve?: PluginHookMap[HookType.AfterResolve];
+  beforeGenerate?: PluginHookMap[HookType.BeforeGenerate];
+  afterGenerate?: PluginHookMap[HookType.AfterGenerate];
+  transformType?: PluginHookMap[HookType.TransformType];
+  transformProperty?: PluginHookMap[HookType.TransformProperty];
+  transformBuildMethod?: PluginHookMap[HookType.TransformBuildMethod];
+  transformPropertyMethod?: PluginHookMap[HookType.TransformPropertyMethod];
+  addCustomMethods?: PluginHookMap[HookType.AddCustomMethods];
+  transformValue?: PluginHookMap[HookType.TransformValue];
 }
 
 export class PluginManager {
   private readonly plugins: Map<string, Plugin> = new Map();
 
   register(plugin: Plugin): void {
+    const validationResult = this.validatePlugin(plugin);
+    if (!validationResult.ok) {
+      throw new Error(`Plugin validation failed: ${validationResult.error.message}`);
+    }
+
     if (this.plugins.has(plugin.name)) {
       throw new Error(`Plugin ${plugin.name} is already registered`);
     }
+
     this.plugins.set(plugin.name, plugin);
   }
 
@@ -142,29 +166,46 @@ export class PluginManager {
     return this.plugins.delete(name);
   }
 
-  async executeHook<T>(
-    hookType: HookType,
-    input: T,
-    ...args: unknown[]
-  ): Promise<Result<T>> {
-    const methodName = hookType as keyof Plugin;
+  async executeHook<K extends HookType>(
+    options: ExecuteHookOptions<K>,
+  ): Promise<Result<GetHookReturnType<K>>> {
+    const { hookType, input, additionalArgs = [] } = options;
     let currentInput = input;
 
     for (const plugin of this.plugins.values()) {
-      const hook = plugin[methodName];
-      if (typeof hook === "function") {
-        const result =
-          args.length > 0
-            ? await (hook as Function).call(plugin, currentInput, ...args)
-            : await (hook as Function).call(plugin, currentInput);
-        if (!result.ok) {
-          return result as Result<T>;
+      const hook = plugin[hookType];
+      if (typeof hook === 'function') {
+        try {
+          const result =
+            additionalArgs.length > 0
+              ? await (hook as any)(currentInput, ...additionalArgs)
+              : await (hook as any)(currentInput);
+
+          if (!this.isValidResult(result)) {
+            return {
+              ok: false,
+              error: new Error(`Plugin ${plugin.name} hook ${hookType} returned invalid result`),
+            };
+          }
+
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: new Error(`Plugin ${plugin.name} hook ${hookType} failed: ${result.error}`),
+            };
+          }
+
+          currentInput = result.value as GetHookInputType<K>;
+        } catch (error) {
+          return {
+            ok: false,
+            error: new Error(`Plugin ${plugin.name} hook ${hookType} threw error: ${error}`),
+          };
         }
-        currentInput = result.value as T;
       }
     }
 
-    return { ok: true, value: currentInput };
+    return { ok: true, value: currentInput as GetHookReturnType<K> };
   }
 
   getPlugins(): ReadonlyArray<Plugin> {
@@ -192,57 +233,173 @@ export class PluginManager {
   }
 
   /** Get property method transformation for a specific property */
-  getPropertyMethodTransform(
-    context: PropertyMethodContext,
-  ): PropertyMethodTransform | null {
-    let transform: PropertyMethodTransform = {};
+  getPropertyMethodTransform(context: PropertyMethodContext): PropertyMethodTransform | null {
+    const results = this.collectPluginResults<PropertyMethodTransform>({
+      hookMethod: 'transformPropertyMethod',
+      context,
+      mergeStrategy: 'merge',
+    });
 
-    for (const plugin of this.plugins.values()) {
-      if (plugin.transformPropertyMethod) {
-        const result = plugin.transformPropertyMethod(context);
-        if (result.ok && result.value) {
-          // Merge transforms, later plugins override earlier ones
-          transform = { ...transform, ...result.value };
-        }
-      }
-    }
-
-    return Object.keys(transform).length > 0 ? transform : null;
+    return results.length > 0
+      ? results.reduce((acc, curr) => ({ ...acc, ...curr }), {} as PropertyMethodTransform)
+      : null;
   }
 
   /** Get all custom methods from plugins */
   getCustomMethods(context: BuilderContext): readonly CustomMethod[] {
-    const allMethods: CustomMethod[] = [];
-
-    for (const plugin of this.plugins.values()) {
-      if (plugin.addCustomMethods) {
-        const result = plugin.addCustomMethods(context);
-        if (result.ok && result.value) {
-          allMethods.push(...result.value);
-        }
-      }
-    }
-
-    return allMethods;
+    return this.collectPluginResults<CustomMethod>({
+      hookMethod: 'addCustomMethods',
+      context,
+      mergeStrategy: 'collect',
+    });
   }
 
   /** Get value transformations for a property */
   getValueTransforms(context: ValueContext): readonly ValueTransform[] {
-    const transforms: ValueTransform[] = [];
+    return this.collectPluginResults<ValueTransform>({
+      hookMethod: 'transformValue',
+      context,
+      mergeStrategy: 'collect',
+    }).filter((transform): transform is ValueTransform => transform !== null);
+  }
+
+  private collectPluginResults<T>({
+    hookMethod,
+    context,
+    mergeStrategy,
+  }: {
+    hookMethod: keyof Plugin;
+    context: unknown;
+    mergeStrategy: 'collect' | 'merge';
+  }): T[] {
+    const results: T[] = [];
 
     for (const plugin of this.plugins.values()) {
-      if (plugin.transformValue) {
-        const result = plugin.transformValue(context);
-        if (result.ok && result.value) {
-          transforms.push(result.value);
+      const hook = plugin[hookMethod];
+      if (typeof hook === 'function') {
+        try {
+          const result = (hook as any)(context);
+          if (
+            this.isValidResult(result) &&
+            result.ok &&
+            result.value !== null &&
+            result.value !== undefined
+          ) {
+            if (mergeStrategy === 'collect' && Array.isArray(result.value)) {
+              results.push(...(result.value as T[]));
+            } else {
+              results.push(result.value as T);
+            }
+          }
+        } catch (error) {
+          // Log error but continue with other plugins
+          console.warn(`Plugin ${plugin.name} hook ${String(hookMethod)} failed:`, error);
         }
       }
     }
 
-    return transforms;
+    return results;
   }
 
   private dedupeImports(imports: string[]): string[] {
     return Array.from(new Set(imports));
+  }
+
+  private isValidResult(value: unknown): value is Result<unknown> {
+    return (
+      typeof value === 'object' &&
+      value !== null &&
+      'ok' in value &&
+      typeof (value as { ok: unknown }).ok === 'boolean' &&
+      ((value as { ok: boolean }).ok ? 'value' in value : 'error' in value)
+    );
+  }
+
+  private validatePlugin(plugin: unknown): Result<Plugin> {
+    if (typeof plugin !== 'object' || plugin === null) {
+      return {
+        ok: false,
+        error: new Error('Plugin must be an object'),
+      };
+    }
+
+    const pluginObj = plugin as Record<string, unknown>;
+
+    // Validate required properties
+    if (typeof pluginObj.name !== 'string' || pluginObj.name.trim() === '') {
+      return {
+        ok: false,
+        error: new Error("Plugin must have a non-empty 'name' property"),
+      };
+    }
+
+    if (typeof pluginObj.version !== 'string' || pluginObj.version.trim() === '') {
+      return {
+        ok: false,
+        error: new Error("Plugin must have a non-empty 'version' property"),
+      };
+    }
+
+    // Validate hook methods are functions if present
+    const hookMethods = [
+      'beforeParse',
+      'afterParse',
+      'beforeResolve',
+      'afterResolve',
+      'beforeGenerate',
+      'afterGenerate',
+      'transformType',
+      'transformProperty',
+      'transformBuildMethod',
+      'transformPropertyMethod',
+      'addCustomMethods',
+      'transformValue',
+    ];
+
+    for (const method of hookMethods) {
+      if (method in pluginObj && typeof pluginObj[method] !== 'function') {
+        return {
+          ok: false,
+          error: new Error(`Plugin hook '${method}' must be a function if provided`),
+        };
+      }
+    }
+
+    // Validate imports structure if present
+    if ('imports' in pluginObj && pluginObj.imports !== undefined) {
+      const imports = pluginObj.imports as Record<string, unknown>;
+      if (typeof imports !== 'object' || imports === null) {
+        return {
+          ok: false,
+          error: new Error("Plugin 'imports' must be an object if provided"),
+        };
+      }
+
+      if ('runtime' in imports && imports.runtime !== undefined) {
+        if (
+          !Array.isArray(imports.runtime) ||
+          !imports.runtime.every(item => typeof item === 'string')
+        ) {
+          return {
+            ok: false,
+            error: new Error("Plugin 'imports.runtime' must be an array of strings if provided"),
+          };
+        }
+      }
+
+      if ('types' in imports && imports.types !== undefined) {
+        if (
+          !Array.isArray(imports.types) ||
+          !imports.types.every(item => typeof item === 'string')
+        ) {
+          return {
+            ok: false,
+            error: new Error("Plugin 'imports.types' must be an array of strings if provided"),
+          };
+        }
+      }
+    }
+
+    return { ok: true, value: plugin as Plugin };
   }
 }

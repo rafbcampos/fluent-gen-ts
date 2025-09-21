@@ -1,15 +1,35 @@
-import { Project, SourceFile, Type } from "ts-morph";
-import type { Result } from "../core/result.js";
-import { ok, err } from "../core/result.js";
-import { TypeResolutionCache } from "../core/cache.js";
-import { PluginManager, HookType } from "../core/plugin.js";
-import path from "node:path";
+import { Project, SourceFile, Type } from 'ts-morph';
+import type { Result } from '../core/result.js';
+import { ok, err } from '../core/result.js';
+import { TypeResolutionCache } from '../core/cache.js';
+import { PluginManager, HookType } from '../core/plugin.js';
+import path from 'node:path';
 
 export interface ParserOptions {
   readonly tsConfigPath?: string;
   readonly cache?: TypeResolutionCache;
   readonly pluginManager?: PluginManager;
 }
+
+interface TypeDeclaration {
+  getType(): Type;
+}
+
+type TypeFinder = (name: string) => TypeDeclaration | undefined;
+
+interface FindTypeParams {
+  readonly sourceFile: SourceFile;
+  readonly typeName: string;
+}
+
+interface TypeFinderContext {
+  readonly sourceFile: SourceFile;
+  readonly typeName: string;
+  readonly cacheKey: string;
+}
+
+type CachedType = Type | undefined;
+type CachedSourceFile = SourceFile | undefined;
 
 export class TypeScriptParser {
   private readonly project: Project;
@@ -30,7 +50,7 @@ export class TypeScriptParser {
     try {
       const absolutePath = path.resolve(filePath);
 
-      const cached = this.cache.getFile(absolutePath) as SourceFile | undefined;
+      const cached = this.getCachedSourceFile(absolutePath);
       if (cached) {
         return ok(cached);
       }
@@ -44,148 +64,38 @@ export class TypeScriptParser {
     }
   }
 
-  async findType(
-    sourceFile: SourceFile,
-    typeName: string,
-  ): Promise<Result<Type>> {
-    const cacheKey = this.cache.getCacheKey(sourceFile.getFilePath(), typeName);
-    const cached = this.cache.getType(cacheKey) as Type | undefined;
+  async findType({ sourceFile, typeName }: FindTypeParams): Promise<Result<Type>> {
+    const cacheKey = this.cache.getCacheKey({
+      file: sourceFile.getFilePath(),
+      typeName,
+    });
+    const cached = this.getCachedType(cacheKey);
     if (cached) {
       return ok(cached);
     }
 
-    const hookResult = await this.pluginManager.executeHook(
-      HookType.BeforeParse,
-      { sourceFile: sourceFile.getFilePath(), typeName },
-    );
+    const hookResult = await this.pluginManager.executeHook({
+      hookType: HookType.BeforeParse,
+      input: { sourceFile: sourceFile.getFilePath(), typeName },
+    });
 
     if (!hookResult.ok) {
       return hookResult;
     }
 
-    const interfaceDecl = sourceFile.getInterface(typeName);
-    if (interfaceDecl) {
-      const type = interfaceDecl.getType();
-      this.cache.setType(cacheKey, type);
+    const context: TypeFinderContext = { sourceFile, typeName, cacheKey };
 
-      const afterHook = await this.pluginManager.executeHook(
-        HookType.AfterParse,
-        { sourceFile: sourceFile.getFilePath(), typeName },
-        type,
-      );
+    const foundType =
+      (await this.findTypeInSourceFile(context)) ?? (await this.findTypeInModules(context));
 
-      return afterHook.ok ? ok(type) : afterHook;
+    if (foundType) {
+      return foundType;
     }
 
-    const typeAlias = sourceFile.getTypeAlias(typeName);
-    if (typeAlias) {
-      const type = typeAlias.getType();
-      this.cache.setType(cacheKey, type);
-
-      const afterHook = await this.pluginManager.executeHook(
-        HookType.AfterParse,
-        { sourceFile: sourceFile.getFilePath(), typeName },
-        type,
-      );
-
-      return afterHook.ok ? ok(type) : afterHook;
-    }
-
-    const enumDecl = sourceFile.getEnum(typeName);
-    if (enumDecl) {
-      const type = enumDecl.getType();
-      this.cache.setType(cacheKey, type);
-
-      const afterHook = await this.pluginManager.executeHook(
-        HookType.AfterParse,
-        { sourceFile: sourceFile.getFilePath(), typeName },
-        type,
-      );
-
-      return afterHook.ok ? ok(type) : afterHook;
-    }
-
-    const classDecl = sourceFile.getClass(typeName);
-    if (classDecl) {
-      const type = classDecl.getType();
-      this.cache.setType(cacheKey, type);
-
-      const afterHook = await this.pluginManager.executeHook(
-        HookType.AfterParse,
-        { sourceFile: sourceFile.getFilePath(), typeName },
-        type,
-      );
-
-      return afterHook.ok ? ok(type) : afterHook;
-    }
-
-    // Look for types inside module declarations
-    for (const moduleDecl of sourceFile.getModules()) {
-      const interfaceDecl = moduleDecl.getInterface(typeName);
-      if (interfaceDecl) {
-        const type = interfaceDecl.getType();
-        this.cache.setType(cacheKey, type);
-
-        const afterHook = await this.pluginManager.executeHook(
-          HookType.AfterParse,
-          { sourceFile: sourceFile.getFilePath(), typeName },
-          type,
-        );
-
-        return afterHook.ok ? ok(type) : afterHook;
-      }
-
-      const typeAlias = moduleDecl.getTypeAlias(typeName);
-      if (typeAlias) {
-        const type = typeAlias.getType();
-        this.cache.setType(cacheKey, type);
-
-        const afterHook = await this.pluginManager.executeHook(
-          HookType.AfterParse,
-          { sourceFile: sourceFile.getFilePath(), typeName },
-          type,
-        );
-
-        return afterHook.ok ? ok(type) : afterHook;
-      }
-
-      const enumDecl = moduleDecl.getEnum(typeName);
-      if (enumDecl) {
-        const type = enumDecl.getType();
-        this.cache.setType(cacheKey, type);
-
-        const afterHook = await this.pluginManager.executeHook(
-          HookType.AfterParse,
-          { sourceFile: sourceFile.getFilePath(), typeName },
-          type,
-        );
-
-        return afterHook.ok ? ok(type) : afterHook;
-      }
-
-      const classDecl = moduleDecl.getClass(typeName);
-      if (classDecl) {
-        const type = classDecl.getType();
-        this.cache.setType(cacheKey, type);
-
-        const afterHook = await this.pluginManager.executeHook(
-          HookType.AfterParse,
-          { sourceFile: sourceFile.getFilePath(), typeName },
-          type,
-        );
-
-        return afterHook.ok ? ok(type) : afterHook;
-      }
-    }
-
-    return err(
-      new Error(`Type '${typeName}' not found in ${sourceFile.getFilePath()}`),
-    );
+    return err(new Error(`Type '${typeName}' not found in ${sourceFile.getFilePath()}`));
   }
 
-  async resolveImports(
-    sourceFile: SourceFile,
-  ): Promise<Result<Map<string, SourceFile>>> {
+  async resolveImports(sourceFile: SourceFile): Promise<Result<Map<string, SourceFile>>> {
     const imports = new Map<string, SourceFile>();
 
     try {
@@ -212,4 +122,94 @@ export class TypeScriptParser {
     this.cache.clear();
   }
 
+  private getCachedSourceFile(path: string): CachedSourceFile {
+    const cached = this.cache.getFile(path);
+    return this.isSourceFile(cached) ? cached : undefined;
+  }
+
+  private getCachedType(cacheKey: string): CachedType {
+    const cached = this.cache.getType(cacheKey);
+    return this.isType(cached) ? cached : undefined;
+  }
+
+  private isSourceFile(value: unknown): value is SourceFile {
+    return value != null && typeof value === 'object' && 'getFilePath' in value;
+  }
+
+  private isType(value: unknown): value is Type {
+    return value != null && typeof value === 'object' && 'getSymbol' in value;
+  }
+
+  private async findTypeInSourceFile(
+    context: TypeFinderContext,
+  ): Promise<Result<Type> | undefined> {
+    const { sourceFile } = context;
+    const typeFinders: TypeFinder[] = [
+      name => sourceFile.getInterface(name),
+      name => sourceFile.getTypeAlias(name),
+      name => sourceFile.getEnum(name),
+      name => sourceFile.getClass(name),
+    ];
+
+    return this.tryTypeFinders({ typeFinders, context });
+  }
+
+  private async findTypeInModules(context: TypeFinderContext): Promise<Result<Type> | undefined> {
+    const { sourceFile } = context;
+
+    for (const moduleDecl of sourceFile.getModules()) {
+      const typeFinders: TypeFinder[] = [
+        name => moduleDecl.getInterface(name),
+        name => moduleDecl.getTypeAlias(name),
+        name => moduleDecl.getEnum(name),
+        name => moduleDecl.getClass(name),
+      ];
+
+      const found = await this.tryTypeFinders({ typeFinders, context });
+      if (found) {
+        return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async tryTypeFinders({
+    typeFinders,
+    context,
+  }: {
+    readonly typeFinders: readonly TypeFinder[];
+    readonly context: TypeFinderContext;
+  }): Promise<Result<Type> | undefined> {
+    const { typeName } = context;
+
+    for (const finder of typeFinders) {
+      const declaration = finder(typeName);
+      if (declaration) {
+        return this.processTypeDeclaration({ declaration, context });
+      }
+    }
+
+    return undefined;
+  }
+
+  private async processTypeDeclaration({
+    declaration,
+    context,
+  }: {
+    readonly declaration: TypeDeclaration;
+    readonly context: TypeFinderContext;
+  }): Promise<Result<Type>> {
+    const { sourceFile, typeName, cacheKey } = context;
+    const type = declaration.getType();
+    this.cache.setType(cacheKey, type);
+
+    const afterHook = await this.pluginManager.executeHook({
+      hookType: HookType.AfterParse,
+      input: { sourceFile: sourceFile.getFilePath(), typeName },
+      additionalArgs: [type],
+    });
+
+    return afterHook.ok ? ok(type) : afterHook;
+  }
 }

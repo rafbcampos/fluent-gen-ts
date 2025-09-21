@@ -1,19 +1,22 @@
+import type { Type, Symbol as TsSymbol, SourceFile } from 'ts-morph';
+import type { TypeInfo } from './types.js';
+
 export interface CacheEntry<T> {
   readonly value: T;
-  readonly timestamp: number;
-  readonly hits: number;
+  readonly lastAccessed: number;
+}
+
+export interface CacheOptions {
+  readonly maxSize?: number;
 }
 
 export class Cache<K, V> {
   private readonly cache = new Map<K, CacheEntry<V>>();
   private readonly maxSize: number;
-  private readonly ttl?: number;
+  private accessOrder = 0;
 
-  constructor(maxSize = 1000, ttl?: number) {
+  constructor({ maxSize = 1000 }: CacheOptions = {}) {
     this.maxSize = maxSize;
-    if (ttl !== undefined) {
-      this.ttl = ttl;
-    }
   }
 
   get(key: K): V | undefined {
@@ -22,47 +25,33 @@ export class Cache<K, V> {
       return undefined;
     }
 
-    if (this.ttl && Date.now() - entry.timestamp > this.ttl) {
-      this.cache.delete(key);
-      return undefined;
-    }
-
+    // Update last accessed time for LRU tracking
     this.cache.set(key, {
-      ...entry,
-      hits: entry.hits + 1,
+      value: entry.value,
+      lastAccessed: ++this.accessOrder,
     });
 
     return entry.value;
   }
 
   set(key: K, value: V): void {
+    // Don't store anything if maxSize is 0
+    if (this.maxSize === 0) {
+      return;
+    }
+
     if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
       this.evictLRU();
     }
 
     this.cache.set(key, {
       value,
-      timestamp: Date.now(),
-      hits: 0,
+      lastAccessed: ++this.accessOrder,
     });
   }
 
   has(key: K): boolean {
-    if (!this.cache.has(key)) {
-      return false;
-    }
-
-    const entry = this.cache.get(key);
-    if (!entry) {
-      return false;
-    }
-
-    if (this.ttl && Date.now() - entry.timestamp > this.ttl) {
-      this.cache.delete(key);
-      return false;
-    }
-
-    return true;
+    return this.cache.has(key);
   }
 
   delete(key: K): boolean {
@@ -71,6 +60,7 @@ export class Cache<K, V> {
 
   clear(): void {
     this.cache.clear();
+    this.accessOrder = 0;
   }
 
   get size(): number {
@@ -79,12 +69,11 @@ export class Cache<K, V> {
 
   private evictLRU(): void {
     let lruKey: K | undefined;
-    let minScore = Infinity;
+    let oldestAccess = Infinity;
 
     for (const [key, entry] of this.cache.entries()) {
-      const score = entry.hits + (Date.now() - entry.timestamp) / 1000;
-      if (score < minScore) {
-        minScore = score;
+      if (entry.lastAccessed < oldestAccess) {
+        oldestAccess = entry.lastAccessed;
         lruKey = key;
       }
     }
@@ -95,36 +84,55 @@ export class Cache<K, V> {
   }
 }
 
+export interface TypeResolutionCacheOptions {
+  readonly symbolCacheSize?: number;
+  readonly typeCacheSize?: number;
+  readonly fileCacheSize?: number;
+}
+
 export class TypeResolutionCache {
-  private readonly symbolCache = new Cache<string, unknown>(5000);
-  private readonly typeCache = new Cache<string, unknown>(5000);
-  private readonly fileCache = new Cache<string, unknown>(1000);
+  private readonly symbolCache: Cache<string, TsSymbol>;
+  private readonly typeCache: Cache<string, Type | TypeInfo>;
+  private readonly fileCache: Cache<string, SourceFile>;
 
-  getCacheKey(file: string, typeName: string): string {
-    return `${file}::${typeName}`;
+  constructor({
+    symbolCacheSize = 5000,
+    typeCacheSize = 5000,
+    fileCacheSize = 1000,
+  }: TypeResolutionCacheOptions = {}) {
+    this.symbolCache = new Cache({ maxSize: symbolCacheSize });
+    this.typeCache = new Cache({ maxSize: typeCacheSize });
+    this.fileCache = new Cache({ maxSize: fileCacheSize });
   }
 
-  getSymbol(key: string): unknown {
-    return this.symbolCache.get(key);
+  getCacheKey({ file, typeName }: { file: string; typeName: string }): string {
+    return JSON.stringify({ file, typeName });
   }
 
-  setSymbol(key: string, value: unknown): void {
+  getSymbol(key: string): TsSymbol | undefined {
+    const value = this.symbolCache.get(key);
+    return this.isSymbol(value) ? value : undefined;
+  }
+
+  setSymbol(key: string, value: TsSymbol): void {
     this.symbolCache.set(key, value);
   }
 
-  getType(key: string): unknown {
-    return this.typeCache.get(key);
+  getType(key: string): Type | TypeInfo | undefined {
+    const value = this.typeCache.get(key);
+    return this.isTypeOrTypeInfo(value) ? value : undefined;
   }
 
-  setType(key: string, value: unknown): void {
+  setType(key: string, value: Type | TypeInfo): void {
     this.typeCache.set(key, value);
   }
 
-  getFile(path: string): unknown {
-    return this.fileCache.get(path);
+  getFile(path: string): SourceFile | undefined {
+    const value = this.fileCache.get(path);
+    return this.isSourceFile(value) ? value : undefined;
   }
 
-  setFile(path: string, value: unknown): void {
+  setFile(path: string, value: SourceFile): void {
     this.fileCache.set(path, value);
   }
 
@@ -133,5 +141,47 @@ export class TypeResolutionCache {
     this.typeCache.clear();
     this.fileCache.clear();
   }
-}
 
+  private isSymbol(value: unknown): value is TsSymbol {
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      value.constructor.name === 'Symbol' &&
+      'getName' in value &&
+      typeof (value as TsSymbol).getName === 'function'
+    );
+  }
+
+  private isTypeOrTypeInfo(value: unknown): value is Type | TypeInfo {
+    return this.isType(value) || this.isTypeInfo(value);
+  }
+
+  private isType(value: unknown): value is Type {
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      value.constructor.name === 'Type' &&
+      'getText' in value &&
+      typeof (value as Type).getText === 'function'
+    );
+  }
+
+  private isTypeInfo(value: unknown): value is TypeInfo {
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      'kind' in value &&
+      typeof (value as TypeInfo).kind === 'string'
+    );
+  }
+
+  private isSourceFile(value: unknown): value is SourceFile {
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      value.constructor.name === 'SourceFile' &&
+      'getFilePath' in value &&
+      typeof (value as SourceFile).getFilePath === 'function'
+    );
+  }
+}
