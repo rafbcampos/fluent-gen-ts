@@ -1,5 +1,6 @@
 import type { Result } from './result.js';
 import type { TypeInfo, ResolvedType, PropertyInfo, GeneratorOptions } from './types.js';
+import { TypeKind } from './types.js';
 import type { Type, Symbol } from 'ts-morph';
 
 export interface BaseTypeContext {
@@ -42,7 +43,13 @@ export interface BuildMethodContext extends BaseBuilderContext, BaseGenericsCont
 
 export interface PropertyMethodContext extends BaseBuilderContext {
   readonly property: PropertyInfo;
-  readonly originalType: string;
+  readonly propertyType: TypeInfo;
+  readonly originalTypeString: string;
+  isType(kind: TypeKind): boolean;
+  hasGenericConstraint(constraintName: string): boolean;
+  isArrayType(): boolean;
+  isUnionType(): boolean;
+  isPrimitiveType(name?: string): boolean;
 }
 
 export interface PropertyMethodTransform {
@@ -79,6 +86,13 @@ export interface PluginImports {
   readonly types?: readonly string[];
 }
 
+export interface ImportTransformContext {
+  readonly imports: readonly string[];
+  readonly resolvedType: ResolvedType;
+  readonly isGeneratingMultiple: boolean;
+  readonly hasExistingCommon: boolean;
+}
+
 export enum HookType {
   BeforeParse = 'beforeParse',
   AfterParse = 'afterParse',
@@ -92,6 +106,7 @@ export enum HookType {
   TransformPropertyMethod = 'transformPropertyMethod',
   AddCustomMethods = 'addCustomMethods',
   TransformValue = 'transformValue',
+  TransformImports = 'transformImports',
 }
 
 type PluginHookMap = {
@@ -109,6 +124,7 @@ type PluginHookMap = {
   ) => Result<PropertyMethodTransform>;
   [HookType.AddCustomMethods]: (context: BuilderContext) => Result<readonly CustomMethod[]>;
   [HookType.TransformValue]: (context: ValueContext) => Result<ValueTransform | null>;
+  [HookType.TransformImports]: (context: ImportTransformContext) => Result<ImportTransformContext>;
 };
 
 type GetHookReturnType<K extends HookType> =
@@ -144,6 +160,7 @@ export interface Plugin {
   transformPropertyMethod?: PluginHookMap[HookType.TransformPropertyMethod];
   addCustomMethods?: PluginHookMap[HookType.AddCustomMethods];
   transformValue?: PluginHookMap[HookType.TransformValue];
+  transformImports?: PluginHookMap[HookType.TransformImports];
 }
 
 export class PluginManager {
@@ -176,10 +193,16 @@ export class PluginManager {
       const hook = plugin[hookType];
       if (typeof hook === 'function') {
         try {
-          const result =
-            additionalArgs.length > 0
-              ? await (hook as any)(currentInput, ...additionalArgs)
-              : await (hook as any)(currentInput);
+          let result: Result<unknown>;
+          if (additionalArgs.length > 0) {
+            result = await (
+              hook as (...args: unknown[]) => Promise<Result<unknown>> | Result<unknown>
+            )(currentInput, ...additionalArgs);
+          } else {
+            result = await (hook as (input: unknown) => Promise<Result<unknown>> | Result<unknown>)(
+              currentInput,
+            );
+          }
 
           if (!this.isValidResult(result)) {
             return {
@@ -278,7 +301,7 @@ export class PluginManager {
       const hook = plugin[hookMethod];
       if (typeof hook === 'function') {
         try {
-          const result = (hook as any)(context);
+          const result = (hook as (context: unknown) => Result<unknown>)(context);
           if (
             this.isValidResult(result) &&
             result.ok &&
@@ -354,6 +377,7 @@ export class PluginManager {
       'transformPropertyMethod',
       'addCustomMethods',
       'transformValue',
+      'transformImports',
     ];
 
     for (const method of hookMethods) {

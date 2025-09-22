@@ -6,7 +6,8 @@
 import path from 'node:path';
 import type { ResolvedType, TypeInfo, GenericParam } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
-import type { PluginManager } from '../core/plugin.js';
+import type { PluginManager, ImportTransformContext } from '../core/plugin.js';
+import { HookType } from '../core/plugin.js';
 import { ImportResolver } from '../core/import-resolver.js';
 import { isValidImportableTypeName } from './types.js';
 import type { Result } from '../core/result.js';
@@ -180,13 +181,13 @@ export class ImportGenerator {
    * @param resolvedType - The resolved type information
    * @param config - Import generation configuration
    */
-  generateAllImports({
+  async generateAllImports({
     resolvedType,
     config,
   }: {
     resolvedType: ResolvedType;
     config: ImportGeneratorConfig;
-  }): Result<string> {
+  }): Promise<Result<string>> {
     try {
       if (!resolvedType || !config) {
         return err(new Error('Invalid resolved type or configuration'));
@@ -239,7 +240,27 @@ export class ImportGenerator {
       }
 
       // Deduplicate imports
-      const uniqueImports = this.deduplicateImports(imports);
+      let uniqueImports = this.deduplicateImports(imports);
+
+      // Apply plugin transformations to imports
+      if (config.pluginManager) {
+        const transformContext: ImportTransformContext = {
+          imports: uniqueImports,
+          resolvedType,
+          isGeneratingMultiple: config.isGeneratingMultiple,
+          hasExistingCommon: config.hasExistingCommon ?? false,
+        };
+
+        const transformResult = await config.pluginManager.executeHook({
+          hookType: HookType.TransformImports,
+          input: transformContext,
+        });
+
+        if (transformResult.ok) {
+          uniqueImports = [...transformResult.value.imports];
+        }
+      }
+
       return ok(uniqueImports.join('\n'));
     } catch (error) {
       return err(new Error(`Failed to generate all imports: ${error}`));

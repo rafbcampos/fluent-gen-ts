@@ -361,7 +361,7 @@ describe('ImportGenerator', () => {
   });
 
   describe('generateAllImports', () => {
-    test('combines all import types successfully', () => {
+    test('combines all import types successfully', async () => {
       const resolvedType: ResolvedType = {
         sourceFile: '/project/src/user.ts',
         name: 'User',
@@ -375,7 +375,7 @@ describe('ImportGenerator', () => {
         commonImportPath: './common',
       };
 
-      const result = generator.generateAllImports({ resolvedType, config });
+      const result = await generator.generateAllImports({ resolvedType, config });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -385,7 +385,7 @@ describe('ImportGenerator', () => {
       }
     });
 
-    test('includes plugin imports', () => {
+    test('includes plugin imports', async () => {
       const pluginManager = new PluginManager();
       pluginManager.register({
         name: 'test-plugin',
@@ -410,7 +410,7 @@ describe('ImportGenerator', () => {
         pluginManager,
       };
 
-      const result = generator.generateAllImports({ resolvedType, config });
+      const result = await generator.generateAllImports({ resolvedType, config });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -419,7 +419,7 @@ describe('ImportGenerator', () => {
       }
     });
 
-    test('handles errors from module imports', () => {
+    test('handles errors from module imports', async () => {
       const invalidResolvedType = {
         sourceFile: '/project/src/user.ts',
         name: 'User',
@@ -433,7 +433,7 @@ describe('ImportGenerator', () => {
         commonImportPath: './common',
       };
 
-      const result = generator.generateAllImports({
+      const result = await generator.generateAllImports({
         resolvedType: invalidResolvedType,
         config,
       });
@@ -441,7 +441,7 @@ describe('ImportGenerator', () => {
       expect(result.ok).toBe(false);
     });
 
-    test('handles errors from type imports', () => {
+    test('handles errors from type imports', async () => {
       const invalidResolvedType = {
         sourceFile: '/project/src/user.ts',
         name: '__invalid',
@@ -459,7 +459,7 @@ describe('ImportGenerator', () => {
         commonImportPath: './common',
       };
 
-      const result = generator.generateAllImports({
+      const result = await generator.generateAllImports({
         resolvedType: invalidResolvedType,
         config,
       });
@@ -467,8 +467,8 @@ describe('ImportGenerator', () => {
       expect(result.ok).toBe(false);
     });
 
-    test('returns error for invalid input', () => {
-      const result = generator.generateAllImports({
+    test('returns error for invalid input', async () => {
+      const result = await generator.generateAllImports({
         resolvedType: null as any,
         config: null as any,
       });

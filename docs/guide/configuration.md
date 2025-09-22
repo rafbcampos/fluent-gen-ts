@@ -121,6 +121,9 @@ interface GeneratorConfig {
 
   // Include JSDoc comments in generated code
   addComments?: boolean;
+
+  // Custom naming strategy for factory functions
+  namingStrategy?: (typeName: string) => string;
 }
 ```
 
@@ -254,6 +257,76 @@ Load custom plugins to extend generation behavior:
     }
   ]
 }
+```
+
+### With Custom Naming Strategy
+
+Configure custom naming for factory functions:
+
+```json
+{
+  "tsConfigPath": "./tsconfig.json",
+  "generator": {
+    "outputDir": "./src/builders",
+    "useDefaults": true,
+    "addComments": true
+  },
+  "targets": [
+    {
+      "file": "src/types/api.ts",
+      "types": ["UserRequest", "ProductResponse"]
+    }
+  ]
+}
+```
+
+For advanced naming strategies, use JavaScript configuration:
+
+```javascript
+// .fluentgenrc.js
+module.exports = {
+  tsConfigPath: './tsconfig.json',
+  generator: {
+    outputDir: './src/builders',
+    useDefaults: true,
+    addComments: true,
+
+    // Custom naming strategies
+    namingStrategy: typeName => {
+      // API types get 'build' prefix
+      if (typeName.endsWith('Request') || typeName.endsWith('Response')) {
+        return `build${typeName.replace(/(Request|Response)$/, '')}`;
+      }
+
+      // Entity types get 'create' prefix
+      if (typeName.endsWith('Entity')) {
+        return `create${typeName.replace('Entity', '')}`;
+      }
+
+      // Configuration types get 'configure' prefix
+      if (typeName.endsWith('Config') || typeName.endsWith('Options')) {
+        return `configure${typeName.replace(/(Config|Options)$/, '')}`;
+      }
+
+      // Default naming for other types
+      return `create${typeName}`;
+    },
+  },
+  targets: [
+    {
+      file: 'src/types/api.ts',
+      types: ['UserRequest', 'UserResponse'], // -> buildUser(), buildUser()
+    },
+    {
+      file: 'src/types/entities.ts',
+      types: ['UserEntity', 'ProductEntity'], // -> createUser(), createProduct()
+    },
+    {
+      file: 'src/types/config.ts',
+      types: ['DatabaseConfig', 'ApiOptions'], // -> configureDatabase(), configureApi()
+    },
+  ],
+};
 ```
 
 ## JavaScript Configuration

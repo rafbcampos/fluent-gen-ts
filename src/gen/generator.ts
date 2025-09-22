@@ -28,6 +28,7 @@ export interface GeneratorConfig extends GeneratorOptions {
   addComments?: boolean;
   generateCommonFile?: boolean;
   outputDir?: string;
+  namingStrategy?: (typeName: string) => string;
 }
 
 /**
@@ -171,7 +172,7 @@ export class BuilderGenerator {
 
     // Add the main builder parts
     parts.push(
-      this.generateImports(resolvedType),
+      await this.generateImports(resolvedType),
       await this.generateBuilderInterface(name, typeInfo),
       await this.generateBuilderClass(name, typeInfo, resolvedType),
       this.generateFactoryFunction(name, typeInfo),
@@ -187,12 +188,12 @@ export class BuilderGenerator {
   /**
    * Generates import statements for the builder
    */
-  private generateImports(resolvedType: ResolvedType): string {
+  private async generateImports(resolvedType: ResolvedType): Promise<string> {
     // Use configured outputDir or fall back to default output path
     const checkDir = this.getOutputDir() || DEFAULT_OUTPUT_PATH;
     const hasCommon = this.hasExistingCommonFile(checkDir);
 
-    const result = this.importGenerator.generateAllImports({
+    const result = await this.importGenerator.generateAllImports({
       resolvedType,
       config: {
         isGeneratingMultiple: this.isGeneratingMultiple,
@@ -545,7 +546,9 @@ ${buildMethod}
    */
   private generateFactoryFunction(name: string, typeInfo: TypeInfo): string {
     const builderName = this.getBuilderName(name);
-    const funcName = this.lowerFirst(name);
+    const funcName = this.config.namingStrategy
+      ? this.config.namingStrategy(name)
+      : this.lowerFirst(name);
     const genericParams = isObjectType(typeInfo)
       ? this.typeStringGenerator.formatGenericParams(typeInfo.genericParams)
       : '';

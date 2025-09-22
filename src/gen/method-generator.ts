@@ -165,12 +165,53 @@ class MethodGeneratorUtils {
    * Creates plugin context for property method transformation
    */
   createPropertyMethodContext(params: WithMethodParams): PropertyMethodContext {
+    const propertyType = params.property.type;
+
     return {
       property: params.property,
-      originalType: this.typeStringGenerator.getPropertyType(params.property),
+      propertyType: propertyType,
+      originalTypeString: this.typeStringGenerator.getPropertyType(params.property),
       builderName: params.builderName,
       typeName: params.typeName,
       typeInfo: params.typeInfo,
+
+      // Helper methods
+      isType(kind: TypeKind): boolean {
+        return propertyType.kind === kind;
+      },
+
+      hasGenericConstraint(constraintName: string): boolean {
+        if (propertyType.kind === TypeKind.Generic && 'constraint' in propertyType) {
+          const constraint = propertyType.constraint;
+          if (
+            constraint &&
+            typeof constraint === 'object' &&
+            'name' in constraint &&
+            typeof constraint.name === 'string'
+          ) {
+            return constraint.name === constraintName;
+          }
+        }
+        return false;
+      },
+
+      isArrayType(): boolean {
+        return propertyType.kind === TypeKind.Array;
+      },
+
+      isUnionType(): boolean {
+        return propertyType.kind === TypeKind.Union;
+      },
+
+      isPrimitiveType(name?: string): boolean {
+        if (propertyType.kind !== TypeKind.Primitive) {
+          return false;
+        }
+        if (name && 'name' in propertyType && typeof propertyType.name === 'string') {
+          return propertyType.name === name;
+        }
+        return !name;
+      },
     };
   }
 

@@ -10,6 +10,7 @@ import {
   type CustomMethod,
   type ValueContext,
   type ValueTransform,
+  type ImportTransformContext,
 } from '../plugin.js';
 import { ok, err } from '../result.js';
 import { TypeKind, type TypeInfo } from '../types.js';
@@ -433,10 +434,16 @@ describe('PluginManager', () => {
           optional: false,
           readonly: false,
         },
-        originalType: 'string',
+        propertyType: { kind: TypeKind.Primitive, name: 'string' },
+        originalTypeString: 'string',
         builderName: 'UserBuilder',
         typeName: 'User',
         typeInfo: { kind: TypeKind.Object, properties: [] },
+        isType: (kind: TypeKind) => kind === TypeKind.Primitive,
+        hasGenericConstraint: () => false,
+        isArrayType: () => false,
+        isUnionType: () => false,
+        isPrimitiveType: (name?: string) => !name || name === 'string',
       };
 
       const result = pluginManager.getPropertyMethodTransform(context);
@@ -473,10 +480,16 @@ describe('PluginManager', () => {
           optional: false,
           readonly: false,
         },
-        originalType: 'string',
+        propertyType: { kind: TypeKind.Primitive, name: 'string' },
+        originalTypeString: 'string',
         builderName: 'UserBuilder',
         typeName: 'User',
         typeInfo: { kind: TypeKind.Object, properties: [] },
+        isType: (kind: TypeKind) => kind === TypeKind.Primitive,
+        hasGenericConstraint: () => false,
+        isArrayType: () => false,
+        isUnionType: () => false,
+        isPrimitiveType: (name?: string) => !name || name === 'string',
       };
 
       const result = pluginManager.getPropertyMethodTransform(context);
@@ -518,10 +531,16 @@ describe('PluginManager', () => {
           optional: false,
           readonly: false,
         },
-        originalType: 'string',
+        propertyType: { kind: TypeKind.Primitive, name: 'string' },
+        originalTypeString: 'string',
         builderName: 'UserBuilder',
         typeName: 'User',
         typeInfo: { kind: TypeKind.Object, properties: [] },
+        isType: (kind: TypeKind) => kind === TypeKind.Primitive,
+        hasGenericConstraint: () => false,
+        isArrayType: () => false,
+        isUnionType: () => false,
+        isPrimitiveType: (name?: string) => !name || name === 'string',
       };
 
       const result = pluginManager.getPropertyMethodTransform(context);
@@ -769,10 +788,172 @@ describe('PluginManager', () => {
         transformPropertyMethod: _context => ok({ parameterType: 'any' }),
         addCustomMethods: _context => ok([]),
         transformValue: _context => ok(null),
+        transformImports: context => ok(context),
       };
 
       expect(() => pluginManager.register(fullPlugin)).not.toThrow();
       expect(pluginManager.getPlugins()).toHaveLength(1);
+    });
+  });
+
+  describe('import transformations', () => {
+    test('transforms imports through plugin hook', async () => {
+      const plugin: Plugin = {
+        name: 'import-transformer',
+        version: '1.0.0',
+        transformImports: (context: ImportTransformContext) => {
+          // Sort imports alphabetically as an example transformation
+          const sorted = [...context.imports].sort();
+          return ok({ ...context, imports: sorted });
+        },
+      };
+
+      pluginManager.register(plugin);
+
+      const context: ImportTransformContext = {
+        imports: ['import { z } from "zod";', 'import { a } from "a";'],
+        resolvedType: {
+          name: 'TestType',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          sourceFile: 'test.ts',
+          imports: [],
+          dependencies: [],
+        },
+        isGeneratingMultiple: false,
+        hasExistingCommon: false,
+      };
+
+      const result = await pluginManager.executeHook({
+        hookType: HookType.TransformImports,
+        input: context,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.imports).toEqual([
+          'import { a } from "a";',
+          'import { z } from "zod";',
+        ]);
+      }
+    });
+
+    test('handles multiple import transformation plugins', async () => {
+      const plugin1: Plugin = {
+        name: 'plugin1',
+        version: '1.0.0',
+        transformImports: (context: ImportTransformContext) => {
+          // Add a comment to each import
+          const commented = context.imports.map(imp => `// Auto-generated\n${imp}`);
+          return ok({ ...context, imports: commented });
+        },
+      };
+
+      const plugin2: Plugin = {
+        name: 'plugin2',
+        version: '1.0.0',
+        transformImports: (context: ImportTransformContext) => {
+          // Filter out any imports containing 'test'
+          const filtered = context.imports.filter(imp => !imp.includes('test'));
+          return ok({ ...context, imports: filtered });
+        },
+      };
+
+      pluginManager.register(plugin1);
+      pluginManager.register(plugin2);
+
+      const context: ImportTransformContext = {
+        imports: ['import { real } from "real";', 'import { test } from "test";'],
+        resolvedType: {
+          name: 'TestType',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          sourceFile: 'test.ts',
+          imports: [],
+          dependencies: [],
+        },
+        isGeneratingMultiple: false,
+        hasExistingCommon: false,
+      };
+
+      const result = await pluginManager.executeHook({
+        hookType: HookType.TransformImports,
+        input: context,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // First plugin adds comments, second plugin filters out 'test' imports
+        expect(result.value.imports).toEqual(['// Auto-generated\nimport { real } from "real";']);
+      }
+    });
+  });
+
+  describe('enhanced property method context', () => {
+    test('provides type checking helper methods', () => {
+      const plugin: Plugin = {
+        name: 'type-checker',
+        version: '1.0.0',
+        transformPropertyMethod: (context: PropertyMethodContext) => {
+          if (context.isPrimitiveType('string')) {
+            return ok({ parameterType: 'string | number', extractValue: 'String(value)' });
+          }
+          return ok({});
+        },
+      };
+
+      pluginManager.register(plugin);
+
+      const context: PropertyMethodContext = {
+        property: {
+          name: 'name',
+          type: { kind: TypeKind.Primitive, name: 'string' },
+          optional: false,
+          readonly: false,
+        },
+        propertyType: { kind: TypeKind.Primitive, name: 'string' },
+        originalTypeString: 'string',
+        builderName: 'UserBuilder',
+        typeName: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [] },
+        isType: (kind: TypeKind) => kind === TypeKind.Primitive,
+        hasGenericConstraint: () => false,
+        isArrayType: () => false,
+        isUnionType: () => false,
+        isPrimitiveType: (name?: string) => !name || name === 'string',
+      };
+
+      const result = pluginManager.getPropertyMethodTransform(context);
+      expect(result).toEqual({
+        parameterType: 'string | number',
+        extractValue: 'String(value)',
+      });
+    });
+
+    test('array type helper works correctly', () => {
+      const context: PropertyMethodContext = {
+        property: {
+          name: 'items',
+          type: { kind: TypeKind.Array, elementType: { kind: TypeKind.Primitive, name: 'string' } },
+          optional: false,
+          readonly: false,
+        },
+        propertyType: {
+          kind: TypeKind.Array,
+          elementType: { kind: TypeKind.Primitive, name: 'string' },
+        },
+        originalTypeString: 'string[]',
+        builderName: 'UserBuilder',
+        typeName: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [] },
+        isType: (kind: TypeKind) => kind === TypeKind.Array,
+        hasGenericConstraint: () => false,
+        isArrayType: () => true,
+        isUnionType: () => false,
+        isPrimitiveType: () => false,
+      };
+
+      expect(context.isArrayType()).toBe(true);
+      expect(context.isPrimitiveType()).toBe(false);
+      expect(context.isType(TypeKind.Array)).toBe(true);
     });
   });
 });
