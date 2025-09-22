@@ -89,7 +89,7 @@
     "cosmiconfig": "^9.0.0",
     "fast-glob": "^3.3.3",
     "glob": "^11.0.3",
-    "inquirer": "^12.9.4",
+    "inquirer": "^12.9.6",
     "minimatch": "^10.0.3",
     "ora": "^8.2.0",
     "ts-morph": "^26.0.0",
