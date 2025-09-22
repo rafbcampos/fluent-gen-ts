@@ -16,5 +16,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "exclude": ["src/__temp__/**/*"]
+  "exclude": ["src/__temp__/**/*", "dist"]
 }

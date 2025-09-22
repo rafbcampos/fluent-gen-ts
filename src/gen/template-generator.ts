@@ -3,32 +3,7 @@
  * Generates code templates for builder files
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-/**
- * Resolves the path to the builder-utilities.ts file
- */
-function getBuilderUtilitiesPath(): string {
-  const currentDir = dirname(fileURLToPath(import.meta.url));
-  return join(currentDir, 'builder-utilities.ts');
-}
-
-/**
- * Reads the builder-utilities.ts file content as a string
- * Throws an error if the file cannot be read
- */
-function readBuilderUtilitiesContent(): string {
-  try {
-    const filePath = getBuilderUtilitiesPath();
-    return readFileSync(filePath, 'utf8');
-  } catch (error) {
-    throw new Error(
-      `Failed to read builder-utilities.ts: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
+import { BUILDER_UTILITIES_CONTENT } from './builder-utilities-content.js';
 
 /**
  * Generates the common.ts file template content
@@ -36,13 +11,11 @@ function readBuilderUtilitiesContent(): string {
  * @returns The complete template string for common.ts
  */
 export function getCommonFileTemplate(): string {
-  const builderUtilitiesContent = readBuilderUtilitiesContent();
-
   return `/**
  * Common utilities for fluent builders
  */
 
-${builderUtilitiesContent}`;
+${BUILDER_UTILITIES_CONTENT}`;
 }
 
 /**
@@ -51,10 +24,8 @@ ${builderUtilitiesContent}`;
  * @returns The template string for single file utilities
  */
 export function getSingleFileUtilitiesTemplate(): string {
-  const builderUtilitiesContent = readBuilderUtilitiesContent();
-
   // Remove export keywords for single file inclusion
-  const processedContent = builderUtilitiesContent.replace(/^export /gm, '');
+  const processedContent = BUILDER_UTILITIES_CONTENT.replace(/^export /gm, '');
 
   return `
 ${processedContent}

@@ -4,3 +4,6 @@ dist
 .generated
 .vitepress/dist
 .vitepress/cache
+
+# Auto-generated files
+src/gen/builder-utilities-content.ts
