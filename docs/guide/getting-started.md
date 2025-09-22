@@ -1,255 +1,396 @@
 # Getting Started
 
-Welcome to Fluent Gen! This guide will help you get up and running with generating type-safe fluent builders from your TypeScript interfaces.
-
-## What is Fluent Gen?
-
-Fluent Gen is a TypeScript code generation tool that automatically creates fluent builder patterns from your existing interfaces and types. It analyzes your TypeScript code, resolves all type dependencies, and generates builder classes that provide a chainable, type-safe API for constructing objects.
-
-## Key Features
-
-- **Zero Runtime Overhead**: All generation happens at build time
-- **Full Type Safety**: Preserves TypeScript types, generics, and JSDoc comments
-- **Complex Type Support**: Handles utility types, conditional types, and circular references
-- **Extensible**: Plugin architecture for customizing generation behavior
-- **Production Ready**: Result-based error handling and comprehensive caching
+This guide will help you get started with fluent-gen, a TypeScript type
+extraction system that generates fluent builders for any interface, type alias,
+or type literal.
 
 ## Prerequisites
 
-- Node.js 18+ or Bun
-- TypeScript 5.0+
-- A TypeScript project with defined interfaces or types
+Before you begin, ensure you have:
 
-## Quick Start
+- Node.js >= 18.0.0
+- TypeScript >= 4.5.0
+- A TypeScript project with a `tsconfig.json` file
 
-### 1. Install Fluent Gen
+## Installation
 
-```bash
-npm install -D fluent-gen
+Install fluent-gen as a development dependency:
+
+::: code-group
+
+```bash [npm]
+npm install --save-dev fluent-gen
 ```
 
-### 2. Create Your First Interface
+```bash [pnpm]
+pnpm add -D fluent-gen
+```
 
-Create a file `types.ts` with an interface:
+```bash [yarn]
+yarn add -D fluent-gen
+```
+
+:::
+
+## Your First Builder
+
+Let's create a simple TypeScript interface and generate a fluent builder for it.
+
+### Step 1: Create an Interface
+
+Create a file `src/types/user.ts`:
 
 ```typescript
-// types.ts
 export interface User {
   id: string;
   name: string;
   email: string;
   age?: number;
-  settings: {
-    theme: 'light' | 'dark';
-    notifications: boolean;
-  };
+  isActive: boolean;
 }
 ```
 
-### 3. Generate the Builder
+### Step 2: Generate the Builder
 
-Run the CLI command:
+You can generate a builder using either the CLI or programmatic API.
+
+#### Using the CLI
 
 ```bash
-npx fluent-gen generate ./types.ts User
+npx fluent-gen generate src/types/user.ts User
 ```
 
-This generates a `User.builder.ts` file with your fluent builder.
+This will output the generated builder code to the console. To save it to a
+file:
 
-### 4. Use the Builder
+```bash
+npx fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
+```
+
+#### Using the Programmatic API
+
+Create a script `generate-builders.js`:
+
+```javascript
+import { FluentGen } from 'fluent-gen';
+
+const generator = new FluentGen({
+  useDefaults: true,
+  addComments: true,
+});
+
+const result = await generator.generateToFile(
+  './src/types/user.ts',
+  'User',
+  './src/builders/user.builder.ts',
+);
+
+if (result.ok) {
+  console.log('Builder generated at:', result.value);
+} else {
+  console.error('Generation failed:', result.error);
+}
+```
+
+Run the script:
+
+```bash
+node generate-builders.js
+```
+
+### Step 3: Use the Builder
+
+Now you can use the generated builder in your code:
 
 ```typescript
-import { userBuilder } from './User.builder';
+import { userBuilder } from './builders/user.builder';
 
+// Create a user with the fluent builder
 const user = userBuilder()
-  .withId('user-123')
+  .withId('user-001')
   .withName('Alice Johnson')
   .withEmail('alice@example.com')
   .withAge(28)
-  .withSettings({
-    theme: 'dark',
-    notifications: true
-  });
+  .withIsActive(true)
+  .build();
 
-// Build the final object
-const userInstance = user();
-console.log(userInstance);
-// Output: { id: 'user-123', name: 'Alice Johnson', ... }
+console.log(user);
+// Output: {
+//   id: 'user-001',
+//   name: 'Alice Johnson',
+//   email: 'alice@example.com',
+//   age: 28,
+//   isActive: true
+// }
 ```
 
-## How It Works
+## Working with Complex Types
 
-1. **Type Extraction**: Fluent Gen parses your TypeScript file using `ts-morph` and extracts the specified interface or type.
+fluent-gen handles complex types seamlessly. Let's see an example with nested
+objects and arrays.
 
-2. **Dependency Resolution**: It recursively resolves all type dependencies, including:
-   - Imported types from other files
-   - Node module types
-   - Utility types (`Pick`, `Omit`, `Partial`, etc.)
-   - Generic type parameters
-
-3. **Type Analysis**: The resolved type is analyzed to understand:
-   - Property types and optionality
-   - Nested object structures
-   - Union and intersection types
-   - JSDoc comments
-
-4. **Code Generation**: Based on the analysis, Fluent Gen generates:
-   - A builder class with `with*` methods for each property
-   - Type-safe method signatures
-   - Smart default values
-   - Support for nested builders
-
-## Core Concepts
-
-### Fluent Builder Pattern
-
-The fluent builder pattern provides a chainable API for object construction:
+### Nested Objects
 
 ```typescript
-const product = productBuilder()
-  .withId('prod-001')
-  .withName('Laptop')
-  .withPrice(999.99)
-  .withInStock(true);
+// types/order.ts
+export interface Address {
+  street: string;
+  city: string;
+  country: string;
+  zipCode?: string;
+}
 
-const instance = product(); // Build the object
-```
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  address: Address;
+}
 
-### Deferred Building
+export interface OrderItem {
+  productId: string;
+  quantity: number;
+  price: number;
+}
 
-Builders don't create the object immediately. The final object is built when you call the builder function:
-
-```typescript
-const builder = userBuilder().withName('Bob');
-// Object not created yet
-
-const user1 = builder(); // Now the object is created
-const user2 = builder(); // Creates a new instance
-```
-
-### Nested Builders
-
-For nested objects, Fluent Gen automatically creates nested builders:
-
-```typescript
-interface Order {
+export interface Order {
   id: string;
   customer: Customer;
   items: OrderItem[];
+  totalAmount: number;
+  createdAt: Date;
 }
+```
 
-// Usage with nested builders
+Generate builders for all types:
+
+```bash
+npx fluent-gen generate types/order.ts Order -o builders/order.builder.ts
+```
+
+Use the nested builders:
+
+```typescript
+import {
+  orderBuilder,
+  customerBuilder,
+  addressBuilder,
+  orderItemBuilder,
+} from './builders/order.builder';
+
 const order = orderBuilder()
-  .withId('order-123')
+  .withId('order-001')
   .withCustomer(
     customerBuilder()
-      .withName('John')
-      .withEmail('john@example.com')
+      .withId('cust-001')
+      .withName('Bob Smith')
+      .withEmail('bob@example.com')
+      .withAddress(
+        addressBuilder()
+          .withStreet('456 Oak St')
+          .withCity('New York')
+          .withCountry('USA')
+          .withZipCode('10001')
+          .build(),
+      )
+      .build(),
   )
   .withItems([
     orderItemBuilder()
       .withProductId('prod-001')
       .withQuantity(2)
-  ]);
+      .withPrice(29.99)
+      .build(),
+    orderItemBuilder()
+      .withProductId('prod-002')
+      .withQuantity(1)
+      .withPrice(49.99)
+      .build(),
+  ])
+  .withTotalAmount(109.97)
+  .withCreatedAt(new Date())
+  .build();
 ```
 
-### Context Passing
+## Batch Generation
 
-Builders can pass context to nested builders, useful for maintaining relationships:
+For larger projects, you can generate multiple builders at once.
+
+### Using Configuration File
+
+Create a `.fluentgenrc.json` file:
+
+```json
+{
+  "tsConfigPath": "./tsconfig.json",
+  "generator": {
+    "outputDir": "./src/generated/builders",
+    "useDefaults": true,
+    "addComments": true
+  },
+  "targets": [
+    {
+      "file": "src/types/models.ts",
+      "types": ["User", "Product", "Order"]
+    },
+    {
+      "file": "src/types/api.ts",
+      "types": ["ApiRequest", "ApiResponse"]
+    }
+  ]
+}
+```
+
+Run batch generation:
+
+```bash
+npx fluent-gen batch
+```
+
+### Using Scan Command
+
+Scan your codebase and select types interactively:
+
+```bash
+npx fluent-gen scan "src/**/*.ts" --interactive
+```
+
+Or generate builders for all discovered types:
+
+```bash
+npx fluent-gen scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
+```
+
+## Generic Types
+
+fluent-gen supports generic interfaces and types:
+
+```typescript
+// types/api.ts
+export interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message?: string;
+  timestamp: Date;
+}
+
+export interface PagedResponse<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
+```
+
+Use generic builders:
+
+```typescript
+import {
+  apiResponseBuilder,
+  pagedResponseBuilder,
+  userBuilder,
+} from './builders';
+
+// ApiResponse with User data
+const userResponse = apiResponseBuilder<User>()
+  .withData(
+    userBuilder()
+      .withId('user-001')
+      .withName('Alice')
+      .withEmail('alice@example.com')
+      .build(),
+  )
+  .withStatus(200)
+  .withMessage('User fetched successfully')
+  .withTimestamp(new Date())
+  .build();
+
+// PagedResponse with User array
+const usersPage = pagedResponseBuilder<User>()
+  .withItems([
+    userBuilder().withName('Alice').build(),
+    userBuilder().withName('Bob').build(),
+  ])
+  .withPage(1)
+  .withPageSize(10)
+  .withTotalCount(2)
+  .build();
+```
+
+## Using Default Values
+
+Enable default values for optional properties:
+
+```typescript
+const generator = new FluentGen({
+  useDefaults: true,
+});
+```
+
+With defaults enabled, optional properties will have sensible default values:
 
 ```typescript
 const user = userBuilder()
-  .withId('user-123')
-  .withProfile(
-    profileBuilder() // Receives parent context
-  );
+  .withId('user-001')
+  .withName('Alice')
+  .withEmail('alice@example.com')
+  .withIsActive(true)
+  .build();
 
-// The profile builder can access the parent user's ID
+// age will default to 0 (number default)
+console.log(user.age); // 0
 ```
 
 ## Next Steps
 
-- **[Installation Guide](./installation.md)**: Detailed installation instructions and requirements
-- **[CLI Usage](./cli.md)**: Learn about all CLI commands and options
-- **[Configuration](./configuration.md)**: Set up project-wide configuration
-- **[Programmatic API](./api.md)**: Integrate Fluent Gen into your build process
-- **[Examples](../examples/basic.md)**: See more complex usage examples
+Now that you've learned the basics, explore more advanced features:
 
-## Common Use Cases
+- [CLI Reference](./cli.md) - Learn about all CLI commands and options
+- [Programmatic API](./api.md) - Deep dive into the programmatic API
+- [Configuration](./configuration.md) - Configure fluent-gen for your project
+- [Plugin System](../api/plugins.md) - Extend fluent-gen with custom plugins
+- [Examples](../examples/basic.md) - See more complex examples
 
-### Test Data Generation
+## Common Issues
 
-Create consistent test data with builders:
+### TypeScript Configuration
 
-```typescript
-describe('UserService', () => {
-  it('should create a user', () => {
-    const testUser = userBuilder()
-      .withId('test-id')
-      .withName('Test User')
-      .withEmail('test@example.com')();
+Ensure your `tsconfig.json` has proper settings:
 
-    const result = userService.create(testUser);
-    expect(result).toBeDefined();
-  });
-});
+```json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["ES2020"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}
 ```
 
-### API Request Building
+### Import Errors
 
-Build API request payloads:
+If you encounter import errors, ensure:
 
-```typescript
-const createUserRequest = createUserRequestBuilder()
-  .withUsername('newuser')
-  .withPassword('secure123')
-  .withProfile(
-    profileBuilder()
-      .withFirstName('Jane')
-      .withLastName('Doe')
-  )();
+1. Your generated builders are in the correct location
+2. Your TypeScript paths are configured correctly
+3. You're using the correct import syntax for your module system
 
-await api.post('/users', createUserRequest);
-```
+### Type Not Found
 
-### Configuration Objects
+If fluent-gen can't find a type:
 
-Build complex configuration objects:
+1. Ensure the type is exported
+2. Check that the file path is correct
+3. Verify the type name matches exactly (case-sensitive)
 
-```typescript
-const config = appConfigBuilder()
-  .withPort(3000)
-  .withDatabase(
-    databaseConfigBuilder()
-      .withHost('localhost')
-      .withPort(5432)
-      .withName('myapp')
-  )
-  .withAuth(
-    authConfigBuilder()
-      .withJwtSecret(process.env.JWT_SECRET)
-      .withTokenExpiry('24h')
-  )();
-```
+## Getting Help
 
-## Troubleshooting
-
-### Common Issues
-
-**Type not found**: Ensure the type is exported and the file path is correct.
-
-**Import resolution fails**: Check your `tsconfig.json` paths configuration.
-
-**Circular references**: Fluent Gen handles these automatically, but very complex circular dependencies might need manual intervention.
-
-### Getting Help
-
-- Check common questions in the documentation
+- Check the [API Documentation](../api/overview.md)
+- Browse [Examples](../examples/basic.md)
 - Report issues on [GitHub](https://github.com/rafbcampos/fluent-gen/issues)
-- Join discussions in the [community forum](https://github.com/rafbcampos/fluent-gen/discussions)
-
-## Learn More
-
-- [Architecture Overview](../api/overview.md): Understand the internal architecture
-- [Plugin Development](../api/plugins.md): Create custom plugins
-- [Advanced Patterns](../examples/advanced.md): Complex type scenarios
+- Join discussions on
+  [GitHub Discussions](https://github.com/rafbcampos/fluent-gen/discussions)

@@ -1,63 +1,108 @@
 # fluent-gen
 
-> Generate fluent builders for any Typescript interface.
+> Generate type-safe fluent builders for TypeScript interfaces and types
 
 ## Features
 
-- **Type-Safe Builders**: Generate strongly-typed fluent builders from TypeScript interfaces
-- **Deep Type Resolution**: Handles complex types including utility, mapped, conditional types, and generics
-- **Smart Defaults**: Automatically generates sensible default values for optional properties
+- **Type-Safe Builders**: Generate strongly-typed fluent builders from
+  TypeScript interfaces, types, and type aliases
+- **Deep Type Resolution**: Handles complex types including utility types,
+  mapped types, conditional types, and generics
+- **Smart Defaults**: Automatically generates sensible default values for
+  optional properties
 - **JSDoc Support**: Preserves documentation comments in generated code
-- **Plugin System**: Extensible micro-kernel architecture for custom type handlers
-- **CLI & API**: Use as a command-line tool or programmatically in your build process
-- **High Performance**: Built-in caching for symbol resolution and type analysis
+- **Plugin System**: Extensible architecture with hooks for customizing
+  generation behavior
+- **CLI & API**: Use as a command-line tool or programmatically in your build
+  process
+- **Zero Runtime Overhead**: All generation happens at build time with no
+  runtime dependencies
 
 ## Installation
 
 ```bash
-# Global CLI installation
-pnpm install -g fluent-gen
+# Install as a development dependency
+pnpm add -D fluent-gen
 
-# Local project installation
-pnpm install --save-dev fluent-gen
+# Or use npm
+npm install --save-dev fluent-gen
+
+# Or use yarn
+yarn add -D fluent-gen
 ```
 
 ## Quick Start
 
 ### CLI Usage
 
-Generate a builder for a single interface:
+fluent-gen provides four main commands:
 
 ```bash
-fluent-gen generate src/types/user.ts User -o src/builders/
+# Generate a builder for a single type
+fluent-gen generate <file> <type> [options]
+
+# Generate multiple builders from configuration
+fluent-gen batch [options]
+
+# Scan files and generate builders interactively or automatically
+fluent-gen scan <pattern> [options]
+
+# Initialize a configuration file
+fluent-gen init [options]
 ```
 
-Scan and generate builders for multiple files:
+#### Examples
 
 ```bash
+# Generate a builder for the User interface
+fluent-gen generate src/types/user.ts User
+
+# Generate with custom output location
+fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
+
+# Scan all TypeScript files and select types interactively
 fluent-gen scan "src/**/*.ts" --interactive
-```
 
-Initialize a configuration file:
-
-```bash
-fluent-gen init
+# Generate from configuration file
+fluent-gen batch
 ```
 
 ### Programmatic Usage
 
 ```typescript
-import { generateBuilderCode } from "fluent-gen";
+import { FluentGen } from 'fluent-gen';
 
-const result = await generateBuilderCode({
-  filePath: "./src/types/user.ts",
-  typeName: "User",
-  outputPath: "./src/builders/user.builder.ts",
+// Create an instance with options
+const generator = new FluentGen({
+  useDefaults: true,
+  addComments: true,
+  outputDir: './src/builders',
 });
 
-if (result.isOk()) {
-  console.log("Builder generated successfully!");
+// Generate builder code for a single type
+const result = await generator.generateBuilder('./src/types/user.ts', 'User');
+
+if (result.ok) {
+  console.log('Generated builder code:', result.value);
+} else {
+  console.error('Error:', result.error);
 }
+
+// Generate and save to file
+const fileResult = await generator.generateToFile(
+  './src/types/user.ts',
+  'User',
+  './src/builders/user.builder.ts',
+);
+
+// Generate multiple builders
+const multipleResult = await generator.generateMultiple(
+  './src/types/models.ts',
+  ['User', 'Product', 'Order'],
+);
+
+// Scan and generate from pattern
+const scanResult = await generator.scanAndGenerate('src/**/*.ts');
 ```
 
 ## Example
@@ -65,6 +110,7 @@ if (result.isOk()) {
 Given this TypeScript interface:
 
 ```typescript
+// user.ts
 interface Address {
   street: string;
   city: string;
@@ -79,28 +125,35 @@ interface User {
   age?: number;
   address: Address;
   tags?: string[];
+  createdAt: Date;
 }
 ```
 
-fluent-gen generates a type-safe builder:
+fluent-gen generates type-safe builders:
 
 ```typescript
-const user = userBuilder()
-  .withId("user-123")
-  .withName("John Doe")
-  .withEmail("john@example.com")
+import { user, address } from './user.builder';
+
+// Build a user with fluent interface
+const newUser = user()
+  .withId('user-123')
+  .withName('John Doe')
+  .withEmail('john@example.com')
   .withAge(30)
   .withAddress(
-    addressBuilder()
-      .withStreet("123 Main St")
-      .withCity("San Francisco")
-      .withCountry("USA")
-      .withPostalCode("94105"),
+    address()
+      .withStreet('123 Main St')
+      .withCity('San Francisco')
+      .withCountry('USA')
+      .withPostalCode('94105')
+      .build(),
   )
-  .withTags(["developer", "typescript"]);
+  .withTags(['developer', 'typescript'])
+  .withCreatedAt(new Date())
+  .build();
 
-// Build the final object
-const userData: User = user.build();
+// The result is fully typed as User
+const userData: User = newUser;
 ```
 
 ## Configuration
@@ -111,127 +164,276 @@ Create a `.fluentgenrc.json` file in your project root:
 {
   "tsConfigPath": "./tsconfig.json",
   "generator": {
-    "outputDir": "./generated",
+    "outputDir": "./src/generated/builders",
     "useDefaults": true,
-    "addComments": true
+    "addComments": true,
+    "contextType": "BuildContext",
+    "importPath": "./build-context"
   },
   "targets": [
     {
       "file": "src/types/models.ts",
-      "types": ["User", "Product", "Order"]
+      "types": ["User", "Product", "Order"],
+      "outputFile": "src/builders/models.builder.ts"
     }
   ],
-  "patterns": [
-    {
-      "include": "src/**/*.interface.ts",
-      "exclude": ["**/*.test.ts", "**/*.spec.ts"]
-    }
-  ]
+  "patterns": ["src/**/*.interface.ts"],
+  "exclude": ["**/*.test.ts", "**/*.spec.ts"],
+  "plugins": ["./plugins/custom-plugin.js"]
 }
 ```
+
+### Configuration Options
+
+| Option                  | Type    | Description                                     |
+| ----------------------- | ------- | ----------------------------------------------- |
+| `tsConfigPath`          | string  | Path to TypeScript configuration file           |
+| `generator.outputDir`   | string  | Default output directory for generated builders |
+| `generator.useDefaults` | boolean | Generate default values for optional properties |
+| `generator.addComments` | boolean | Include JSDoc comments in generated code        |
+| `generator.contextType` | string  | Custom context type name for builders           |
+| `generator.importPath`  | string  | Import path for context type                    |
+| `targets`               | array   | Specific files and types to generate            |
+| `patterns`              | array   | Glob patterns to scan for types                 |
+| `exclude`               | array   | Patterns to exclude from scanning               |
+| `plugins`               | array   | Paths to plugin files                           |
+
+## CLI Commands
+
+### `generate`
+
+Generate a builder for a specific type.
+
+```bash
+fluent-gen generate <file> <type> [options]
+```
+
+**Options:**
+
+- `-o, --output <path>`: Output file path
+- `-c, --config <path>`: Path to configuration file
+- `-t, --tsconfig <path>`: Path to tsconfig.json
+- `-p, --plugins <paths...>`: Plugin file paths
+- `-d, --defaults`: Use default values for optional properties
+- `--dry-run`: Preview without writing files
+- `--no-comments`: Don't include JSDoc comments
+
+### `batch`
+
+Generate builders from configuration file.
+
+```bash
+fluent-gen batch [options]
+```
+
+**Options:**
+
+- `-c, --config <path>`: Configuration file path
+- `-p, --plugins <paths...>`: Plugin file paths
+- `-d, --dry-run`: Preview without writing files
+- `--parallel`: Generate builders in parallel
+
+### `scan`
+
+Scan files for types and generate builders.
+
+```bash
+fluent-gen scan <pattern> [options]
+```
+
+**Options:**
+
+- `-o, --output <pattern>`: Output file pattern
+- `-c, --config <path>`: Configuration file path
+- `-p, --plugins <paths...>`: Plugin file paths
+- `-e, --exclude <patterns...>`: Patterns to exclude
+- `-t, --types <types>`: Comma-separated type names
+- `-i, --interactive`: Interactive type selection
+- `--dry-run`: Preview discovered types
+- `--ignore-private`: Ignore non-exported types
+
+### `init`
+
+Initialize a configuration file.
+
+```bash
+fluent-gen init [options]
+```
+
+**Options:**
+
+- `--overwrite`: Overwrite existing configuration
 
 ## Advanced Features
 
 ### Nested Builders
 
-Nested objects automatically support builder pattern:
+Nested objects automatically get their own builders:
 
 ```typescript
 const order = orderBuilder()
-  .withId("order-123")
+  .withId('order-123')
   .withCustomer(
-    customerBuilder().withName("Alice").withEmail("alice@example.com"),
+    customerBuilder().withName('Alice').withEmail('alice@example.com').build(),
   )
   .withItems([
-    orderItemBuilder().withProductId("prod-1").withQuantity(2).withPrice(29.99),
-  ]);
+    orderItemBuilder()
+      .withProductId('prod-1')
+      .withQuantity(2)
+      .withPrice(29.99)
+      .build(),
+    orderItemBuilder()
+      .withProductId('prod-2')
+      .withQuantity(1)
+      .withPrice(49.99)
+      .build(),
+  ])
+  .build();
 ```
 
 ### Generic Types
 
-Full support for generic interfaces:
+Full support for generic interfaces and types:
 
 ```typescript
 interface ApiResponse<T> {
   data: T;
   status: number;
-  timestamp: Date;
+  message?: string;
 }
 
-// Usage with specific type
+// Generated builder usage
 const response = apiResponseBuilder<User>()
-  .withData(userBuilder().withName("Bob").build())
+  .withData(userBuilder().withName('Bob').build())
   .withStatus(200)
-  .withTimestamp(new Date());
+  .withMessage('Success')
+  .build();
 ```
 
 ### Context Passing
 
-Builders support context passing from parent to child:
+Builders support context passing for advanced scenarios:
 
 ```typescript
+interface BuildContext {
+  tenantId: string;
+  userId: string;
+}
+
 const user = userBuilder()
-  .withAddress(addressBuilder()) // Address builder receives parent context
-  .build({ tenantId: "tenant-123" }); // Context passed during build
+  .withName('John')
+  .withEmail('john@example.com')
+  .build({ tenantId: 'tenant-123', userId: 'user-456' });
 ```
-
-## API Reference
-
-### CLI Commands
-
-- `generate <file> <type>` - Generate a builder for a specific type
-- `batch` - Generate builders from configuration file
-- `scan <pattern>` - Scan files for interfaces and types
-- `init` - Initialize a configuration file
-
-### Programmatic API
-
-```typescript
-import {
-  generateBuilderCode,
-  extractTypeInfo,
-  TypeResolver,
-  PluginSystem,
-} from "fluent-gen";
-```
-
-See [full API documentation](https://rafbcampos.github.io/fluent-gen/) for details.
 
 ## Plugin System
 
-fluent-gen uses a micro-kernel architecture with a powerful plugin system:
+Create custom plugins to extend generation behavior:
 
 ```typescript
-import { Plugin, PluginSystem } from "fluent-gen";
+import { Plugin } from 'fluent-gen';
 
 const myPlugin: Plugin = {
-  name: "my-custom-plugin",
+  name: 'my-custom-plugin',
   hooks: {
-    beforeTypeResolution: async (context) => {
-      // Custom logic before type resolution
+    beforeTypeResolution: async context => {
+      // Modify type resolution behavior
       return { continue: true };
     },
-    afterPropertyGeneration: async (context) => {
-      // Modify generated properties
-      return {
-        continue: true,
-        data: modifiedProperties,
-      };
+    afterPropertyGeneration: async context => {
+      // Customize generated properties
+      return { continue: true, data: context.properties };
+    },
+    beforeCodeGeneration: async context => {
+      // Modify generation context
+      return { continue: true };
     },
   },
 };
 
-const pluginSystem = new PluginSystem();
-pluginSystem.register(myPlugin);
+// Register plugin
+generator.registerPlugin(myPlugin);
 ```
 
-## Contributing
+## API Reference
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+### Main Classes
+
+#### FluentGen
+
+The main class for builder generation.
+
+```typescript
+class FluentGen {
+  constructor(options?: FluentGenOptions);
+
+  // Generate builder code as string
+  generateBuilder(filePath: string, typeName: string): Promise<Result<string>>;
+
+  // Generate multiple builders
+  generateMultiple(
+    filePath: string,
+    typeNames: string[],
+  ): Promise<Result<Map<string, string>>>;
+
+  // Generate and write to file
+  generateToFile(
+    filePath: string,
+    typeName: string,
+    outputPath?: string,
+  ): Promise<Result<string>>;
+
+  // Scan pattern and generate builders
+  scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>;
+
+  // Plugin registration
+  registerPlugin(plugin: Plugin): Result<void>;
+
+  // Cache management
+  clearCache(): void;
+}
+```
+
+#### TypeExtractor
+
+Extract type information from TypeScript files.
+
+```typescript
+class TypeExtractor {
+  extractType(filePath: string, typeName: string): Promise<Result<TypeInfo>>;
+  scanFile(filePath: string): Promise<Result<string[]>>;
+}
+```
+
+#### BuilderGenerator
+
+Generate builder code from type information.
+
+```typescript
+class BuilderGenerator {
+  generate(typeInfo: TypeInfo): Promise<Result<string>>;
+  generateCommonFile(): string;
+}
+```
+
+### Result Type
+
+All operations use Result types for error handling:
+
+```typescript
+type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
+
+// Helper functions
+function isOk<T>(result: Result<T>): boolean;
+function isErr<T>(result: Result<T>): boolean;
+```
+
+## Development
 
 ```bash
 # Clone the repository
 git clone https://github.com/rafbcampos/fluent-gen.git
+cd fluent-gen
 
 # Install dependencies
 pnpm install
@@ -241,7 +443,23 @@ pnpm test
 
 # Build the project
 pnpm build
+
+# Run linting
+pnpm lint
+
+# Type checking
+pnpm typecheck
 ```
+
+## Requirements
+
+- Node.js >= 18.0.0
+- TypeScript >= 4.5.0
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md)
+for details.
 
 ## License
 
@@ -252,4 +470,3 @@ MIT © [Rafael Campos](https://github.com/rafbcampos)
 - [Documentation](https://rafbcampos.github.io/fluent-gen/)
 - [GitHub Issues](https://github.com/rafbcampos/fluent-gen/issues)
 - [Discussions](https://github.com/rafbcampos/fluent-gen/discussions)
-

@@ -1,11 +1,17 @@
 # Programmatic API
 
-The Fluent Gen programmatic API allows you to integrate builder generation into your build process, development tools, or custom workflows. This guide covers the complete API surface.
+The fluent-gen programmatic API allows you to integrate builder generation into
+your build process, development tools, or custom workflows. This guide covers
+the complete API surface and usage patterns.
 
 ## Installation
 
 ```bash
 npm install fluent-gen
+# or
+pnpm add fluent-gen
+# or
+yarn add fluent-gen
 ```
 
 ## Quick Start
@@ -13,21 +19,19 @@ npm install fluent-gen
 ```typescript
 import { FluentGen } from 'fluent-gen';
 
+// Create a generator instance
 const generator = new FluentGen({
   useDefaults: true,
-  addComments: true
+  addComments: true,
 });
 
-// Generate a single builder
-const result = await generator.generateBuilder(
-  './src/types.ts',
-  'User'
-);
+// Generate a builder for a type
+const result = await generator.generateBuilder('./src/types.ts', 'User');
 
 if (result.ok) {
-  console.log('Generated builder code:', result.value);
+  console.log('Generated builder:', result.value);
 } else {
-  console.error('Generation failed:', result.error);
+  console.error('Error:', result.error);
 }
 ```
 
@@ -35,48 +39,117 @@ if (result.ok) {
 
 ### FluentGen
 
-The main class for builder generation.
+The main class for builder generation. Provides methods to generate builders
+programmatically.
 
 ```typescript
-import { FluentGen, type GeneratorConfig } from 'fluent-gen';
+import { FluentGen, type FluentGenOptions } from 'fluent-gen';
 
 class FluentGen {
-  constructor(config?: GeneratorConfig);
+  constructor(options?: FluentGenOptions);
 
-  // Core generation methods
+  // Core methods
   generateBuilder(filePath: string, typeName: string): Promise<Result<string>>;
-  generateMultiple(filePath: string, typeNames: string[]): Promise<Result<Map<string, string>>>;
-  generateToFile(filePath: string, typeName: string, outputPath?: string): Promise<Result<string>>;
+  generateMultiple(
+    filePath: string,
+    typeNames: string[],
+  ): Promise<Result<Map<string, string>>>;
+  generateToFile(
+    filePath: string,
+    typeName: string,
+    outputPath?: string,
+  ): Promise<Result<string>>;
   scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>;
 
-  // Configuration methods
-  registerPlugin(plugin: Plugin): void;
-  setConfig(config: Partial<GeneratorConfig>): void;
-  getConfig(): GeneratorConfig;
+  // Plugin management
+  registerPlugin(plugin: Plugin): Result<void>;
 
   // Cache management
   clearCache(): void;
-  getCacheStats(): CacheStats;
 }
 ```
 
 #### Constructor Options
 
 ```typescript
-interface GeneratorConfig {
-  outputDir?: string;           // Output directory for files
-  useDefaults?: boolean;        // Generate default values
-  contextType?: string;         // Custom context type name
-  importPath?: string;          // Import path for context type
-  indentSize?: number;          // Indentation size (spaces)
-  useTab?: boolean;            // Use tabs instead of spaces
-  addComments?: boolean;        // Include JSDoc comments
-  fileExtension?: string;       // Custom file extension
-  skipTypeCheck?: boolean;      // Skip TypeScript validation
+interface FluentGenOptions {
+  // Output configuration
+  outputDir?: string; // Default output directory for generated files
+  fileName?: string; // Custom filename pattern
+
+  // Generation settings
+  useDefaults?: boolean; // Generate default values for optional properties
+  addComments?: boolean; // Include JSDoc comments in generated code
+  contextType?: string; // Custom context type name for builders
+  importPath?: string; // Import path for context type
+  outputPath?: string; // Output path for generated files
+
+  // Type extraction settings
+  tsConfigPath?: string; // Path to tsconfig.json
+  maxDepth?: number; // Maximum depth for type resolution (1-100)
+  cache?: boolean; // Enable caching for type resolution
+
+  // Advanced
+  pluginManager?: PluginManager; // Custom plugin manager instance
 }
 ```
 
-## Generation Methods
+### TypeExtractor
+
+Extracts type information from TypeScript files.
+
+```typescript
+import { TypeExtractor, type TypeExtractorOptions } from 'fluent-gen';
+
+class TypeExtractor {
+  constructor(options?: TypeExtractorOptions);
+
+  extractType(filePath: string, typeName: string): Promise<Result<TypeInfo>>;
+  scanFile(filePath: string): Promise<Result<string[]>>;
+}
+```
+
+#### TypeExtractor Options
+
+```typescript
+interface TypeExtractorOptions {
+  tsConfigPath?: string; // Path to tsconfig.json
+  cache?: boolean; // Enable caching
+  pluginManager?: PluginManager; // Plugin manager instance
+  maxDepth?: number; // Max recursion depth (1-100)
+}
+```
+
+### BuilderGenerator
+
+Generates builder code from type information.
+
+```typescript
+import { BuilderGenerator, type GeneratorConfig } from 'fluent-gen';
+
+class BuilderGenerator {
+  constructor(config?: GeneratorConfig, pluginManager?: PluginManager);
+
+  generate(typeInfo: TypeInfo): Promise<Result<string>>;
+  generateCommonFile(): string;
+  setGeneratingMultiple(value: boolean): void;
+  clearCache(): void;
+}
+```
+
+#### Generator Configuration
+
+```typescript
+interface GeneratorConfig {
+  outputPath?: string; // Output file path
+  useDefaults?: boolean; // Use default values
+  contextType?: string; // Context type name
+  importPath?: string; // Import path for context
+  addComments?: boolean; // Include JSDoc comments
+}
+```
+
+## Core Methods
 
 ### generateBuilder
 
@@ -90,37 +163,33 @@ async generateBuilder(
 ```
 
 **Parameters:**
-- `filePath` - Path to TypeScript file containing the interface
-- `typeName` - Name of the interface or type to generate builder for
 
-**Returns:** `Result<string>` containing the generated builder code
+- `filePath` - Path to the TypeScript file containing the type
+- `typeName` - Name of the interface or type to generate a builder for
+
+**Returns:** `Result<string>` containing the generated builder code or an error
 
 **Example:**
 
 ```typescript
-import { FluentGen } from 'fluent-gen';
-
 const generator = new FluentGen({
   useDefaults: true,
-  addComments: true
+  addComments: true,
 });
 
-const result = await generator.generateBuilder(
-  './src/models/user.ts',
-  'User'
-);
+const result = await generator.generateBuilder('./src/types/user.ts', 'User');
 
 if (result.ok) {
-  console.log('Generated builder:', result.value);
-  // Write to file, send to webpack, etc.
+  console.log('Generated code:', result.value);
+  // Save to file or use the generated code
 } else {
-  console.error('Error:', result.error.message);
+  console.error('Generation failed:', result.error.message);
 }
 ```
 
 ### generateMultiple
 
-Generate builders for multiple types from a single file.
+Generate builders for multiple types from the same file.
 
 ```typescript
 async generateMultiple(
@@ -130,30 +199,39 @@ async generateMultiple(
 ```
 
 **Parameters:**
-- `filePath` - Path to TypeScript file
-- `typeNames` - Array of interface/type names
 
-**Returns:** `Result<Map<string, string>>` where keys are type names and values are generated code
+- `filePath` - Path to the TypeScript file
+- `typeNames` - Array of type names to generate builders for
+
+**Returns:** `Result<Map<string, string>>` where keys are filenames and values
+are generated code
 
 **Example:**
 
 ```typescript
-const result = await generator.generateMultiple(
-  './src/api/types.ts',
-  ['CreateUserRequest', 'UpdateUserRequest', 'UserResponse']
-);
+const result = await generator.generateMultiple('./src/types/models.ts', [
+  'User',
+  'Product',
+  'Order',
+]);
 
 if (result.ok) {
-  for (const [typeName, code] of result.value) {
-    console.log(`Generated ${typeName} builder`);
-    await fs.writeFile(`./builders/${typeName}.builder.ts`, code);
+  // result.value is a Map with:
+  // - 'common.ts' -> Common utilities
+  // - 'User.builder.ts' -> User builder
+  // - 'Product.builder.ts' -> Product builder
+  // - 'Order.builder.ts' -> Order builder
+
+  for (const [filename, code] of result.value) {
+    console.log(`Generated ${filename}`);
+    // Save each file
   }
 }
 ```
 
 ### generateToFile
 
-Generate a builder and write directly to a file.
+Generate a builder and save it to a file.
 
 ```typescript
 async generateToFile(
@@ -164,448 +242,553 @@ async generateToFile(
 ```
 
 **Parameters:**
-- `filePath` - Source TypeScript file path
-- `typeName` - Interface/type name
-- `outputPath` - Optional output file path (auto-generated if not provided)
 
-**Returns:** `Result<string>` containing the output file path
+- `filePath` - Path to the TypeScript file
+- `typeName` - Name of the type
+- `outputPath` - Optional output file path (uses default if not provided)
+
+**Returns:** `Result<string>` containing the output file path or an error
 
 **Example:**
 
 ```typescript
-// Auto-generate output path
 const result = await generator.generateToFile(
-  './src/types.ts',
-  'Product'
-);
-
-// Custom output path
-const result2 = await generator.generateToFile(
-  './src/types.ts',
-  'Order',
-  './custom/Order.builder.ts'
+  './src/types/user.ts',
+  'User',
+  './src/builders/user.builder.ts',
 );
 
 if (result.ok) {
-  console.log('File written to:', result.value);
+  console.log('Builder saved to:', result.value);
+} else {
+  console.error('Failed to generate:', result.error.message);
 }
 ```
 
 ### scanAndGenerate
 
-Scan files matching a pattern and generate builders for discovered interfaces.
+Scan files matching a pattern and generate builders for all discovered types.
 
 ```typescript
-async scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>
+async scanAndGenerate(
+  pattern: string
+): Promise<Result<Map<string, string>>>
 ```
 
 **Parameters:**
+
 - `pattern` - Glob pattern to match TypeScript files
 
-**Returns:** `Result<Map<string, string>>` with discovered types and generated code
+**Returns:** `Result<Map<string, string>>` where keys are `"file:type"` and
+values are generated code
 
 **Example:**
 
 ```typescript
-const result = await generator.scanAndGenerate('src/models/**/*.ts');
+const result = await generator.scanAndGenerate('src/**/*.ts');
 
 if (result.ok) {
-  console.log(`Generated ${result.value.size} builders`);
-
-  for (const [typeName, code] of result.value) {
-    const outputPath = `./builders/${typeName}.builder.ts`;
-    await fs.writeFile(outputPath, code);
+  for (const [key, code] of result.value) {
+    const [file, type] = key.split(':');
+    console.log(`Generated builder for ${type} from ${file}`);
+    // Save the generated code
   }
 }
 ```
 
-## Type Extraction API
+### registerPlugin
 
-For more granular control, use the type extraction functions directly:
+Register a plugin to extend generation behavior.
 
 ```typescript
-import { extractTypeInfo, generateBuilderCode } from 'fluent-gen';
-
-// Extract type information
-const typeResult = await extractTypeInfo('./src/types.ts', 'User');
-
-if (typeResult.ok) {
-  const typeInfo = typeResult.value;
-
-  // Generate builder code from type info
-  const codeResult = generateBuilderCode(typeInfo, {
-    useDefaults: true,
-    addComments: true
-  });
-
-  if (codeResult.ok) {
-    console.log('Generated code:', codeResult.value);
-  }
-}
+registerPlugin(plugin: Plugin): Result<void>
 ```
 
-### extractTypeInfo
+**Parameters:**
+
+- `plugin` - Plugin object with hooks
+
+**Returns:** `Result<void>` indicating success or failure
+
+**Example:**
 
 ```typescript
-async function extractTypeInfo(
-  filePath: string,
-  typeName: string,
-  options?: TypeExtractionOptions
-): Promise<Result<TypeInfo>>
-```
-
-**Options:**
-
-```typescript
-interface TypeExtractionOptions {
-  tsConfigPath?: string;
-  cacheEnabled?: boolean;
-  followImports?: boolean;
-  maxDepth?: number;
-}
-```
-
-### generateBuilderCode
-
-```typescript
-function generateBuilderCode(
-  typeInfo: TypeInfo,
-  config?: GeneratorConfig
-): Result<string>
-```
-
-## Plugin System
-
-Register plugins to extend generation behavior:
-
-```typescript
-import { FluentGen, type Plugin } from 'fluent-gen';
-
-const customPlugin: Plugin = {
-  name: 'custom-defaults',
+const myPlugin: Plugin = {
+  name: 'my-custom-plugin',
   hooks: {
-    beforeGeneration: (context) => {
-      // Modify context before generation
-      console.log('Generating for type:', context.typeName);
+    beforeTypeResolution: async context => {
+      console.log('Resolving type:', context.typeName);
+      return { continue: true };
     },
-    afterPropertyGeneration: (context, property, method) => {
-      // Customize property methods
-      if (property.type.kind === 'string') {
-        method.addJSDoc(`@example .with${property.name}("example")`);
-      }
-      return method;
-    }
-  }
+  },
 };
 
-const generator = new FluentGen();
-generator.registerPlugin(customPlugin);
+const result = generator.registerPlugin(myPlugin);
+if (!result.ok) {
+  console.error('Plugin registration failed:', result.error);
+}
+```
+
+### clearCache
+
+Clear the internal cache for type resolution and generation.
+
+```typescript
+clearCache(): void
+```
+
+**Example:**
+
+```typescript
+// Clear cache between generations if needed
+generator.clearCache();
 ```
 
 ## Result Type
 
-All async methods return a `Result<T>` type for railway-oriented programming:
+All API methods return `Result` types for consistent error handling without
+exceptions.
 
 ```typescript
-type Result<T> = Ok<T> | Err;
+type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
+```
 
-interface Ok<T> {
-  ok: true;
-  value: T;
+### Helper Functions
+
+```typescript
+import { ok, err, isOk, isErr } from 'fluent-gen';
+
+// Create results
+const successResult = ok('success');
+const errorResult = err(new Error('failed'));
+
+// Check results
+if (isOk(result)) {
+  console.log('Success:', result.value);
 }
 
-interface Err {
-  ok: false;
-  error: Error;
+if (isErr(result)) {
+  console.error('Error:', result.error);
 }
 ```
 
-**Usage:**
+## Type Information
+
+### TypeInfo Interface
+
+The structure returned by type extraction:
 
 ```typescript
-const result = await generator.generateBuilder('./types.ts', 'User');
+interface TypeInfo {
+  name: string;
+  kind: TypeKind;
+  properties?: PropertyInfo[];
+  typeParameters?: GenericParam[];
+  indexSignatures?: IndexSignature[];
+  jsDoc?: string;
+  isExported: boolean;
+  sourceFile: string;
+}
 
-if (result.ok) {
-  // Success case
-  const code = result.value;
-  console.log('Generated:', code);
-} else {
-  // Error case
-  const error = result.error;
-  console.error('Failed:', error.message);
+interface PropertyInfo {
+  name: string;
+  type: ResolvedType;
+  isOptional: boolean;
+  jsDoc?: string;
+  defaultValue?: string;
+}
+
+type TypeKind =
+  | 'interface'
+  | 'type-alias'
+  | 'class'
+  | 'enum'
+  | 'union'
+  | 'intersection'
+  | 'primitive'
+  | 'object'
+  | 'array'
+  | 'tuple';
+```
+
+## Plugin System
+
+Create plugins to customize generation behavior.
+
+### Plugin Interface
+
+```typescript
+interface Plugin {
+  name: string;
+  hooks?: {
+    beforeTypeResolution?: Hook<ParseContext>;
+    afterTypeResolution?: Hook<ResolveContext>;
+    beforePropertyGeneration?: Hook<GenerateContext>;
+    afterPropertyGeneration?: Hook<GenerateContext>;
+    beforeCodeGeneration?: Hook<GenerateContext>;
+    afterCodeGeneration?: Hook<GenerateContext>;
+  };
+}
+
+type Hook<T> = (context: T) => Promise<HookResult>;
+
+interface HookResult {
+  continue: boolean;
+  data?: any;
+  error?: Error;
+}
+```
+
+### Creating a Plugin
+
+```typescript
+import { Plugin } from 'fluent-gen';
+
+const customDefaultsPlugin: Plugin = {
+  name: 'custom-defaults',
+  hooks: {
+    afterPropertyGeneration: async context => {
+      // Modify properties to add custom defaults
+      const properties = context.properties.map(prop => {
+        if (prop.isOptional && prop.type === 'string') {
+          prop.defaultValue = '"custom-default"';
+        }
+        return prop;
+      });
+
+      return {
+        continue: true,
+        data: properties,
+      };
+    },
+  },
+};
+
+// Register the plugin
+generator.registerPlugin(customDefaultsPlugin);
+```
+
+## Advanced Usage
+
+### Custom Output Paths
+
+```typescript
+const generator = new FluentGen({
+  outputDir: './src/generated/builders',
+  fileName: '{type}.builder.generated.ts',
+});
+
+// Files will be saved to outputDir with custom naming
+await generator.generateToFile('./src/types.ts', 'User');
+// Output: ./src/generated/builders/user.builder.generated.ts
+```
+
+### Context Passing
+
+Enable context passing between parent and child builders:
+
+```typescript
+const generator = new FluentGen({
+  contextType: 'BuildContext',
+  importPath: './build-context',
+});
+
+// Generated builders will support context
+const code = await generator.generateBuilder('./types.ts', 'Order');
+```
+
+### Batch Processing
+
+Process multiple files efficiently:
+
+```typescript
+import { FluentGen } from 'fluent-gen';
+import { glob } from 'glob';
+
+async function generateAllBuilders() {
+  const generator = new FluentGen({
+    useDefaults: true,
+    addComments: true,
+  });
+
+  const files = await glob('src/**/*.interface.ts');
+
+  for (const file of files) {
+    const extractor = new TypeExtractor();
+    const typesResult = await extractor.scanFile(file);
+
+    if (typesResult.ok) {
+      for (const typeName of typesResult.value) {
+        const result = await generator.generateToFile(
+          file,
+          typeName,
+          `./builders/${typeName}.builder.ts`,
+        );
+
+        if (result.ok) {
+          console.log(`✓ Generated ${typeName}`);
+        } else {
+          console.error(`✗ Failed ${typeName}:`, result.error.message);
+        }
+      }
+    }
+  }
+}
+```
+
+### Integration with Build Tools
+
+#### Webpack Plugin
+
+```typescript
+class FluentGenWebpackPlugin {
+  apply(compiler) {
+    compiler.hooks.beforeCompile.tapAsync(
+      'FluentGenPlugin',
+      async (params, callback) => {
+        const generator = new FluentGen({
+          useDefaults: true,
+        });
+
+        const result = await generator.scanAndGenerate('src/**/*.ts');
+
+        if (result.ok) {
+          // Save generated files
+          for (const [key, code] of result.value) {
+            // Write files...
+          }
+        }
+
+        callback();
+      },
+    );
+  }
+}
+```
+
+#### Vite Plugin
+
+```typescript
+import { Plugin } from 'vite';
+import { FluentGen } from 'fluent-gen';
+
+export function fluentGenPlugin(): Plugin {
+  return {
+    name: 'vite-plugin-fluent-gen',
+    async buildStart() {
+      const generator = new FluentGen({
+        useDefaults: true,
+      });
+
+      await generator.scanAndGenerate('src/**/*.ts');
+    },
+  };
 }
 ```
 
 ## Error Handling
 
-Fluent Gen uses structured error handling:
+### Best Practices
 
 ```typescript
-import { FluentGenError, ErrorCode } from 'fluent-gen';
+import { FluentGen, isErr } from 'fluent-gen';
 
-try {
-  const result = await generator.generateBuilder('./types.ts', 'NonExistent');
+async function safeGenerate(file: string, type: string) {
+  const generator = new FluentGen();
 
-  if (!result.ok) {
-    const error = result.error as FluentGenError;
+  try {
+    const result = await generator.generateBuilder(file, type);
 
-    switch (error.code) {
-      case ErrorCode.TYPE_NOT_FOUND:
-        console.log('Interface not found');
-        break;
-      case ErrorCode.FILE_NOT_FOUND:
-        console.log('Source file not found');
-        break;
-      case ErrorCode.PARSE_ERROR:
-        console.log('TypeScript parsing failed');
-        break;
-      default:
-        console.log('Unknown error:', error.message);
+    if (isErr(result)) {
+      // Handle specific error types
+      if (result.error.message.includes('Type not found')) {
+        console.error(`Type '${type}' not found in ${file}`);
+      } else if (result.error.message.includes('File not found')) {
+        console.error(`File '${file}' does not exist`);
+      } else {
+        console.error('Unexpected error:', result.error);
+      }
+      return null;
     }
+
+    return result.value;
+  } catch (error) {
+    // This shouldn't happen with Result types
+    console.error('Unexpected exception:', error);
+    return null;
   }
-} catch (error) {
-  console.error('Unexpected error:', error);
 }
 ```
 
-## Configuration Management
+### Common Errors
 
-### Dynamic Configuration
+| Error                | Cause                                | Solution                                       |
+| -------------------- | ------------------------------------ | ---------------------------------------------- |
+| `Type not found`     | Type doesn't exist or isn't exported | Ensure type is exported and name is correct    |
+| `File not found`     | Invalid file path                    | Check file path is correct and relative to cwd |
+| `Invalid TypeScript` | Syntax errors in source file         | Fix TypeScript compilation errors              |
+| `Circular reference` | Complex circular dependencies        | Simplify type structure or use type aliases    |
+| `Max depth exceeded` | Very deep nested types               | Increase `maxDepth` option                     |
 
-```typescript
-const generator = new FluentGen();
+## Performance Optimization
 
-// Update configuration at runtime
-generator.setConfig({
-  useDefaults: false,
-  addComments: true,
-  indentSize: 4
-});
+### Caching
 
-// Get current configuration
-const config = generator.getConfig();
-console.log('Current config:', config);
-```
-
-### Environment-Based Configuration
+Enable caching for better performance with multiple generations:
 
 ```typescript
 const generator = new FluentGen({
-  outputDir: process.env.FLUENT_GEN_OUTPUT || './src/builders',
-  useDefaults: process.env.NODE_ENV !== 'production',
-  addComments: process.env.NODE_ENV === 'development'
+  cache: true, // Enable caching
 });
-```
 
-## Cache Management
+// First generation - builds cache
+await generator.generateBuilder('./types.ts', 'User');
 
-Fluent Gen includes sophisticated caching for performance:
+// Subsequent generations - uses cache
+await generator.generateBuilder('./types.ts', 'Product');
 
-```typescript
-// Clear all caches
+// Clear cache when needed
 generator.clearCache();
-
-// Get cache statistics
-const stats = generator.getCacheStats();
-console.log('Cache stats:', {
-  typeResolutionHits: stats.typeResolutionHits,
-  symbolResolutionHits: stats.symbolResolutionHits,
-  memoryUsage: stats.memoryUsage
-});
 ```
 
-## Build Tool Integration
+### Parallel Processing
 
-### Webpack Plugin
-
-```typescript
-// webpack.config.js
-const { FluentGenPlugin } = require('fluent-gen/webpack');
-
-module.exports = {
-  plugins: [
-    new FluentGenPlugin({
-      patterns: ['src/**/*.ts'],
-      outputDir: './src/builders',
-      watch: process.env.NODE_ENV === 'development'
-    })
-  ]
-};
-```
-
-### Vite Plugin
+Process multiple types in parallel:
 
 ```typescript
-// vite.config.ts
-import { fluentGen } from 'fluent-gen/vite';
+async function generateInParallel(types: Array<[string, string]>) {
+  const generator = new FluentGen({ cache: true });
 
-export default defineConfig({
-  plugins: [
-    fluentGen({
-      targets: [
-        { file: './src/types.ts', types: ['User', 'Product'] }
-      ]
-    })
-  ]
-});
-```
+  const promises = types.map(([file, type]) =>
+    generator.generateBuilder(file, type),
+  );
 
-### Rollup Plugin
+  const results = await Promise.all(promises);
 
-```typescript
-// rollup.config.js
-import { fluentGen } from 'fluent-gen/rollup';
-
-export default {
-  plugins: [
-    fluentGen({
-      configPath: './.fluentgenrc.json'
-    })
-  ]
-};
-```
-
-### Custom Build Integration
-
-```typescript
-// build.js
-import { FluentGen } from 'fluent-gen';
-import fs from 'fs/promises';
-import path from 'path';
-
-async function generateBuilders() {
-  const generator = new FluentGen({
-    outputDir: './dist/builders',
-    useDefaults: true
-  });
-
-  const targets = [
-    { file: './src/api/types.ts', types: ['ApiRequest', 'ApiResponse'] },
-    { file: './src/models/user.ts', types: ['User', 'UserProfile'] },
-    { file: './src/models/product.ts', types: ['Product', 'Category'] }
-  ];
-
-  for (const target of targets) {
-    const result = await generator.generateMultiple(target.file, target.types);
-
+  results.forEach((result, index) => {
     if (result.ok) {
-      for (const [typeName, code] of result.value) {
-        const outputPath = path.join('./dist/builders', `${typeName}.builder.ts`);
-        await fs.writeFile(outputPath, code);
-        console.log(`✓ Generated ${typeName} builder`);
-      }
+      console.log(`✓ Generated ${types[index][1]}`);
     } else {
-      console.error(`✗ Failed to generate ${target.file}:`, result.error.message);
-      process.exit(1);
+      console.error(`✗ Failed ${types[index][1]}`);
     }
-  }
+  });
 }
-
-generateBuilders().catch(console.error);
 ```
 
-## Advanced Usage
-
-### Custom Type Resolution
-
-```typescript
-import { TypeExtractor, ImportResolver } from 'fluent-gen/core';
-
-// Custom import resolution
-const customResolver = new ImportResolver({
-  pathMapping: {
-    '@/types': './src/types',
-    '@/models': './src/models'
-  }
-});
-
-const extractor = new TypeExtractor({
-  importResolver: customResolver,
-  followImports: true,
-  maxDepth: 10
-});
-
-const result = await extractor.extractType('./src/types.ts', 'ComplexType');
-```
-
-### Streaming Generation
+## Testing Generated Builders
 
 ```typescript
 import { FluentGen } from 'fluent-gen';
-import { Readable } from 'stream';
+import { beforeAll, describe, it, expect } from 'vitest';
 
-async function* generateStream(patterns: string[]) {
-  const generator = new FluentGen();
+describe('Builder Generation', () => {
+  let generator: FluentGen;
 
-  for (const pattern of patterns) {
-    const result = await generator.scanAndGenerate(pattern);
+  beforeAll(() => {
+    generator = new FluentGen({
+      useDefaults: true,
+      addComments: false,
+    });
+  });
 
+  it('should generate valid builder code', async () => {
+    const result = await generator.generateBuilder(
+      './test-types.ts',
+      'TestInterface',
+    );
+
+    expect(result.ok).toBe(true);
     if (result.ok) {
-      for (const [typeName, code] of result.value) {
-        yield { typeName, code };
-      }
+      expect(result.value).toContain('export function testInterfaceBuilder');
+      expect(result.value).toContain('withId');
+      expect(result.value).toContain('build()');
     }
-  }
-}
-
-// Usage
-for await (const { typeName, code } of generateStream(['src/**/*.ts'])) {
-  console.log(`Generated ${typeName}`);
-  // Process each builder as it's generated
-}
-```
-
-## Testing Integration
-
-### Jest Setup
-
-```typescript
-// jest.setup.ts
-import { FluentGen } from 'fluent-gen';
-
-// Global test generator
-global.testGenerator = new FluentGen({
-  useDefaults: true,
-  addComments: false
-});
-```
-
-### Test Utilities
-
-```typescript
-// test-utils.ts
-import { FluentGen } from 'fluent-gen';
-import { join } from 'path';
-
-export async function generateTestBuilder(
-  typeName: string,
-  sourceFile = 'test-types.ts'
-) {
-  const generator = new FluentGen({ useDefaults: true });
-  const filePath = join(__dirname, 'fixtures', sourceFile);
-
-  const result = await generator.generateBuilder(filePath, typeName);
-
-  if (!result.ok) {
-    throw new Error(`Failed to generate ${typeName}: ${result.error.message}`);
-  }
-
-  return result.value;
-}
-
-// Usage in tests
-describe('UserBuilder', () => {
-  it('should generate correct builder', async () => {
-    const code = await generateTestBuilder('User');
-    expect(code).toContain('withName');
-    expect(code).toContain('withEmail');
   });
 });
+```
+
+## Migration Guide
+
+### From v0.x to v1.x
+
+The API has been redesigned for v1.0:
+
+```typescript
+// Old API (v0.x)
+import { generateBuilderCode } from 'fluent-gen';
+
+const result = await generateBuilderCode({
+  filePath: './types.ts',
+  typeName: 'User',
+  outputPath: './user.builder.ts',
+});
+
+// New API (v1.x)
+import { FluentGen } from 'fluent-gen';
+
+const generator = new FluentGen();
+const result = await generator.generateToFile(
+  './types.ts',
+  'User',
+  './user.builder.ts',
+);
+```
+
+## API Reference Summary
+
+### Exports
+
+```typescript
+// Main API
+export { FluentGen } from 'fluent-gen';
+export type { FluentGenOptions } from 'fluent-gen';
+
+// Type extraction
+export { TypeExtractor } from 'fluent-gen';
+export type { TypeExtractorOptions } from 'fluent-gen';
+
+// Code generation
+export { BuilderGenerator } from 'fluent-gen';
+export type { GeneratorConfig } from 'fluent-gen';
+
+// Core types
+export type {
+  TypeInfo,
+  PropertyInfo,
+  TypeKind,
+  ResolvedType,
+  GenericParam,
+  IndexSignature,
+  GeneratorOptions,
+} from 'fluent-gen';
+
+// Result handling
+export { ok, err, isOk, isErr } from 'fluent-gen';
+export type { Result } from 'fluent-gen';
+
+// Plugin system
+export { PluginManager, HookType } from 'fluent-gen';
+export type {
+  Plugin,
+  ParseContext,
+  ResolveContext,
+  GenerateContext,
+} from 'fluent-gen';
+
+// Runtime utilities (for generated code)
+export {
+  FLUENT_BUILDER_SYMBOL,
+  isFluentBuilder,
+  isBuilderArray,
+  createNestedContext,
+  resolveValue,
+} from 'fluent-gen';
+export type { FluentBuilder, BaseBuildContext } from 'fluent-gen';
 ```
 
 ## Next Steps
 
-- [Explore practical examples](../examples/basic.md)
-- [Learn about plugin development](../api/plugins.md)
-- [Understand the type resolution system](../api/resolver.md)
-- [See the complete API reference](../api/overview.md)
+- Explore the [CLI documentation](./cli.md) for command-line usage
+- Learn about [configuration](./configuration.md) options
+- Check out [examples](../examples/basic.md) for common patterns
+- Read about [plugin development](../api/plugins.md) for extending fluent-gen

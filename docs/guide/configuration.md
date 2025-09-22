@@ -1,16 +1,20 @@
 # Configuration
 
-Fluent Gen offers flexible configuration options through configuration files, CLI arguments, and programmatic APIs. This guide covers all configuration aspects.
+fluent-gen offers flexible configuration options through configuration files,
+CLI arguments, and programmatic APIs. This guide covers all configuration
+aspects to help you customize the builder generation process.
 
 ## Configuration File
 
-Fluent Gen uses [cosmiconfig](https://github.com/davidtheclark/cosmiconfig) for configuration discovery. It searches for configuration in the following order:
+fluent-gen uses [cosmiconfig](https://github.com/davidtheclark/cosmiconfig) for
+configuration discovery. It searches for configuration in the following order:
 
-1. `.fluentgenrc.json`
-2. `.fluentgenrc.yaml` / `.fluentgenrc.yml`
-3. `.fluentgenrc.js` / `.fluentgenrc.cjs`
-4. `fluentgen.config.js` / `fluentgen.config.cjs` / `fluentgen.config.mjs`
-5. `fluent-gen` property in `package.json`
+1. `.fluentgenrc` (JSON or YAML)
+2. `.fluentgenrc.json`
+3. `.fluentgenrc.yaml` / `.fluentgenrc.yml`
+4. `.fluentgenrc.js` / `.fluentgenrc.cjs`
+5. `fluentgen.config.js` / `fluentgen.config.cjs`
+6. `package.json` (in a `"fluentgen"` property)
 
 ## Quick Setup
 
@@ -20,18 +24,7 @@ Initialize a configuration file:
 npx fluent-gen init
 ```
 
-This creates a `.fluentgenrc.json` file with defaults:
-
-```json
-{
-  "tsConfigPath": "./tsconfig.json",
-  "generator": {
-    "outputDir": "./src/builders",
-    "useDefaults": true,
-    "addComments": true
-  }
-}
-```
+This creates a `.fluentgenrc.json` file with sensible defaults.
 
 ## Configuration Schema
 
@@ -42,23 +35,20 @@ interface Config {
   // Path to TypeScript configuration file
   tsConfigPath?: string;
 
-  // Generator options
+  // Generator configuration options
   generator?: GeneratorConfig;
 
   // Target files and types to generate
   targets?: Target[];
 
-  // File patterns to scan
+  // Glob patterns to scan for types
   patterns?: string[];
 
   // Patterns to exclude from scanning
   exclude?: string[];
 
-  // Plugin paths to load
+  // Plugin file paths to load
   plugins?: string[];
-
-  // Watch mode options
-  watch?: WatchConfig;
 }
 ```
 
@@ -66,35 +56,20 @@ interface Config {
 
 ```typescript
 interface GeneratorConfig {
-  // Output directory for generated builders
+  // Default output directory for generated builders
   outputDir?: string;
 
-  // Generate default values for properties
+  // Generate default values for optional properties
   useDefaults?: boolean;
 
-  // Custom context type for builders
+  // Custom context type name for builders
   contextType?: string;
 
-  // Custom import path for context type
+  // Import path for the custom context type
   importPath?: string;
 
-  // Indentation size (spaces)
-  indentSize?: number;
-
-  // Use tabs instead of spaces
-  useTab?: boolean;
-
-  // Add JSDoc comments to generated code
+  // Include JSDoc comments in generated code
   addComments?: boolean;
-
-  // Custom file extension for builders
-  fileExtension?: string;
-
-  // Template for builder file names
-  fileNameTemplate?: string;
-
-  // Skip type checking on generated code
-  skipTypeCheck?: boolean;
 }
 ```
 
@@ -102,35 +77,14 @@ interface GeneratorConfig {
 
 ```typescript
 interface Target {
-  // Source file path
+  // Source file path containing types
   file: string;
 
-  // Type/interface names to generate
-  types: string[];
+  // Array of type/interface names to generate (optional)
+  types?: string[];
 
-  // Override output directory for this target
-  outputDir?: string;
-
-  // Override generator config for this target
-  generator?: Partial<GeneratorConfig>;
-}
-```
-
-### Watch Configuration
-
-```typescript
-interface WatchConfig {
-  // Enable watch mode
-  enabled?: boolean;
-
-  // Debounce delay in milliseconds
-  debounce?: number;
-
-  // Clear console on change
-  clearConsole?: boolean;
-
-  // Ignore patterns for watching
-  ignore?: string[];
+  // Custom output file for this target (optional)
+  outputFile?: string;
 }
 ```
 
@@ -138,11 +92,13 @@ interface WatchConfig {
 
 ### Basic Configuration
 
+A minimal configuration for most projects:
+
 ```json
 {
   "tsConfigPath": "./tsconfig.json",
   "generator": {
-    "outputDir": "./generated/builders",
+    "outputDir": "./src/builders",
     "useDefaults": true,
     "addComments": true
   }
@@ -151,89 +107,100 @@ interface WatchConfig {
 
 ### Multiple Targets
 
+Generate builders for specific types from multiple files:
+
 ```json
 {
+  "tsConfigPath": "./tsconfig.json",
   "generator": {
-    "outputDir": "./src/builders",
-    "useDefaults": true
+    "outputDir": "./src/generated/builders",
+    "useDefaults": true,
+    "addComments": true
   },
   "targets": [
     {
-      "file": "./src/models/user.ts",
+      "file": "src/types/user.ts",
       "types": ["User", "UserProfile", "UserSettings"]
     },
     {
-      "file": "./src/models/product.ts",
+      "file": "src/types/product.ts",
       "types": ["Product", "ProductVariant"],
-      "outputDir": "./src/builders/products"
+      "outputFile": "src/builders/product-builders.ts"
+    },
+    {
+      "file": "src/types/api.ts",
+      "types": ["ApiRequest", "ApiResponse"]
     }
   ]
 }
 ```
 
-### Pattern-Based Generation
+### Pattern-Based Scanning
+
+Use glob patterns to automatically find and generate builders:
 
 ```json
 {
+  "tsConfigPath": "./tsconfig.json",
   "generator": {
-    "outputDir": "./src/builders"
+    "outputDir": "./src/builders",
+    "useDefaults": false,
+    "addComments": true
   },
   "patterns": [
     "src/entities/**/*.ts",
-    "src/models/**/*.ts"
+    "src/models/**/*.interface.ts",
+    "src/types/*.ts"
   ],
   "exclude": [
     "**/*.test.ts",
     "**/*.spec.ts",
-    "**/index.ts"
+    "**/index.ts",
+    "**/node_modules/**"
   ]
 }
 ```
 
-### Custom Context Type
+### With Custom Context Type
+
+Configure builders to use a custom context type for dependency injection:
 
 ```json
 {
+  "tsConfigPath": "./tsconfig.json",
   "generator": {
     "outputDir": "./src/builders",
+    "useDefaults": true,
+    "addComments": true,
     "contextType": "BuildContext",
-    "importPath": "../context",
-    "useDefaults": true
-  }
+    "importPath": "@/contexts/build-context"
+  },
+  "targets": [
+    {
+      "file": "src/types/models.ts",
+      "types": ["User", "Order"]
+    }
+  ]
 }
 ```
 
-### Watch Mode Configuration
+### With Plugins
+
+Load custom plugins to extend generation behavior:
 
 ```json
 {
+  "tsConfigPath": "./tsconfig.json",
   "generator": {
-    "outputDir": "./src/builders"
+    "outputDir": "./src/builders",
+    "useDefaults": true,
+    "addComments": true
   },
-  "watch": {
-    "enabled": true,
-    "debounce": 500,
-    "clearConsole": true,
-    "ignore": [
-      "**/node_modules/**",
-      "**/*.test.ts"
-    ]
-  },
-  "patterns": ["src/**/*.ts"]
-}
-```
-
-### Plugin Configuration
-
-```json
-{
-  "generator": {
-    "outputDir": "./src/builders"
-  },
-  "plugins": [
-    "./plugins/custom-defaults.js",
-    "./plugins/validation.js",
-    "@company/fluent-gen-plugin"
+  "plugins": ["./plugins/custom-defaults.js", "./plugins/validation-plugin.js"],
+  "targets": [
+    {
+      "file": "src/types/domain.ts"
+    }
   ]
 }
 ```
@@ -242,120 +209,124 @@ interface WatchConfig {
 
 For dynamic configuration, use a JavaScript file:
 
+### CommonJS Format
+
 ```javascript
-// fluentgen.config.js
+// .fluentgenrc.js or fluentgen.config.js
 module.exports = {
   tsConfigPath: './tsconfig.json',
   generator: {
-    outputDir: process.env.NODE_ENV === 'test'
-      ? './test/builders'
-      : './src/builders',
+    outputDir:
+      process.env.NODE_ENV === 'test' ? './test/builders' : './src/builders',
     useDefaults: true,
-    addComments: process.env.NODE_ENV !== 'production'
+    addComments: process.env.NODE_ENV !== 'production',
   },
   targets: [
     {
-      file: './src/types.ts',
-      types: require('./src/types').exportedTypes
-    }
+      file: './src/types/user.ts',
+      types: ['User', 'UserProfile'],
+    },
+    {
+      file: './src/types/product.ts',
+      types: ['Product'],
+    },
   ],
-  plugins: process.env.FLUENT_GEN_PLUGINS?.split(',') || []
+  exclude: ['**/*.test.ts', '**/*.spec.ts'],
+  plugins: process.env.FLUENT_GEN_PLUGINS?.split(',') || [],
 };
 ```
 
-### ESM Configuration
+### Dynamic Target Resolution
 
 ```javascript
-// fluentgen.config.mjs
-export default {
+// fluentgen.config.js
+const fs = require('fs');
+const path = require('path');
+
+// Dynamically find all interface files
+function findInterfaceFiles(dir) {
+  const files = [];
+  const items = fs.readdirSync(dir);
+
+  for (const item of items) {
+    const fullPath = path.join(dir, item);
+    const stat = fs.statSync(fullPath);
+
+    if (stat.isDirectory() && item !== 'node_modules') {
+      files.push(...findInterfaceFiles(fullPath));
+    } else if (item.endsWith('.interface.ts')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+module.exports = {
   tsConfigPath: './tsconfig.json',
   generator: {
     outputDir: './src/builders',
-    useDefaults: true
+    useDefaults: true,
+    addComments: true,
   },
-  async targets() {
-    // Dynamic target resolution
-    const files = await glob('src/**/*.interface.ts');
-    return files.map(file => ({
-      file,
-      types: ['*'] // Generate all exports
-    }));
-  }
+  targets: findInterfaceFiles('./src').map(file => ({
+    file,
+    // Generate all exported types from each file
+    types: undefined,
+  })),
 };
 ```
 
 ## Package.json Configuration
 
+You can also configure fluent-gen in your `package.json`:
+
 ```json
 {
   "name": "my-project",
-  "fluent-gen": {
+  "version": "1.0.0",
+  "fluentgen": {
+    "tsConfigPath": "./tsconfig.json",
     "generator": {
       "outputDir": "./src/builders",
-      "useDefaults": true
+      "useDefaults": true,
+      "addComments": true
     },
     "targets": [
       {
-        "file": "./src/types.ts",
-        "types": ["User", "Product"]
+        "file": "./src/types/models.ts",
+        "types": ["User", "Product", "Order"]
       }
-    ]
+    ],
+    "exclude": ["**/*.test.ts", "**/*.spec.ts"]
   }
 }
 ```
 
-## Environment Variables
+## Configuration Priority
 
-Fluent Gen supports environment variable overrides:
+Configuration sources are merged with the following priority (highest to
+lowest):
 
-```bash
-# Override output directory
-FLUENT_GEN_OUTPUT_DIR=./dist/builders npx fluent-gen batch
+1. CLI arguments
+2. Environment variables
+3. Configuration file
+4. Default values
 
-# Override TypeScript config
-FLUENT_GEN_TS_CONFIG=./tsconfig.build.json npx fluent-gen batch
-
-# Enable debug mode
-FLUENT_GEN_DEBUG=true npx fluent-gen generate ./src/types.ts User
-
-# Disable comments in CI
-FLUENT_GEN_NO_COMMENTS=true npx fluent-gen batch
-```
-
-### Supported Environment Variables
-
-- `FLUENT_GEN_OUTPUT_DIR` - Override output directory
-- `FLUENT_GEN_TS_CONFIG` - Override TypeScript config path
-- `FLUENT_GEN_DEBUG` - Enable debug logging
-- `FLUENT_GEN_NO_COMMENTS` - Disable JSDoc comments
-- `FLUENT_GEN_NO_DEFAULTS` - Disable default value generation
-- `FLUENT_GEN_INDENT_SIZE` - Override indentation size
-- `FLUENT_GEN_USE_TABS` - Use tabs instead of spaces
-- `FLUENT_GEN_FILE_EXTENSION` - Override file extension
-
-## CLI Option Overrides
-
-CLI options override configuration file settings:
+Example:
 
 ```bash
-# Override output directory
-npx fluent-gen batch --output ./dist/builders
+# CLI argument overrides config file
+npx fluent-gen generate src/types.ts User --defaults
 
-# Override TypeScript config
-npx fluent-gen batch --tsconfig ./tsconfig.build.json
-
-# Disable defaults
-npx fluent-gen generate ./src/types.ts User --no-defaults
-
-# Custom indentation
-npx fluent-gen batch --indent-size 4 --use-tabs
+# Even if .fluentgenrc.json has useDefaults: false
 ```
 
-## Generator Options
+## Generator Options Explained
 
-### Output Directory
+### outputDir
 
-Controls where generated files are placed:
+Specifies the default directory where generated builder files are saved.
 
 ```json
 {
@@ -365,11 +336,12 @@ Controls where generated files are placed:
 }
 ```
 
-Files are generated as: `{outputDir}/{TypeName}.builder.ts`
+- Files are generated as: `{outputDir}/{TypeName}.builder.ts`
+- Can be overridden per-target or via CLI
 
-### Use Defaults
+### useDefaults
 
-Generates smart default values for properties:
+Controls whether to generate default values for optional properties.
 
 ```json
 {
@@ -379,16 +351,18 @@ Generates smart default values for properties:
 }
 ```
 
-Default values by type:
+When enabled, generates smart defaults:
+
 - `string`: `""`
 - `number`: `0`
 - `boolean`: `false`
-- Arrays: `[]`
-- Objects: `{}`
+- `array`: `[]`
+- `object`: `{}`
+- `Date`: `new Date()`
 
-### Add Comments
+### addComments
 
-Preserves JSDoc comments from source:
+Preserves JSDoc comments from the source types in generated code.
 
 ```json
 {
@@ -398,82 +372,104 @@ Preserves JSDoc comments from source:
 }
 ```
 
-### Custom Context Type
+Example output with comments:
 
-Define a custom context type for builders:
+```typescript
+/**
+ * Sets the user's email address
+ * @param value - Valid email address
+ */
+withEmail(value: string): this {
+  this.email = value;
+  return this;
+}
+```
+
+### contextType & importPath
+
+Define a custom context type for builders to enable dependency injection or
+shared state.
 
 ```json
 {
   "generator": {
-    "contextType": "MyBuildContext",
+    "contextType": "BuildContext",
     "importPath": "@/contexts/build-context"
   }
 }
 ```
 
-Generated code will use:
+Generated code will include:
+
 ```typescript
-import { MyBuildContext } from '@/contexts/build-context';
+import type { BuildContext } from '@/contexts/build-context';
 
-export interface UserBuilder extends FluentBuilder<User, MyBuildContext> {
-  // ...
+export interface UserBuilder {
+  build(context?: BuildContext): User;
 }
 ```
 
-### File Naming
+## CLI Option Overrides
 
-Customize generated file names:
+CLI options can override configuration file settings:
+
+```bash
+# Override output directory
+npx fluent-gen generate src/types.ts User -o ./custom/output.ts
+
+# Override TypeScript config
+npx fluent-gen batch --tsconfig ./tsconfig.build.json
+
+# Force defaults even if config says false
+npx fluent-gen generate src/types.ts User --defaults
+
+# Disable comments for this run
+npx fluent-gen batch --no-comments
+```
+
+## Plugin Configuration
+
+Plugins extend fluent-gen's functionality. They can be npm packages or local
+files:
 
 ```json
 {
-  "generator": {
-    "fileExtension": ".generated.ts",
-    "fileNameTemplate": "{type}.builder{ext}"
-  }
+  "plugins": ["./plugins/my-plugin.js", "@company/fluent-gen-plugin-validators"]
 }
 ```
 
-Variables:
-- `{type}` - Type name (lowercase)
-- `{Type}` - Type name (original case)
-- `{ext}` - File extension
-
-### Code Formatting
-
-Control code formatting:
-
-```json
-{
-  "generator": {
-    "indentSize": 2,
-    "useTab": false
-  }
-}
-```
-
-## Advanced Configuration
-
-### Conditional Configuration
+Plugin file structure:
 
 ```javascript
-// fluentgen.config.js
-const isDevelopment = process.env.NODE_ENV === 'development';
-const isCI = process.env.CI === 'true';
-
+// plugins/my-plugin.js
 module.exports = {
-  generator: {
-    outputDir: isDevelopment ? './dev/builders' : './src/builders',
-    addComments: !isCI,
-    useDefaults: true,
-    skipTypeCheck: isCI
+  name: 'my-custom-plugin',
+  hooks: {
+    afterPropertyGeneration: async context => {
+      // Modify generated properties
+      return { continue: true, data: context.properties };
+    },
   },
-  watch: {
-    enabled: isDevelopment && !isCI
-  }
 };
 ```
 
-### Multi-Environment Configuration
+## Environment-Specific Configuration
+
+### Using Environment Variables
+
+```javascript
+// fluentgen.config.js
+module.exports = {
+  tsConfigPath: process.env.TS_CONFIG || './tsconfig.json',
+  generator: {
+    outputDir: process.env.BUILD_DIR || './src/builders',
+    useDefaults: process.env.NODE_ENV !== 'production',
+    addComments: process.env.NODE_ENV === 'development',
+  },
+};
+```
+
+### Multiple Configurations
 
 ```javascript
 // fluentgen.config.js
@@ -481,86 +477,43 @@ const configs = {
   development: {
     generator: {
       outputDir: './dev/builders',
+      useDefaults: true,
       addComments: true,
-      useDefaults: true
-    }
+    },
   },
   production: {
     generator: {
       outputDir: './dist/builders',
-      addComments: false,
       useDefaults: false,
-      skipTypeCheck: true
-    }
+      addComments: false,
+    },
   },
   test: {
     generator: {
       outputDir: './test/builders',
-      useDefaults: true
-    }
-  }
+      useDefaults: true,
+      addComments: false,
+    },
+  },
 };
 
 module.exports = configs[process.env.NODE_ENV || 'development'];
 ```
 
-### Workspace Configuration
-
-For monorepos:
-
-```javascript
-// fluentgen.config.js (root)
-module.exports = {
-  projects: [
-    {
-      name: 'app',
-      root: './packages/app',
-      config: {
-        generator: {
-          outputDir: './packages/app/src/builders'
-        }
-      }
-    },
-    {
-      name: 'lib',
-      root: './packages/lib',
-      config: {
-        generator: {
-          outputDir: './packages/lib/src/builders'
-        }
-      }
-    }
-  ]
-};
-```
-
-## Validation
-
-Fluent Gen validates configuration using Zod schemas. Invalid configurations will produce clear error messages:
-
-```
-Error: Invalid configuration
-  - generator.indentSize: Expected number, received string
-  - targets[0].file: Required field missing
-  - patterns: Expected array, received string
-```
-
 ## Best Practices
 
-### 1. Version Control
+### 1. Commit Configuration
 
-Commit your configuration file:
+Always commit your configuration file to version control:
+
 ```bash
 git add .fluentgenrc.json
 ```
 
-Consider generated files:
-- **Commit** if builders are stable and rarely change
-- **Ignore** if generating as part of build process
+### 2. Use Relative Paths
 
-### 2. Consistent Paths
+Use paths relative to the project root:
 
-Use relative paths from project root:
 ```json
 {
   "tsConfigPath": "./tsconfig.json",
@@ -570,28 +523,57 @@ Use relative paths from project root:
 }
 ```
 
-### 3. Environment-Specific Config
+### 3. Document Custom Settings
 
-Use JavaScript config for environment-specific settings:
+Add comments to explain non-obvious configurations:
+
 ```javascript
+// fluentgen.config.js
 module.exports = {
   generator: {
-    outputDir: process.env.BUILD_DIR || './src/builders'
-  }
+    // Using custom context for dependency injection
+    contextType: 'DIContext',
+    importPath: '@/di/context',
+  },
 };
 ```
 
-### 4. Documentation
+### 4. Separate Generated Code
 
-Document custom configurations:
+Keep generated code in a dedicated directory:
+
 ```json
 {
-  "_comment": "Custom context for dependency injection",
   "generator": {
-    "contextType": "DIContext",
-    "importPath": "@/di/context"
+    "outputDir": "./src/generated/builders"
   }
 }
+```
+
+### 5. Gitignore Strategy
+
+Consider your gitignore strategy:
+
+```bash
+# .gitignore
+
+# Option 1: Commit generated builders (stable, rarely change)
+# No entry needed
+
+# Option 2: Ignore generated builders (regenerate on build)
+src/generated/builders/
+```
+
+## Validation
+
+fluent-gen validates configuration using Zod schemas. Invalid configurations
+produce clear error messages:
+
+```
+Error: Invalid configuration
+  - generator.useDefaults: Expected boolean, received string
+  - targets[0].file: Required field missing
+  - patterns: Expected array, received string
 ```
 
 ## Troubleshooting
@@ -602,27 +584,56 @@ Document custom configurations:
 Error: No configuration file found
 ```
 
-Solution: Run `npx fluent-gen init` or create `.fluentgenrc.json` manually.
+**Solution**: Run `npx fluent-gen init` or create `.fluentgenrc.json` manually.
 
-### Invalid Configuration
+### Invalid JSON Syntax
 
 ```bash
-Error: Configuration validation failed
+Error: Failed to parse configuration file
 ```
 
-Solution: Check configuration against schema, ensure proper JSON syntax.
+**Solution**: Validate JSON syntax using a JSON validator or editor.
 
 ### Path Resolution Issues
 
 ```bash
-Error: Cannot resolve path './src/types.ts'
+Error: Cannot find file './src/types.ts'
 ```
 
-Solution: Use paths relative to configuration file location.
+**Solution**: Ensure paths are relative to the configuration file location.
+
+### Type Not Found
+
+```bash
+Error: Type 'User' not found in file
+```
+
+**Solution**: Ensure the type is exported and the name matches exactly
+(case-sensitive).
+
+## Migration from Older Versions
+
+If migrating from an older configuration format:
+
+```javascript
+// Old format (pre-1.0)
+{
+  "outputPath": "./builders",
+  "includeDefaults": true
+}
+
+// New format (1.0+)
+{
+  "generator": {
+    "outputDir": "./builders",
+    "useDefaults": true
+  }
+}
+```
 
 ## Next Steps
 
-- [Learn CLI commands](./cli.md)
-- [Set up programmatic usage](./api.md)
-- [Create custom plugins](../api/plugins.md)
-- [See configuration examples](../examples/basic.md)
+- [Learn CLI commands](./cli.md) - Master the command-line interface
+- [Explore the API](./api.md) - Use fluent-gen programmatically
+- [Create plugins](../api/plugins.md) - Extend fluent-gen functionality
+- [View examples](../examples/basic.md) - See real-world configurations
