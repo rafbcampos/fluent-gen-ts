@@ -1,6 +1,8 @@
 # Type Resolution System
 
-The type resolution system is the core component that analyzes TypeScript code and extracts type information. It handles complex scenarios including generics, utility types, circular references, and conditional types.
+The type resolution system analyzes TypeScript code and extracts comprehensive
+type information for fluent builder generation. It handles complex scenarios
+including generics, utility types, circular references, and conditional types.
 
 ## Architecture Overview
 
@@ -8,772 +10,673 @@ The type resolution system consists of multiple specialized components:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                Type Extractor                       │
+│                 TypeExtractor                       │
+│              (Main Interface)                       │
 ├─────────────────────────────────────────────────────┤
-│    Parser    │   Resolver   │   Import Resolver    │
-├──────────────┼──────────────┼──────────────────────┤
-│  Utility     │  Conditional │   Mapped Type        │
-│  Expander    │  Resolver    │   Resolver           │
-├──────────────┼──────────────┼──────────────────────┤
-│           Template Literal Resolver               │
+│    TypeScriptParser    │      TypeResolver          │
+│   (AST Parsing)        │   (Type Resolution)        │
+├─────────────────────────────────────────────────────┤
+│  UtilityExpander │ ConditionalResolver │ MappedResolver │
+├─────────────────────────────────────────────────────┤
+│        TemplateLiteralResolver │ ImportResolver      │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Main Type Extraction API
+## TypeExtractor Class
 
-### extractTypeInfo
+The main interface for TypeScript type analysis and extraction:
 
-The primary function for extracting type information:
+### Constructor
 
 ```typescript
-async function extractTypeInfo(
+constructor(options?: TypeExtractorOptions)
+```
+
+**Options:**
+
+```typescript
+interface TypeExtractorOptions {
+  tsConfigPath?: string; // Path to tsconfig.json
+  cache?: TypeResolutionCache; // Custom cache instance
+  pluginManager?: PluginManager; // Plugin manager for hooks
+  maxDepth?: number; // Maximum resolution depth (1-100)
+}
+```
+
+### Core Extraction Methods
+
+#### extractType()
+
+Extracts complete type information for a single type:
+
+```typescript
+async extractType(
   filePath: string,
-  typeName: string,
-  options?: TypeExtractionOptions
-): Promise<Result<TypeInfo>>
+  typeName: string
+): Promise<Result<ResolvedType>>
 ```
 
 **Parameters:**
-- `filePath` - Path to TypeScript file containing the type
-- `typeName` - Name of the interface or type to extract
-- `options` - Optional extraction configuration
 
-**Returns:** `Result<TypeInfo>` containing the resolved type information
+- `filePath` - Path to TypeScript file containing the type (`.ts`, `.tsx`, or
+  `.d.ts`)
+- `typeName` - Name of the interface, type alias, or class to extract
+
+**Returns:** `Result<ResolvedType>` containing complete type information
 
 **Example:**
-```typescript
-import { extractTypeInfo } from 'fluent-gen';
 
-const result = await extractTypeInfo('./types.ts', 'User');
+```typescript
+import { TypeExtractor } from 'fluent-gen-ts';
+
+const extractor = new TypeExtractor({
+  tsConfigPath: './tsconfig.json',
+  maxDepth: 10,
+});
+
+const result = await extractor.extractType('./src/types.ts', 'User');
 
 if (result.ok) {
-  console.log('Type info:', result.value);
-  console.log('Properties:', result.value.properties);
+  const resolvedType = result.value;
+  console.log('Type name:', resolvedType.name);
+  console.log('Source file:', resolvedType.sourceFile);
+  console.log('Type info:', resolvedType.typeInfo);
+  console.log('Dependencies:', resolvedType.dependencies);
 } else {
-  console.error('Failed to extract type:', result.error.message);
+  console.error('Extraction failed:', result.error.message);
 }
 ```
 
-### TypeExtractionOptions
+#### extractMultiple()
+
+Extracts multiple types from the same file in a single operation:
 
 ```typescript
-interface TypeExtractionOptions {
-  // TypeScript configuration
-  tsConfigPath?: string;           // Path to tsconfig.json
-  compilerOptions?: CompilerOptions; // Override compiler options
+async extractMultiple(
+  filePath: string,
+  typeNames: string[]
+): Promise<Result<ResolvedType[]>>
+```
 
-  // Resolution options
-  followImports?: boolean;         // Follow imported types (default: true)
-  maxDepth?: number;              // Maximum resolution depth (default: 10)
-  resolveGenerics?: boolean;      // Resolve generic parameters (default: true)
+**Parameters:**
 
-  // Caching options
-  cacheEnabled?: boolean;         // Enable type resolution caching (default: true)
-  cacheTTL?: number;             // Cache time-to-live in ms (default: 300000)
+- `filePath` - Source TypeScript file path
+- `typeNames` - Array of type names to extract
 
-  // Plugin options
-  plugins?: Plugin[];            // Type resolution plugins
-  customResolvers?: TypeResolver[]; // Custom type resolvers
+**Returns:** `Result<ResolvedType[]>` with extracted types in the same order
+
+**Example:**
+
+```typescript
+const result = await extractor.extractMultiple('./types.ts', [
+  'User',
+  'Post',
+  'Comment',
+]);
+
+if (result.ok) {
+  for (const resolvedType of result.value) {
+    console.log(`Extracted: ${resolvedType.name}`);
+  }
 }
 ```
 
-**Example with Options:**
+#### scanFile()
+
+Scans a TypeScript file and returns all available type names:
+
 ```typescript
-const result = await extractTypeInfo('./types.ts', 'User', {
-  followImports: true,
-  maxDepth: 15,
-  resolveGenerics: true,
-  cacheEnabled: true,
-  tsConfigPath: './tsconfig.json'
-});
+async scanFile(filePath: string): Promise<Result<string[]>>
 ```
 
-## Type Resolution Components
+**Parameters:**
 
-### TypeExtractor
+- `filePath` - TypeScript file to scan
 
-The main orchestrator for type extraction:
+**Returns:** `Result<string[]>` with names of all interfaces and type aliases
+
+**Example:**
 
 ```typescript
-class TypeExtractor {
-  constructor(options?: TypeExtractionOptions);
+const result = await extractor.scanFile('./src/models.ts');
 
-  async extractType(filePath: string, typeName: string): Promise<Result<TypeInfo>>;
-  async extractMultiple(filePath: string, typeNames: string[]): Promise<Result<Map<string, TypeInfo>>>;
-  async scanFile(filePath: string): Promise<Result<TypeDeclaration[]>>;
-
-  // Configuration
-  setOptions(options: Partial<TypeExtractionOptions>): void;
-  getOptions(): TypeExtractionOptions;
-
-  // Cache management
-  clearCache(): void;
-  getCacheStats(): CacheStats;
+if (result.ok) {
+  console.log('Available types:', result.value);
+  // Output: ['User', 'Post', 'Comment', 'Category']
 }
 ```
 
-### Parser
+### Cache Management
 
-Handles TypeScript AST parsing and initial analysis:
+#### clearCache()
+
+Clears the type resolution cache and resets internal state:
 
 ```typescript
-class Parser {
-  parseFile(filePath: string): Result<SourceFile>;
-  findTypeDeclaration(sourceFile: SourceFile, typeName: string): Result<TypeNode>;
-  extractJSDoc(node: Node): string | undefined;
-  getTypeParameters(node: TypeNode): GenericParameter[];
+clearCache(): void
+```
+
+**Usage:**
+
+```typescript
+// Clear cache before processing unrelated files
+extractor.clearCache();
+
+// Or periodically in long-running processes
+setInterval(() => {
+  extractor.clearCache();
+}, 60000); // Every minute
+```
+
+## ResolvedType Interface
+
+Complete type information returned by extraction:
+
+```typescript
+interface ResolvedType {
+  readonly sourceFile: string; // Absolute path to source file
+  readonly name: string; // Type name
+  readonly typeInfo: TypeInfo; // Detailed type structure
+  readonly imports: readonly string[]; // Required import paths
+  readonly dependencies: readonly ResolvedType[]; // Dependent types
 }
 ```
 
-### Resolver
-
-Core type resolution logic:
+### Example ResolvedType
 
 ```typescript
-class Resolver {
-  resolveType(typeNode: TypeNode, context: ResolutionContext): Result<TypeInfo>;
-  resolveTypeReference(node: TypeReferenceNode, context: ResolutionContext): Result<TypeInfo>;
-  resolveUnionType(node: UnionTypeNode, context: ResolutionContext): Result<UnionTypeInfo>;
-  resolveIntersectionType(node: IntersectionTypeNode, context: ResolutionContext): Result<IntersectionTypeInfo>;
+// For: interface User { name: string; posts: Post[]; }
+{
+  sourceFile: "/path/to/types.ts",
+  name: "User",
+  typeInfo: {
+    kind: TypeKind.Object,
+    properties: [
+      {
+        name: "name",
+        type: { kind: TypeKind.Primitive, name: "string" },
+        optional: false,
+        readonly: false
+      },
+      {
+        name: "posts",
+        type: {
+          kind: TypeKind.Array,
+          elementType: { kind: TypeKind.Reference, name: "Post" }
+        },
+        optional: false,
+        readonly: false
+      }
+    ]
+  },
+  imports: ["./post"],
+  dependencies: [/* Post ResolvedType */]
 }
 ```
 
-### ImportResolver
+## TypeInfo System
 
-Manages TypeScript import resolution:
+The core discriminated union representing all TypeScript types:
 
-```typescript
-class ImportResolver {
-  resolveImport(importPath: string, fromFile: string): Promise<Result<ResolvedImport>>;
-  resolveTypeImport(typeName: string, fromFile: string): Promise<Result<TypeImport>>;
-  getExports(filePath: string): Promise<Result<ExportInfo[]>>;
-}
-```
-
-## TypeInfo Types
-
-### Base TypeInfo
-
-All type information extends this base interface:
+### Object Types
 
 ```typescript
-interface BaseTypeInfo {
-  kind: TypeKind;
-  optional?: boolean;
-  readonly?: boolean;
-  jsDoc?: string;
-  sourceLocation?: SourceLocation;
-}
-
-enum TypeKind {
-  Primitive = 'primitive',
-  Object = 'object',
-  Array = 'array',
-  Union = 'union',
-  Intersection = 'intersection',
-  Generic = 'generic',
-  Conditional = 'conditional',
-  Mapped = 'mapped',
-  TemplateLiteral = 'template-literal',
-  Tuple = 'tuple',
-  Function = 'function',
-  Unknown = 'unknown'
-}
-```
-
-### PrimitiveTypeInfo
-
-Represents primitive TypeScript types:
-
-```typescript
-interface PrimitiveTypeInfo extends BaseTypeInfo {
-  kind: 'primitive';
-  name: 'string' | 'number' | 'boolean' | 'bigint' | 'symbol' | 'undefined' | 'null' | 'void' | 'any' | 'unknown' | 'never';
-  literalValue?: string | number | boolean; // For literal types
-}
-```
-
-**Examples:**
-- `string` → `{ kind: 'primitive', name: 'string' }`
-- `42` → `{ kind: 'primitive', name: 'number', literalValue: 42 }`
-- `'hello'` → `{ kind: 'primitive', name: 'string', literalValue: 'hello' }`
-
-### ObjectTypeInfo
-
-Represents object types and interfaces:
-
-```typescript
-interface ObjectTypeInfo extends BaseTypeInfo {
-  kind: 'object';
-  properties: PropertyInfo[];
-  indexSignatures?: IndexSignatureInfo[];
-  callSignatures?: CallSignatureInfo[];
-  constructSignatures?: ConstructSignatureInfo[];
+interface ObjectTypeInfo {
+  kind: TypeKind.Object;
+  name?: string; // Interface/class name
+  properties: readonly PropertyInfo[];
+  genericParams?: readonly GenericParam[];
+  indexSignature?: IndexSignature;
+  unresolvedGenerics?: readonly GenericParam[];
+  typeArguments?: readonly TypeInfo[];
 }
 
 interface PropertyInfo {
-  name: string;
-  type: TypeInfo;
-  optional: boolean;
-  readonly: boolean;
-  jsDoc?: string;
-  defaultValue?: any;
+  readonly name: string;
+  readonly type: TypeInfo;
+  readonly optional: boolean;
+  readonly readonly: boolean;
+  readonly jsDoc?: string; // JSDoc comments
 }
 ```
 
-**Example:**
+### Primitive Types
+
 ```typescript
-interface User {
-  id: string;
-  name: string;
-  age?: number;
+interface PrimitiveTypeInfo {
+  kind: TypeKind.Primitive;
+  name: string; // 'string', 'number', 'boolean', etc.
+  literal?: unknown; // For literal types: 'hello', 42, true
+}
+```
+
+### Array Types
+
+```typescript
+interface ArrayTypeInfo {
+  kind: TypeKind.Array;
+  elementType: TypeInfo; // Type of array elements
+}
+```
+
+### Union Types
+
+```typescript
+interface UnionTypeInfo {
+  kind: TypeKind.Union;
+  unionTypes: readonly TypeInfo[]; // All union members
+}
+```
+
+### Generic Types
+
+```typescript
+interface GenericTypeInfo {
+  kind: TypeKind.Generic;
+  name: string; // Generic parameter name
+  typeArguments?: readonly TypeInfo[];
+  constraint?: TypeInfo; // 'extends' constraint
+  default?: TypeInfo; // Default type
+  unresolvedGenerics?: readonly GenericParam[];
 }
 
-// Resolves to:
+interface GenericParam {
+  readonly name: string;
+  readonly constraint?: TypeInfo;
+  readonly default?: TypeInfo;
+}
+```
+
+### Reference Types
+
+```typescript
+interface ReferenceTypeInfo {
+  kind: TypeKind.Reference;
+  name: string; // Referenced type name
+  typeArguments?: readonly TypeInfo[]; // Generic arguments
+}
+```
+
+### Conditional Types
+
+```typescript
+interface ConditionalTypeInfo {
+  kind: TypeKind.Conditional;
+  checkType: TypeInfo; // T in 'T extends U ? X : Y'
+  extendsType: TypeInfo; // U in 'T extends U ? X : Y'
+  trueType: TypeInfo; // X in 'T extends U ? X : Y'
+  falseType: TypeInfo; // Y in 'T extends U ? X : Y'
+  inferredTypes?: Record<string, TypeInfo>; // Inferred type variables
+}
+```
+
+### Other Types
+
+```typescript
+// Tuple types: [string, number]
+interface TupleTypeInfo {
+  kind: TypeKind.Tuple;
+  elements: readonly TypeInfo[];
+}
+
+// Enum types
+interface EnumTypeInfo {
+  kind: TypeKind.Enum;
+  name: string;
+  values?: readonly unknown[];
+}
+
+// Utility types
+interface KeyofTypeInfo {
+  kind: TypeKind.Keyof;
+  target: TypeInfo; // keyof T
+}
+
+interface TypeofTypeInfo {
+  kind: TypeKind.Typeof;
+  target: TypeInfo; // typeof x
+}
+
+// Index access: T[K]
+interface IndexTypeInfo {
+  kind: TypeKind.Index;
+  object: TypeInfo; // T
+  index: TypeInfo; // K
+}
+```
+
+## Type Resolution Features
+
+### Generics Resolution
+
+Handles complex generic scenarios:
+
+```typescript
+// Source TypeScript
+interface Container<T, U = string> {
+  value: T;
+  metadata: U;
+  items: T[];
+}
+
+// Resolved TypeInfo
 {
-  kind: 'object',
+  kind: TypeKind.Object,
+  name: "Container",
+  genericParams: [
+    { name: "T" },
+    { name: "U", default: { kind: TypeKind.Primitive, name: "string" } }
+  ],
   properties: [
-    { name: 'id', type: { kind: 'primitive', name: 'string' }, optional: false },
-    { name: 'name', type: { kind: 'primitive', name: 'string' }, optional: false },
-    { name: 'age', type: { kind: 'primitive', name: 'number' }, optional: true }
+    {
+      name: "value",
+      type: { kind: TypeKind.Generic, name: "T" }
+    },
+    {
+      name: "metadata",
+      type: { kind: TypeKind.Generic, name: "U" }
+    },
+    {
+      name: "items",
+      type: {
+        kind: TypeKind.Array,
+        elementType: { kind: TypeKind.Generic, name: "T" }
+      }
+    }
   ]
 }
 ```
 
-### ArrayTypeInfo
+### Utility Types
 
-Represents array and tuple types:
-
-```typescript
-interface ArrayTypeInfo extends BaseTypeInfo {
-  kind: 'array';
-  elementType: TypeInfo;
-  isReadonly?: boolean;
-}
-
-interface TupleTypeInfo extends BaseTypeInfo {
-  kind: 'tuple';
-  elements: TypeInfo[];
-  restElement?: TypeInfo;
-}
-```
-
-**Examples:**
-- `string[]` → `{ kind: 'array', elementType: { kind: 'primitive', name: 'string' } }`
-- `[string, number]` → `{ kind: 'tuple', elements: [string_type, number_type] }`
-
-### UnionTypeInfo
-
-Represents union types:
+Supports TypeScript utility types:
 
 ```typescript
-interface UnionTypeInfo extends BaseTypeInfo {
-  kind: 'union';
-  types: TypeInfo[];
-  discriminant?: string; // For discriminated unions
-}
-```
-
-**Examples:**
-- `string | number` → `{ kind: 'union', types: [string_type, number_type] }`
-- `'success' | 'error'` → Union of string literals
-
-### GenericTypeInfo
-
-Represents generic types with parameters:
-
-```typescript
-interface GenericTypeInfo extends BaseTypeInfo {
-  kind: 'generic';
-  name: string;
-  typeParameters: GenericParameter[];
-  baseType: TypeInfo;
-  constraints?: TypeInfo[];
-}
-
-interface GenericParameter {
-  name: string;
-  constraint?: TypeInfo;
-  default?: TypeInfo;
-}
-```
-
-**Example:**
-```typescript
-interface ApiResponse<T = any, E = Error> {
-  data: T;
-  error?: E;
-}
-
-// Resolves to GenericTypeInfo with:
-// typeParameters: [
-//   { name: 'T', default: any_type },
-//   { name: 'E', default: Error_type }
-// ]
-```
-
-## Advanced Type Resolution
-
-### Utility Type Expansion
-
-The `UtilityTypeExpander` handles TypeScript utility types:
-
-```typescript
-class UtilityTypeExpander {
-  expandPick<T, K extends keyof T>(baseType: TypeInfo, keys: string[]): Result<TypeInfo>;
-  expandOmit<T, K extends keyof T>(baseType: TypeInfo, keys: string[]): Result<TypeInfo>;
-  expandPartial<T>(baseType: TypeInfo): Result<TypeInfo>;
-  expandRequired<T>(baseType: TypeInfo): Result<TypeInfo>;
-  expandRecord<K extends string, T>(keyType: TypeInfo, valueType: TypeInfo): Result<TypeInfo>;
-}
-```
-
-**Supported Utility Types:**
-- `Pick<T, K>` - Select subset of properties
-- `Omit<T, K>` - Exclude properties
-- `Partial<T>` - Make all properties optional
-- `Required<T>` - Make all properties required
-- `Record<K, V>` - Create object type with specific key-value types
-- `Exclude<T, U>` - Exclude from union
-- `Extract<T, U>` - Extract from union
-- `NonNullable<T>` - Remove null and undefined
-- `ReturnType<T>` - Extract function return type
-- `Parameters<T>` - Extract function parameter types
-
-**Example:**
-```typescript
-// Type: Pick<User, 'id' | 'name'>
-const result = await extractTypeInfo('./types.ts', 'UserSummary');
-
-// Automatically expands to:
+// Pick<User, 'name' | 'email'>
 {
-  kind: 'object',
+  kind: TypeKind.Object,
   properties: [
-    { name: 'id', type: string_type },
-    { name: 'name', type: string_type }
+    { name: "name", type: { kind: TypeKind.Primitive, name: "string" } },
+    { name: "email", type: { kind: TypeKind.Primitive, name: "string" } }
+  ]
+}
+
+// Partial<User>
+{
+  kind: TypeKind.Object,
+  properties: [
+    { name: "name", type: { kind: TypeKind.Primitive, name: "string" }, optional: true },
+    { name: "email", type: { kind: TypeKind.Primitive, name: "string" }, optional: true }
   ]
 }
 ```
 
-### Conditional Type Resolution
+### Conditional Types
 
-The `ConditionalTypeResolver` handles conditional types:
+Resolves complex conditional logic:
 
 ```typescript
-class ConditionalTypeResolver {
-  resolveConditional(
-    checkType: TypeInfo,
-    extendsType: TypeInfo,
-    trueType: TypeInfo,
-    falseType: TypeInfo,
-    context: ResolutionContext
-  ): Result<TypeInfo>;
+// type ApiResponse<T> = T extends string ? { message: T } : { data: T }
 
-  evaluateExtends(type: TypeInfo, constraint: TypeInfo): boolean;
+// For T = string
+{
+  kind: TypeKind.Object,
+  properties: [
+    { name: "message", type: { kind: TypeKind.Generic, name: "T" } }
+  ]
+}
+
+// For T = User
+{
+  kind: TypeKind.Object,
+  properties: [
+    { name: "data", type: { kind: TypeKind.Reference, name: "User" } }
+  ]
 }
 ```
 
-**Example:**
-```typescript
-type ApiResponseData<T> = T extends string
-  ? { message: T }
-  : T extends number
-  ? { value: T }
-  : { data: T };
+### Mapped Types
 
-// For T = string, resolves to: { message: string }
-// For T = number, resolves to: { value: number }
-// For T = User, resolves to: { data: User }
-```
-
-### Mapped Type Resolution
-
-The `MappedTypeResolver` handles mapped types:
+Handles mapped type transformations:
 
 ```typescript
-class MappedTypeResolver {
-  resolveMapped(
-    typeParameter: string,
-    nameType: TypeInfo,
-    keyType: TypeInfo,
-    templateType: TypeInfo,
-    context: ResolutionContext
-  ): Result<TypeInfo>;
+// type UserFlags = { [K in keyof User]: boolean }
+{
+  kind: TypeKind.Object,
+  properties: [
+    { name: "name", type: { kind: TypeKind.Primitive, name: "boolean" } },
+    { name: "email", type: { kind: TypeKind.Primitive, name: "boolean" } },
+    { name: "age", type: { kind: TypeKind.Primitive, name: "boolean" } }
+  ]
 }
 ```
 
-**Example:**
-```typescript
-type Optional<T, K extends keyof T> = {
-  [P in keyof T]: P extends K ? T[P] | undefined : T[P];
-};
+## Advanced Configuration
 
-// Automatically resolves the mapped type transformation
-```
-
-### Template Literal Types
-
-The `TemplateLiteralResolver` handles template literal types:
+### TypeScript Configuration
 
 ```typescript
-class TemplateLiteralResolver {
-  resolveTemplate(
-    head: string,
-    templateSpans: TemplateSpan[],
-    context: ResolutionContext
-  ): Result<TemplateLiteralTypeInfo>;
-}
-
-interface TemplateLiteralTypeInfo extends BaseTypeInfo {
-  kind: 'template-literal';
-  parts: (string | TypeInfo)[];
-}
-```
-
-**Example:**
-```typescript
-type EventName<T extends string> = `on${Capitalize<T>}`;
-
-// For T = 'click', resolves to literal type 'onClick'
-```
-
-## Circular Reference Handling
-
-### Detection and Resolution
-
-Fluent Gen automatically detects and handles circular references:
-
-```typescript
-interface Node {
-  id: string;
-  children: Node[];
-  parent?: Node;
-}
-
-// Circular reference between Node.children and Node.parent
-// Automatically handled without infinite recursion
-```
-
-### Circular Reference Strategies
-
-1. **Lazy Resolution**: Defer resolution of circular properties
-2. **Reference Tracking**: Track resolution stack to detect cycles
-3. **Placeholder Types**: Use placeholder types during resolution
-4. **Post-Processing**: Resolve circular references after initial pass
-
-```typescript
-interface CircularReferenceHandler {
-  detectCycle(type: TypeInfo, stack: string[]): boolean;
-  createPlaceholder(typeName: string): PlaceholderTypeInfo;
-  resolvePlaceholders(typeInfo: TypeInfo): TypeInfo;
-}
-```
-
-## Caching System
-
-### Resolution Cache
-
-The type resolution cache improves performance for repeated operations:
-
-```typescript
-interface TypeResolutionCache {
-  // Cache resolved types
-  getType(key: string): TypeInfo | undefined;
-  setType(key: string, typeInfo: TypeInfo): void;
-
-  // Cache symbols
-  getSymbol(key: string): Symbol | undefined;
-  setSymbol(key: string, symbol: Symbol): void;
-
-  // Cache imports
-  getImport(key: string): ResolvedImport | undefined;
-  setImport(key: string, import: ResolvedImport): void;
-
-  // Management
-  clear(): void;
-  size(): number;
-  stats(): CacheStats;
-}
-```
-
-### Cache Key Generation
-
-Cache keys are generated from:
-- File path (normalized)
-- Type name
-- Generic parameters
-- Import context
-- Compiler options hash
-
-**Example Cache Key:**
-```
-/src/types.ts:ApiResponse<User,Error>:imports=[./user.ts]:opts=abc123
-```
-
-### Cache Statistics
-
-```typescript
-interface CacheStats {
-  hits: number;
-  misses: number;
-  size: number;
-  hitRate: number;
-  memoryUsage: number;
-  oldestEntry: Date;
-  newestEntry: Date;
-}
-```
-
-## Error Handling
-
-### Resolution Errors
-
-```typescript
-enum ResolutionErrorCode {
-  TYPE_NOT_FOUND = 'TYPE_NOT_FOUND',
-  IMPORT_RESOLUTION_FAILED = 'IMPORT_RESOLUTION_FAILED',
-  CIRCULAR_REFERENCE = 'CIRCULAR_REFERENCE',
-  GENERIC_RESOLUTION_FAILED = 'GENERIC_RESOLUTION_FAILED',
-  UTILITY_TYPE_EXPANSION_FAILED = 'UTILITY_TYPE_EXPANSION_FAILED',
-  CONDITIONAL_TYPE_RESOLUTION_FAILED = 'CONDITIONAL_TYPE_RESOLUTION_FAILED',
-  MAPPED_TYPE_RESOLUTION_FAILED = 'MAPPED_TYPE_RESOLUTION_FAILED',
-  TEMPLATE_LITERAL_RESOLUTION_FAILED = 'TEMPLATE_LITERAL_RESOLUTION_FAILED'
-}
-
-class ResolutionError extends FluentGenError {
-  constructor(
-    code: ResolutionErrorCode,
-    message: string,
-    context?: ResolutionErrorContext
-  ) {
-    super(code, message, context);
-  }
-}
-```
-
-### Error Context
-
-```typescript
-interface ResolutionErrorContext {
-  filePath?: string;
-  typeName?: string;
-  propertyName?: string;
-  resolutionStack?: string[];
-  sourceLocation?: SourceLocation;
-  originalError?: Error;
-}
-```
-
-### Error Recovery
-
-```typescript
-// Graceful error handling
-const result = await extractTypeInfo('./types.ts', 'ComplexType');
-
-if (!result.ok) {
-  const error = result.error as ResolutionError;
-
-  switch (error.code) {
-    case ResolutionErrorCode.TYPE_NOT_FOUND:
-      console.log('Type not found:', error.context?.typeName);
-      break;
-    case ResolutionErrorCode.CIRCULAR_REFERENCE:
-      console.log('Circular reference detected:', error.context?.resolutionStack);
-      break;
-    default:
-      console.log('Resolution failed:', error.message);
-  }
-}
-```
-
-## Performance Considerations
-
-### Optimization Strategies
-
-1. **Lazy Resolution**: Only resolve types when needed
-2. **Incremental Parsing**: Reuse parsed ASTs when possible
-3. **Parallel Resolution**: Resolve independent types in parallel
-4. **Memory Management**: Clean up temporary data structures
-
-### Performance Monitoring
-
-```typescript
-interface PerformanceMetrics {
-  totalResolutionTime: number;
-  averageResolutionTime: number;
-  cacheHitRate: number;
-  memoryUsage: number;
-  resolvedTypeCount: number;
-}
-
-const extractor = new TypeExtractor();
-const metrics = extractor.getPerformanceMetrics();
-```
-
-### Benchmarking
-
-```typescript
-// Benchmark type resolution
-console.time('type-resolution');
-const result = await extractTypeInfo('./large-types.ts', 'ComplexType');
-console.timeEnd('type-resolution');
-
-console.log('Cache stats:', extractor.getCacheStats());
-```
-
-## Custom Resolvers
-
-### Creating Custom Resolvers
-
-```typescript
-interface CustomTypeResolver {
-  name: string;
-  canResolve(typeNode: TypeNode): boolean;
-  resolve(typeNode: TypeNode, context: ResolutionContext): Result<TypeInfo>;
-}
-
-// Example: Custom date resolver
-const dateResolver: CustomTypeResolver = {
-  name: 'date-resolver',
-  canResolve: (node) => {
-    return node.kind === SyntaxKind.TypeReference &&
-           node.typeName.getText() === 'Date';
-  },
-  resolve: (node, context) => {
-    return ok({
-      kind: 'primitive',
-      name: 'string',
-      jsDoc: 'ISO date string (resolved by custom resolver)'
-    } as PrimitiveTypeInfo);
-  }
-};
-
-// Register custom resolver
 const extractor = new TypeExtractor({
-  customResolvers: [dateResolver]
+  tsConfigPath: './tsconfig.json',
+  maxDepth: 15, // Deeper resolution for complex types
 });
+```
+
+### Custom Cache
+
+```typescript
+import { TypeResolutionCache } from 'fluent-gen-ts';
+
+const customCache = new TypeResolutionCache();
+const extractor = new TypeExtractor({
+  cache: customCache,
+});
+
+// Cache statistics
+console.log('Cache size:', customCache.size());
+console.log('Cache stats:', customCache.getStats());
 ```
 
 ### Plugin Integration
 
 ```typescript
-// Type resolution plugin
-const customResolutionPlugin: Plugin = {
-  name: 'custom-resolution',
-  hooks: {
-    beforeResolving: (context) => {
-      console.log('Resolving type:', context.typeName);
-      return context;
-    },
-    afterResolving: (context, typeInfo) => {
-      // Transform resolved type
-      if (typeInfo.kind === 'object') {
-        return {
-          ...typeInfo,
-          properties: typeInfo.properties.map(prop => ({
-            ...prop,
-            jsDoc: prop.jsDoc || `Auto-generated docs for ${prop.name}`
-          }))
-        };
-      }
-      return typeInfo;
-    }
-  }
-};
-```
+import { PluginManager } from 'fluent-gen-ts';
 
-## Testing Type Resolution
+const pluginManager = new PluginManager();
 
-### Unit Testing
-
-```typescript
-import { extractTypeInfo } from 'fluent-gen';
-
-describe('Type Resolution', () => {
-  it('should resolve basic interface', async () => {
-    const result = await extractTypeInfo('./test-types.ts', 'User');
-
-    expect(result.ok).toBe(true);
-    expect(result.value.kind).toBe('object');
-    expect(result.value.properties).toHaveLength(3);
-  });
-
-  it('should handle generic types', async () => {
-    const result = await extractTypeInfo('./test-types.ts', 'ApiResponse');
-
-    expect(result.ok).toBe(true);
-    expect(result.value.kind).toBe('generic');
-    expect(result.value.typeParameters).toHaveLength(1);
-  });
+// Register type transformation plugin
+pluginManager.register({
+  name: 'type-transformer',
+  version: '1.0.0',
+  beforeResolve: context => {
+    console.log('Resolving type:', context.typeName);
+    return ok(context);
+  },
+  afterResolve: (context, typeInfo) => {
+    // Transform resolved type
+    return ok(typeInfo);
+  },
 });
-```
 
-### Integration Testing
-
-```typescript
-describe('Complex Type Resolution', () => {
-  it('should resolve utility types', async () => {
-    const result = await extractTypeInfo('./complex-types.ts', 'PickedUser');
-
-    expect(result.ok).toBe(true);
-    // Verify Pick<User, 'id' | 'name'> is properly resolved
-    const properties = result.value.properties;
-    expect(properties.map(p => p.name)).toEqual(['id', 'name']);
-  });
-});
-```
-
-## Best Practices
-
-### 1. Configuration
-
-```typescript
-// Recommended configuration for large projects
 const extractor = new TypeExtractor({
-  followImports: true,
-  maxDepth: 20,
-  cacheEnabled: true,
-  cacheTTL: 600000, // 10 minutes
-  tsConfigPath: './tsconfig.json'
+  pluginManager,
 });
 ```
 
-### 2. Error Handling
+## Error Handling
+
+### Common Error Scenarios
 
 ```typescript
-// Always handle resolution errors
-const result = await extractTypeInfo('./types.ts', 'User');
+const result = await extractor.extractType('./types.ts', 'MissingType');
 
 if (!result.ok) {
-  logger.error('Type resolution failed', {
-    error: result.error.message,
-    code: result.error.code,
-    context: result.error.context
-  });
+  console.error('Error:', result.error.message);
 
-  // Fallback or recovery logic
-  return getDefaultTypeInfo();
+  // Common error types:
+  // - "File not found" - Source file doesn't exist
+  // - "Type not found" - Type doesn't exist in file
+  // - "Parse error" - TypeScript parsing failed
+  // - "Circular reference" - Circular type dependency
+  // - "Max depth exceeded" - Type resolution too deep
 }
 ```
 
-### 3. Performance
+### Validation
+
+Input validation is performed automatically:
 
 ```typescript
-// Batch resolution for better performance
-const typeNames = ['User', 'Product', 'Order'];
+// Invalid file path
+await extractor.extractType('', 'User'); // Error: filePath must be non-empty
+
+// Invalid type name
+await extractor.extractType('./types.ts', ''); // Error: typeName must be non-empty
+
+// Invalid file extension
+await extractor.extractType('./types.js', 'User'); // Error: must be .ts, .tsx, or .d.ts
+```
+
+## Performance Optimization
+
+### Caching Strategy
+
+```typescript
+// For batch processing
 const extractor = new TypeExtractor();
 
-const results = await Promise.all(
-  typeNames.map(name => extractor.extractType('./types.ts', name))
+for (const file of files) {
+  const types = await extractor.scanFile(file);
+  if (types.ok) {
+    await extractor.extractMultiple(file, types.value);
+  }
+}
+
+// Clear cache periodically
+extractor.clearCache();
+```
+
+### Memory Management
+
+```typescript
+// Limit resolution depth for large codebases
+const extractor = new TypeExtractor({
+  maxDepth: 5, // Faster but less detailed resolution
+});
+
+// Use custom cache with size limits
+const cache = new TypeResolutionCache({
+  maxSize: 1000, // Limit cached types
+});
+```
+
+### Parallel Processing
+
+```typescript
+// Process multiple files in parallel
+const extractors = files.map(file =>
+  new TypeExtractor().extractType(file, 'MainType'),
 );
 
-// Check cache stats
-console.log('Cache hit rate:', extractor.getCacheStats().hitRate);
+const results = await Promise.all(extractors);
+```
+
+## Integration Examples
+
+### With Build Tools
+
+```typescript
+// build-types.ts
+import { TypeExtractor } from 'fluent-gen-ts';
+import { glob } from 'glob';
+
+const extractor = new TypeExtractor();
+
+const files = await glob('./src/**/*.ts');
+const allTypes = new Map<string, string[]>();
+
+for (const file of files) {
+  const types = await extractor.scanFile(file);
+  if (types.ok && types.value.length > 0) {
+    allTypes.set(file, types.value);
+  }
+}
+
+console.log('Discovered types:', allTypes);
+```
+
+### With Watch Mode
+
+```typescript
+import { watch } from 'fs';
+
+const extractor = new TypeExtractor();
+
+watch('./src/types.ts', async (eventType, filename) => {
+  if (eventType === 'change') {
+    extractor.clearCache();
+
+    const types = await extractor.scanFile('./src/types.ts');
+    if (types.ok) {
+      console.log('Types updated:', types.value);
+    }
+  }
+});
+```
+
+### Type Analysis
+
+```typescript
+// Analyze type complexity
+async function analyzeType(filePath: string, typeName: string) {
+  const result = await extractor.extractType(filePath, typeName);
+
+  if (result.ok) {
+    const { typeInfo, dependencies } = result.value;
+
+    console.log('Type complexity:');
+    console.log('- Properties:', countProperties(typeInfo));
+    console.log('- Dependencies:', dependencies.length);
+    console.log('- Max depth:', calculateDepth(typeInfo));
+  }
+}
+
+function countProperties(typeInfo: TypeInfo): number {
+  if (typeInfo.kind === TypeKind.Object) {
+    return typeInfo.properties.length;
+  }
+  return 0;
+}
+```
+
+## Type Guards and Utilities
+
+Use type guards to safely work with TypeInfo:
+
+```typescript
+import {
+  isObjectTypeInfo,
+  isArrayTypeInfo,
+  isUnionTypeInfo,
+  isPrimitiveTypeInfo,
+} from 'fluent-gen-ts';
+
+function processTypeInfo(typeInfo: TypeInfo) {
+  if (isObjectTypeInfo(typeInfo)) {
+    console.log('Object with', typeInfo.properties.length, 'properties');
+  } else if (isArrayTypeInfo(typeInfo)) {
+    console.log('Array of', typeInfo.elementType.kind);
+  } else if (isUnionTypeInfo(typeInfo)) {
+    console.log('Union with', typeInfo.unionTypes.length, 'types');
+  } else if (isPrimitiveTypeInfo(typeInfo)) {
+    console.log('Primitive type:', typeInfo.name);
+  }
+}
 ```
 
 ## Next Steps
 
-- [Plugin Development Guide](./plugins.md)
-- [Generator Functions](./generator.md)
-- [API Overview](./overview.md)
-- [Configuration Guide](../guide/configuration.md)
+- [Generator Functions Documentation](./generator.md) - Code generation from
+  resolved types
+- [Plugin Development Guide](./plugins.md) - Extending type resolution
+- [CLI Usage](../guide/cli.md) - Command-line type extraction

@@ -1,119 +1,212 @@
 # API Reference Overview
 
-This is the complete API reference for Fluent Gen. The API is organized into several modules that work together to provide type extraction, code generation, and builder creation capabilities.
+This is the complete API reference for Fluent Gen TS. The library provides
+type-safe fluent builder generation from TypeScript interfaces and types.
+
+## Quick Start
+
+```typescript
+import { FluentGen } from 'fluent-gen-ts';
+
+const generator = new FluentGen();
+const result = await generator.generateBuilder('./types.ts', 'User');
+
+if (result.ok) {
+  console.log(result.value); // Generated builder code
+} else {
+  console.error(result.error.message);
+}
+```
 
 ## Architecture Overview
 
-Fluent Gen follows a microkernel architecture with the following core components:
+Fluent Gen TS follows a layered architecture:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Fluent Gen Core                      │
+│                      FluentGen                          │
+│                   (Main API)                            │
 ├─────────────────────────────────────────────────────────┤
-│  CLI Layer          │  Programmatic API                 │
-├─────────────────────┼───────────────────────────────────┤
-│  Generator Layer    │  Code Generation Engine           │
-├─────────────────────┼───────────────────────────────────┤
-│  Type Info Layer    │  Type Extraction & Resolution     │
-├─────────────────────┼───────────────────────────────────┤
-│  Core Layer         │  Result Types, Caching, Plugins   │
+│     TypeExtractor        │        BuilderGenerator      │
+│   (Type Analysis)        │      (Code Generation)       │
+├─────────────────────────────────────────────────────────┤
+│                   PluginManager                         │
+│                 (Plugin System)                         │
+├─────────────────────────────────────────────────────────┤
+│    TypeInfo System     │     Result Types              │
+│   (Type Definitions)   │   (Error Handling)            │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Module Structure
+## Core Classes
 
-### Core Modules (`/src/core/`)
+### FluentGen
 
-**Purpose**: Fundamental types, utilities, and abstractions
-
-- [`types.ts`](#core-types) - Core type definitions and interfaces
-- [`result.ts`](#result-types) - Railway-oriented programming types
-- [`cache.ts`](#caching-system) - Type resolution caching
-- [`plugin.ts`](#plugin-system) - Plugin architecture and hooks
-- [`import-resolver.ts`](#import-resolution) - TypeScript import resolution
-
-### Type Information (`/src/type-info/`)
-
-**Purpose**: TypeScript parsing, analysis, and type resolution
-
-- [`parser.ts`](#type-parser) - TypeScript AST parsing
-- [`resolver.ts`](#type-resolver) - Type resolution and dependency tracking
-- [`extractor.ts`](#type-extractor) - Main type extraction orchestration
-- [`utility-expander.ts`](#utility-types) - Utility type expansion
-- [`conditional-resolver.ts`](#conditional-types) - Conditional type resolution
-- [`mapped-resolver.ts`](#mapped-types) - Mapped type resolution
-
-### Code Generation (`/src/gen/`)
-
-**Purpose**: Builder code generation and output formatting
-
-- [`generator.ts`](#code-generator) - Main generation orchestration
-- [`import-generator.ts`](#import-generation) - Import statement generation
-- [`method-generator.ts`](#method-generation) - Builder method generation
-- [`template-generator.ts`](#template-generation) - Code template processing
-- [`type-string-generator.ts`](#type-strings) - TypeScript type string formatting
-
-### CLI Interface (`/src/cli/`)
-
-**Purpose**: Command-line interface and configuration
-
-- [`commands.ts`](#cli-commands) - CLI command implementations
-- [`config.ts`](#configuration) - Configuration loading and validation
-
-## Core Types
-
-### FluentBuilder Interface
-
-The foundation of all generated builders:
+The main entry point for fluent builder generation:
 
 ```typescript
-interface FluentBuilder<T, Ctx extends BuildContext = BuildContext> {
-  readonly [FLUENT_BUILDER_SYMBOL]: true;
-  (context?: Ctx): T;
+class FluentGen {
+  constructor(options?: FluentGenOptions);
+
+  // Generate single builder
+  generateBuilder(filePath: string, typeName: string): Promise<Result<string>>;
+
+  // Generate multiple builders
+  generateMultiple(
+    filePath: string,
+    typeNames: string[],
+  ): Promise<Result<Map<string, string>>>;
+
+  // Generate and write to file
+  generateToFile(
+    filePath: string,
+    typeName: string,
+    outputPath?: string,
+  ): Promise<Result<string>>;
+
+  // Scan file and generate all builders
+  scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>;
+
+  // Plugin management
+  registerPlugin(plugin: Plugin): Result<void>;
+
+  // Cache management
+  clearCache(): void;
+}
+
+interface FluentGenOptions extends GeneratorConfig, TypeExtractorOptions {
+  outputDir?: string;
+  fileName?: string;
 }
 ```
 
-**Type Parameters:**
+### TypeExtractor
 
-- `T` - The type being built
-- `Ctx` - Build context type for parent-child relationships
-
-**Usage:**
+Handles TypeScript type analysis and extraction:
 
 ```typescript
-// Generated builder extends this interface
-interface UserBuilder extends FluentBuilder<User> {
-  withName(name: string): UserBuilder;
-  withEmail(email: string): UserBuilder;
-  // ... other with methods
+class TypeExtractor {
+  constructor(options?: TypeExtractorOptions);
+
+  // Extract single type
+  extractType(
+    filePath: string,
+    typeName: string,
+  ): Promise<Result<ResolvedType>>;
+
+  // Extract multiple types
+  extractMultiple(
+    filePath: string,
+    typeNames: string[],
+  ): Promise<Result<ResolvedType[]>>;
+
+  // Scan file for available types
+  scanFile(filePath: string): Promise<Result<string[]>>;
+
+  // Cache management
+  clearCache(): void;
+}
+
+interface TypeExtractorOptions {
+  tsConfigPath?: string;
+  cache?: TypeResolutionCache;
+  pluginManager?: PluginManager;
+  maxDepth?: number;
 }
 ```
 
-### TypeInfo Discriminated Union
+### BuilderGenerator
 
-Represents all possible TypeScript types:
+Low-level builder code generation:
+
+```typescript
+class BuilderGenerator {
+  constructor(config?: GeneratorConfig, pluginManager?: PluginManager);
+
+  // Generate builder code
+  generate(resolvedType: ResolvedType): Promise<Result<string>>;
+
+  // Generate common utilities file
+  generateCommonFile(): string;
+
+  // State management
+  setGeneratingMultiple(value: boolean): void;
+  clearCache(): void;
+}
+
+interface GeneratorConfig extends GeneratorOptions {
+  addComments?: boolean;
+  generateCommonFile?: boolean;
+}
+
+interface GeneratorOptions {
+  outputPath?: string;
+  useDefaults?: boolean;
+  contextType?: string;
+  importPath?: string;
+}
+```
+
+## Type System
+
+### TypeInfo
+
+The core discriminated union representing all TypeScript types:
 
 ```typescript
 type TypeInfo =
-  | PrimitiveTypeInfo
-  | ObjectTypeInfo
-  | ArrayTypeInfo
-  | UnionTypeInfo
-  | IntersectionTypeInfo
-  | GenericTypeInfo
-  | ConditionalTypeInfo
-  | MappedTypeInfo
-  | TemplateLiteralTypeInfo;
-```
+  | { kind: TypeKind.Primitive; name: string; literal?: unknown }
+  | {
+      kind: TypeKind.Object;
+      name?: string;
+      properties: readonly PropertyInfo[] /* ... */;
+    }
+  | { kind: TypeKind.Array; elementType: TypeInfo }
+  | { kind: TypeKind.Union; unionTypes: readonly TypeInfo[] }
+  | { kind: TypeKind.Intersection; intersectionTypes: readonly TypeInfo[] }
+  | {
+      kind: TypeKind.Generic;
+      name: string;
+      typeArguments?: readonly TypeInfo[] /* ... */;
+    }
+  | { kind: TypeKind.Literal; literal: unknown }
+  | {
+      kind: TypeKind.Reference;
+      name: string;
+      typeArguments?: readonly TypeInfo[];
+    }
+  | { kind: TypeKind.Function; name?: string }
+  | { kind: TypeKind.Tuple; elements: readonly TypeInfo[] }
+  | { kind: TypeKind.Enum; name: string; values?: readonly unknown[] }
+  | { kind: TypeKind.Keyof; target: TypeInfo }
+  | { kind: TypeKind.Typeof; target: TypeInfo }
+  | { kind: TypeKind.Index; object: TypeInfo; index: TypeInfo }
+  | {
+      kind: TypeKind.Conditional;
+      checkType: TypeInfo;
+      extendsType: TypeInfo /* ... */;
+    }
+  | { kind: TypeKind.Unknown }
+  | { kind: TypeKind.Never };
 
-**Common Properties:**
-
-```typescript
-interface BaseTypeInfo {
-  kind: TypeKind;
-  optional?: boolean;
-  readonly?: boolean;
-  jsDoc?: string;
+enum TypeKind {
+  Primitive = 'primitive',
+  Object = 'object',
+  Array = 'array',
+  Union = 'union',
+  Intersection = 'intersection',
+  Generic = 'generic',
+  Literal = 'literal',
+  Unknown = 'unknown',
+  Reference = 'reference',
+  Function = 'function',
+  Tuple = 'tuple',
+  Enum = 'enum',
+  Keyof = 'keyof',
+  Typeof = 'typeof',
+  Index = 'index',
+  Conditional = 'conditional',
+  Never = 'never',
 }
 ```
 
@@ -123,12 +216,25 @@ Represents object properties:
 
 ```typescript
 interface PropertyInfo {
-  name: string;
-  type: TypeInfo;
-  optional: boolean;
-  readonly: boolean;
-  jsDoc?: string;
-  defaultValue?: any;
+  readonly name: string;
+  readonly type: TypeInfo;
+  readonly optional: boolean;
+  readonly readonly: boolean;
+  readonly jsDoc?: string;
+}
+```
+
+### ResolvedType
+
+Complete type information with dependencies:
+
+```typescript
+interface ResolvedType {
+  readonly sourceFile: string;
+  readonly name: string;
+  readonly typeInfo: TypeInfo;
+  readonly imports: readonly string[];
+  readonly dependencies: readonly ResolvedType[];
 }
 ```
 
@@ -148,431 +254,205 @@ interface Err {
   readonly ok: false;
   readonly error: Error;
 }
-```
 
-### Result Utilities
-
-```typescript
-// Create success result
+// Utility functions
 function ok<T>(value: T): Ok<T>;
-
-// Create error result
 function err(error: Error | string): Err;
-
-// Chain operations
-function chain<T, U>(result: Result<T>, fn: (value: T) => Result<U>): Result<U>;
-
-// Map over success values
-function map<T, U>(result: Result<T>, fn: (value: T) => U): Result<U>;
-```
-
-**Usage Example:**
-
-```typescript
-const result = await generator.generateBuilder("./types.ts", "User");
-
-if (result.ok) {
-  console.log("Generated:", result.value);
-} else {
-  console.error("Error:", result.error.message);
-}
-```
-
-## Caching System
-
-### TypeResolutionCache
-
-Optimizes performance by caching resolved types:
-
-```typescript
-interface TypeResolutionCache {
-  get(key: string): TypeInfo | undefined;
-  set(key: string, typeInfo: TypeInfo): void;
-  has(key: string): boolean;
-  clear(): void;
-  size(): number;
-}
-```
-
-### Cache Keys
-
-Cache keys are generated from:
-
-- File path
-- Type name
-- Generic parameters
-- Import context
-
-**Example Cache Key:**
-
-```
-/src/types.ts:User<T=string,U=number>:imports=[./base.ts]
-```
-
-### Cache Statistics
-
-```typescript
-interface CacheStats {
-  hits: number;
-  misses: number;
-  size: number;
-  hitRate: number;
-  memoryUsage: number;
-}
+function isOk<T>(result: Result<T>): result is Ok<T>;
+function isErr<T>(result: Result<T>): result is Err;
 ```
 
 ## Plugin System
+
+### PluginManager
+
+Manages and executes plugins:
+
+```typescript
+class PluginManager {
+  register(plugin: Plugin): void;
+  unregister(name: string): boolean;
+  executeHook<K extends HookType>(
+    options: ExecuteHookOptions<K>,
+  ): Promise<Result<GetHookReturnType<K>>>;
+}
+```
 
 ### Plugin Interface
 
 ```typescript
 interface Plugin {
-  name: string;
-  version?: string;
-  hooks: PluginHooks;
+  readonly name: string;
+  readonly version: string;
+  readonly imports?: PluginImports;
+
+  // Hook implementations
+  beforeParse?: (context: ParseContext) => Result<ParseContext>;
+  afterParse?: (context: ParseContext, type: Type) => Result<Type>;
+  beforeResolve?: (context: ResolveContext) => Result<ResolveContext>;
+  afterResolve?: (
+    context: ResolveContext,
+    typeInfo: TypeInfo,
+  ) => Result<TypeInfo>;
+  beforeGenerate?: (context: GenerateContext) => Result<GenerateContext>;
+  afterGenerate?: (code: string, context: GenerateContext) => Result<string>;
+  transformType?: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>;
+  transformProperty?: (property: PropertyInfo) => Result<PropertyInfo>;
+  transformBuildMethod?: (context: BuildMethodContext) => Result<string>;
+  transformPropertyMethod?: (
+    context: PropertyMethodContext,
+  ) => Result<PropertyMethodTransform>;
+  addCustomMethods?: (
+    context: BuilderContext,
+  ) => Result<readonly CustomMethod[]>;
+  transformValue?: (context: ValueContext) => Result<ValueTransform | null>;
 }
 
-interface PluginHooks {
-  beforeParsing?: BeforeParsingHook;
-  afterParsing?: AfterParsingHook;
-  beforeResolving?: BeforeResolvingHook;
-  afterResolving?: AfterResolvingHook;
-  beforeGeneration?: BeforeGenerationHook;
-  afterGeneration?: AfterGenerationHook;
-  beforePropertyGeneration?: BeforePropertyGenerationHook;
-  afterPropertyGeneration?: AfterPropertyGenerationHook;
-  beforeMethodGeneration?: BeforeMethodGenerationHook;
-  afterMethodGeneration?: AfterMethodGenerationHook;
-  importTransform?: ImportTransformHook;
-  valueTransform?: ValueTransformHook;
+enum HookType {
+  BeforeParse = 'beforeParse',
+  AfterParse = 'afterParse',
+  BeforeResolve = 'beforeResolve',
+  AfterResolve = 'afterResolve',
+  BeforeGenerate = 'beforeGenerate',
+  AfterGenerate = 'afterGenerate',
+  TransformType = 'transformType',
+  TransformProperty = 'transformProperty',
+  TransformBuildMethod = 'transformBuildMethod',
+  TransformPropertyMethod = 'transformPropertyMethod',
+  AddCustomMethods = 'addCustomMethods',
+  TransformValue = 'transformValue',
 }
 ```
 
-### Hook Types
+## Generated Builder Interface
 
-**Parsing Hooks:**
+Builders generated by Fluent Gen implement this interface:
 
 ```typescript
-type BeforeParsingHook = (
-  context: ParseContext,
-) => ParseContext | Promise<ParseContext>;
+interface FluentBuilder<T, Ctx extends BuildContext = BuildContext> {
+  readonly [FLUENT_BUILDER_SYMBOL]: true;
+  (context?: Ctx): T;
+}
 
-type AfterParsingHook = (
-  context: ParseContext,
-  result: ParseResult,
-) => ParseResult | Promise<ParseResult>;
+interface BuildContext {
+  readonly parentId?: string;
+  readonly parameterName?: string;
+  readonly index?: number;
+  readonly [key: string]: unknown;
+}
+
+// Utility function
+function isFluentBuilder<T = unknown, Ctx extends BuildContext = BuildContext>(
+  value: unknown,
+): value is FluentBuilder<T, Ctx>;
 ```
 
-**Generation Hooks:**
+## Common Usage Patterns
+
+### Basic Generation
 
 ```typescript
-type BeforeGenerationHook = (
-  context: GenerationContext,
-) => GenerationContext | Promise<GenerationContext>;
+import { FluentGen } from 'fluent-gen-ts';
 
-type AfterGenerationHook = (
-  context: GenerationContext,
-  code: string,
-) => string | Promise<string>;
-```
-
-**Property Hooks:**
-
-```typescript
-type BeforePropertyGenerationHook = (
-  context: PropertyContext,
-  property: PropertyInfo,
-) => PropertyInfo | Promise<PropertyInfo>;
-
-type AfterPropertyGenerationHook = (
-  context: PropertyContext,
-  property: PropertyInfo,
-  method: MethodDeclaration,
-) => MethodDeclaration | Promise<MethodDeclaration>;
-```
-
-### Plugin Registration
-
-```typescript
-// Programmatic registration
-const generator = new FluentGen();
-generator.registerPlugin({
-  name: 'custom-plugin',
-  hooks: {
-    beforeGeneration: (context) => {
-      console.log('Generating for:', context.typeName);
-      return context;
-    }
-  }
+const generator = new FluentGen({
+  outputDir: './src/builders',
+  useDefaults: true,
+  addComments: true,
 });
 
-// Configuration file registration
-{
-  "plugins": [
-    "./plugins/custom-plugin.js",
-    "@company/fluent-gen-plugin"
-  ]
+const result = await generator.generateBuilder('./types.ts', 'User');
+if (result.ok) {
+  console.log('Generated builder:', result.value);
 }
 ```
 
-## Import Resolution
-
-### ImportResolver
-
-Handles TypeScript module resolution:
+### Multiple Types
 
 ```typescript
-interface ImportResolver {
-  resolveImport(
-    importPath: string,
-    fromFile: string,
-  ): Promise<Result<ResolvedImport>>;
-
-  resolveTypeImport(
-    typeName: string,
-    fromFile: string,
-  ): Promise<Result<TypeImport>>;
-}
-
-interface ResolvedImport {
-  resolvedPath: string;
-  isNodeModule: boolean;
-  isTypeOnly: boolean;
-  exports: string[];
+const result = await generator.generateMultiple('./types.ts', [
+  'User',
+  'Post',
+  'Comment',
+]);
+if (result.ok) {
+  for (const [filename, code] of result.value) {
+    console.log(`Generated ${filename}`);
+  }
 }
 ```
 
-### Import Types
+### With Plugins
 
-- **Relative imports**: `./types`, `../models/user`
-- **Absolute imports**: `@/types`, `~/models`
-- **Node modules**: `lodash`, `@types/node`
-- **Virtual files**: In-memory TypeScript files
+```typescript
+const customPlugin: Plugin = {
+  name: 'custom-validation',
+  version: '1.0.0',
+  transformProperty: property => {
+    // Add validation logic
+    return ok(property);
+  },
+};
+
+generator.registerPlugin(customPlugin);
+```
+
+### File Generation
+
+```typescript
+const outputPath = await generator.generateToFile(
+  './types.ts',
+  'User',
+  './src/builders/user.builder.ts',
+);
+if (outputPath.ok) {
+  console.log('Builder written to:', outputPath.value);
+}
+```
 
 ## Error Handling
 
-### Error Types
+All async operations return `Result<T>` types for safe error handling:
 
 ```typescript
-enum ErrorCode {
-  FILE_NOT_FOUND = "FILE_NOT_FOUND",
-  TYPE_NOT_FOUND = "TYPE_NOT_FOUND",
-  PARSE_ERROR = "PARSE_ERROR",
-  RESOLVE_ERROR = "RESOLVE_ERROR",
-  GENERATION_ERROR = "GENERATION_ERROR",
-  CIRCULAR_REFERENCE = "CIRCULAR_REFERENCE",
-  UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE",
-}
+const result = await generator.generateBuilder('./types.ts', 'User');
 
-class FluentGenError extends Error {
-  constructor(
-    public code: ErrorCode,
-    message: string,
-    public context?: any,
-  ) {
-    super(message);
-  }
+if (result.ok) {
+  // Success - use result.value
+  console.log(result.value);
+} else {
+  // Error - handle result.error
+  console.error('Generation failed:', result.error.message);
 }
 ```
 
-### Error Context
+## Configuration Options
 
-Errors include contextual information:
+### FluentGenOptions
 
 ```typescript
-interface ErrorContext {
-  filePath?: string;
-  typeName?: string;
-  propertyName?: string;
-  line?: number;
-  column?: number;
-  stack?: string[];
+interface FluentGenOptions {
+  // Generator options
+  outputPath?: string; // Output directory
+  useDefaults?: boolean; // Generate default values
+  contextType?: string; // Build context type name
+  importPath?: string; // Import path for utilities
+  addComments?: boolean; // Add JSDoc comments
+
+  // Type extractor options
+  tsConfigPath?: string; // TypeScript config path
+  maxDepth?: number; // Maximum resolution depth
+  cache?: TypeResolutionCache; // Custom cache instance
+  pluginManager?: PluginManager; // Custom plugin manager
+
+  // File generation
+  outputDir?: string; // Output directory
+  fileName?: string; // Output filename template
 }
 ```
-
-## Configuration Types
-
-### GeneratorConfig
-
-```typescript
-interface GeneratorConfig {
-  outputDir?: string;
-  useDefaults?: boolean;
-  contextType?: string;
-  importPath?: string;
-  indentSize?: number;
-  useTab?: boolean;
-  addComments?: boolean;
-  fileExtension?: string;
-  fileNameTemplate?: string;
-  skipTypeCheck?: boolean;
-}
-```
-
-### Target Configuration
-
-```typescript
-interface Target {
-  file: string;
-  types: string[];
-  outputDir?: string;
-  generator?: Partial<GeneratorConfig>;
-}
-```
-
-### Complete Configuration
-
-```typescript
-interface Config {
-  tsConfigPath?: string;
-  generator?: GeneratorConfig;
-  targets?: Target[];
-  patterns?: string[];
-  exclude?: string[];
-  plugins?: string[];
-  watch?: WatchConfig;
-}
-```
-
-## Context Types
-
-### BuildContext
-
-Base context passed to builders:
-
-```typescript
-interface BuildContext {
-  parentId?: string;
-  depth?: number;
-  metadata?: Record<string, any>;
-}
-```
-
-### Generation Context
-
-Context during code generation:
-
-```typescript
-interface GenerationContext {
-  typeName: string;
-  typeInfo: TypeInfo;
-  config: GeneratorConfig;
-  imports: ImportInfo[];
-  plugins: Plugin[];
-}
-```
-
-### Property Context
-
-Context during property generation:
-
-```typescript
-interface PropertyContext {
-  typeName: string;
-  propertyName: string;
-  parentContext: GenerationContext;
-  depth: number;
-}
-```
-
-## Type Guards
-
-Fluent Gen provides type guards for runtime type checking:
-
-```typescript
-// Core type guards
-function isFluentBuilder<T>(obj: any): obj is FluentBuilder<T>;
-function isPrimitiveType(type: TypeInfo): type is PrimitiveTypeInfo;
-function isObjectType(type: TypeInfo): type is ObjectTypeInfo;
-function isArrayType(type: TypeInfo): type is ArrayTypeInfo;
-function isUnionType(type: TypeInfo): type is UnionTypeInfo;
-
-// Result type guards
-function isOk<T>(result: Result<T>): result is Ok<T>;
-function isErr<T>(result: Result<T>): result is Err;
-```
-
-## Constants
-
-### Symbols
-
-```typescript
-const FLUENT_BUILDER_SYMBOL = Symbol.for("fluent-builder");
-const BUILDER_CONTEXT_SYMBOL = Symbol.for("builder-context");
-```
-
-### Default Values
-
-```typescript
-const DEFAULT_CONFIG: GeneratorConfig = {
-  outputDir: "./src/builders",
-  useDefaults: true,
-  addComments: true,
-  indentSize: 2,
-  useTab: false,
-  fileExtension: ".builder.ts",
-};
-```
-
-## Utilities
-
-### Type Utilities
-
-```typescript
-// Get default value for a type
-function getDefaultValue(typeInfo: TypeInfo): any;
-
-// Generate TypeScript type string
-function generateTypeString(typeInfo: TypeInfo): string;
-
-// Check if type is optional
-function isOptionalType(typeInfo: TypeInfo): boolean;
-
-// Flatten union types
-function flattenUnionType(typeInfo: UnionTypeInfo): TypeInfo[];
-```
-
-### String Utilities
-
-```typescript
-// Convert to camelCase
-function toCamelCase(str: string): string;
-
-// Convert to PascalCase
-function toPascalCase(str: string): string;
-
-// Generate with method name
-function toWithMethodName(propertyName: string): string;
-```
-
-## Performance Considerations
-
-### Memory Management
-
-- Type resolution cache with LRU eviction
-- Weak references for circular type handling
-- Lazy evaluation of expensive operations
-
-### Optimization Strategies
-
-- Parallel type resolution when possible
-- Incremental parsing for watch mode
-- AST node reuse across generations
-- Import deduplication
-
-### Benchmarks
-
-Typical performance characteristics:
-
-- Simple interface (5 properties): ~10ms
-- Complex nested structure (20+ properties): ~50ms
-- Large union type (100+ variants): ~100ms
-- Full project scan (500+ types): ~2-5s
 
 ## Next Steps
 
-- [Generator Functions Documentation](./generator.md)
-- [Type Resolution System](./resolver.md)
-- [Plugin Development Guide](./plugins.md)
-- [CLI Reference](../guide/cli.md)
-
+- [Generator Functions Documentation](./generator.md) - Detailed code generation
+  API
+- [Type Resolution System](./resolver.md) - Type extraction and analysis
+- [Plugin Development Guide](./plugins.md) - Creating custom plugins

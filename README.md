@@ -1,5 +1,14 @@
 # fluent-gen
 
+[![CI](https://github.com/rafbcampos/fluent-gen-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/rafbcampos/fluent-gen-ts/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/rafbcampos/fluent-gen-ts/graph/badge.svg?token=PQ45UU94C1)](https://codecov.io/gh/rafbcampos/fluent-gen-ts)
+[![npm version](https://badge.fury.io/js/fluent-gen-ts.svg)](https://www.npmjs.com/package/fluent-gen-ts)
+[![Node.js Version](https://img.shields.io/node/v/fluent-gen-ts.svg)](https://nodejs.org/)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![npm downloads](https://img.shields.io/npm/dm/fluent-gen-ts.svg)](https://www.npmjs.com/package/fluent-gen-ts)
+
 > Generate type-safe fluent builders for TypeScript interfaces and types
 
 ## Features
@@ -467,6 +476,5 @@ MIT © [Rafael Campos](https://github.com/rafbcampos)
 
 ## Support
 
-- [Documentation](https://rafbcampos.github.io/fluent-gen/)
+- [Documentation](https://rafbcampos.github.io/fluent-gen-ts/)
 - [GitHub Issues](https://github.com/rafbcampos/fluent-gen/issues)
-- [Discussions](https://github.com/rafbcampos/fluent-gen/discussions)

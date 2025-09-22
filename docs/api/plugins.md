@@ -1,18 +1,24 @@
 # Plugin System
 
-Fluent Gen features an extensive plugin architecture that allows you to customize every aspect of the type analysis and code generation process. Plugins can hook into 11 different points in the pipeline to modify behavior, transform data, and extend functionality.
+Fluent Gen TS features a comprehensive plugin architecture that allows you to
+customize every aspect of the type analysis and code generation process. The
+plugin system provides 12 different hooks covering parsing, resolution,
+generation, and transformation phases.
 
 ## Plugin Architecture
 
-The plugin system follows a microkernel architecture where the core provides the basic functionality and plugins extend it:
+The plugin system follows a microkernel architecture where the core provides
+basic functionality and plugins extend it:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  Plugin Manager                     │
+│                  PluginManager                      │
+│               (Plugin Registry)                     │
 ├─────────────────────────────────────────────────────┤
-│  Parsing    │  Resolution │  Generation │  Transform │
-│  Hooks      │  Hooks      │  Hooks      │  Hooks     │
-├─────────────┼─────────────┼─────────────┼──────────┤
+│   Parse Hooks  │ Resolve Hooks │ Generate Hooks     │
+├─────────────────────────────────────────────────────┤
+│         Transform Hooks │ Custom Method Hooks      │
+├─────────────────────────────────────────────────────┤
 │             Core Fluent Gen Pipeline               │
 └─────────────────────────────────────────────────────┘
 ```
@@ -23,904 +29,695 @@ The plugin system follows a microkernel architecture where the core provides the
 
 ```typescript
 interface Plugin {
-  name: string;              // Unique plugin identifier
-  version?: string;          // Plugin version (semantic versioning)
-  description?: string;      // Plugin description
-  author?: string;          // Plugin author
-  hooks: PluginHooks;       // Hook implementations
-  config?: PluginConfig;    // Plugin configuration
-  dependencies?: string[];   // Required plugin dependencies
+  readonly name: string; // Unique plugin identifier
+  readonly version: string; // Plugin version (semantic versioning)
+  readonly imports?: PluginImports; // Import dependencies
+
+  // Hook implementations (all optional)
+  beforeParse?: (context: ParseContext) => Result<ParseContext>;
+  afterParse?: (context: ParseContext, type: Type) => Result<Type>;
+  beforeResolve?: (context: ResolveContext) => Result<ResolveContext>;
+  afterResolve?: (
+    context: ResolveContext,
+    typeInfo: TypeInfo,
+  ) => Result<TypeInfo>;
+  beforeGenerate?: (context: GenerateContext) => Result<GenerateContext>;
+  afterGenerate?: (code: string, context: GenerateContext) => Result<string>;
+  transformType?: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>;
+  transformProperty?: (property: PropertyInfo) => Result<PropertyInfo>;
+  transformBuildMethod?: (context: BuildMethodContext) => Result<string>;
+  transformPropertyMethod?: (
+    context: PropertyMethodContext,
+  ) => Result<PropertyMethodTransform>;
+  addCustomMethods?: (
+    context: BuilderContext,
+  ) => Result<readonly CustomMethod[]>;
+  transformValue?: (context: ValueContext) => Result<ValueTransform | null>;
 }
 
-interface PluginConfig {
-  [key: string]: any;
-}
-```
-
-### Plugin Hooks
-
-Fluent Gen provides 11 different hook types for maximum customization:
-
-```typescript
-interface PluginHooks {
-  // Parsing hooks
-  beforeParsing?: BeforeParsingHook;
-  afterParsing?: AfterParsingHook;
-
-  // Type resolution hooks
-  beforeResolving?: BeforeResolvingHook;
-  afterResolving?: AfterResolvingHook;
-
-  // Code generation hooks
-  beforeGeneration?: BeforeGenerationHook;
-  afterGeneration?: AfterGenerationHook;
-
-  // Property-level hooks
-  beforePropertyGeneration?: BeforePropertyGenerationHook;
-  afterPropertyGeneration?: AfterPropertyGenerationHook;
-
-  // Method-level hooks
-  beforeMethodGeneration?: BeforeMethodGenerationHook;
-  afterMethodGeneration?: AfterMethodGenerationHook;
-
-  // Transformation hooks
-  importTransform?: ImportTransformHook;
-  valueTransform?: ValueTransformHook;
+interface PluginImports {
+  readonly runtime?: readonly string[]; // Runtime imports needed
+  readonly types?: readonly string[]; // Type imports needed
 }
 ```
 
-## Hook Types and Usage
+## PluginManager Class
 
-### Parsing Hooks
+The central registry for managing plugins:
 
-**BeforeParsingHook**: Executed before TypeScript file parsing
+### Constructor
 
 ```typescript
-type BeforeParsingHook = (
-  context: ParseContext
-) => ParseContext | Promise<ParseContext>;
-
-interface ParseContext {
-  filePath: string;
-  content: string;
-  compilerOptions: CompilerOptions;
-  plugins: Plugin[];
-}
-
-// Example: Add custom compiler options
-const preprocessorPlugin: Plugin = {
-  name: 'typescript-preprocessor',
-  hooks: {
-    beforeParsing: (context) => {
-      return {
-        ...context,
-        compilerOptions: {
-          ...context.compilerOptions,
-          strictNullChecks: true,
-          exactOptionalPropertyTypes: true
-        }
-      };
-    }
-  }
-};
+constructor();
 ```
 
-**AfterParsingHook**: Executed after parsing completes
+Creates a new plugin manager instance.
+
+### Core Methods
+
+#### register()
+
+Registers a plugin with the manager:
 
 ```typescript
-type AfterParsingHook = (
-  context: ParseContext,
-  result: ParseResult
-) => ParseResult | Promise<ParseResult>;
-
-interface ParseResult {
-  sourceFile: SourceFile;
-  declarations: TypeDeclaration[];
-  exports: ExportInfo[];
-  imports: ImportInfo[];
-}
-
-// Example: Filter declarations
-const filterPlugin: Plugin = {
-  name: 'declaration-filter',
-  hooks: {
-    afterParsing: (context, result) => {
-      return {
-        ...result,
-        declarations: result.declarations.filter(
-          decl => !decl.name.startsWith('_') // Exclude private declarations
-        )
-      };
-    }
-  }
-};
+register(plugin: Plugin): void
 ```
 
-### Type Resolution Hooks
-
-**BeforeResolvingHook**: Executed before type resolution
+**Example:**
 
 ```typescript
-type BeforeResolvingHook = (
-  context: ResolutionContext
-) => ResolutionContext | Promise<ResolutionContext>;
+import { PluginManager } from 'fluent-gen-ts';
 
-interface ResolutionContext {
-  typeName: string;
-  filePath: string;
-  typeNode: TypeNode;
-  scope: ResolutionScope;
-  cache: TypeResolutionCache;
-  plugins: Plugin[];
-}
+const pluginManager = new PluginManager();
 
-// Example: Modify resolution scope
-const scopePlugin: Plugin = {
-  name: 'custom-scope',
-  hooks: {
-    beforeResolving: (context) => {
-      return {
-        ...context,
-        scope: {
-          ...context.scope,
-          followImports: true,
-          maxDepth: 20
-        }
-      };
-    }
-  }
-};
-```
-
-**AfterResolvingHook**: Executed after type resolution
-
-```typescript
-type AfterResolvingHook = (
-  context: ResolutionContext,
-  typeInfo: TypeInfo
-) => TypeInfo | Promise<TypeInfo>;
-
-// Example: Add metadata to resolved types
-const metadataPlugin: Plugin = {
-  name: 'type-metadata',
-  hooks: {
-    afterResolving: (context, typeInfo) => {
-      return {
-        ...typeInfo,
-        metadata: {
-          resolvedAt: new Date(),
-          resolvedFrom: context.filePath,
-          plugin: 'type-metadata'
-        }
-      };
-    }
-  }
-};
-```
-
-### Code Generation Hooks
-
-**BeforeGenerationHook**: Executed before code generation
-
-```typescript
-type BeforeGenerationHook = (
-  context: GenerationContext
-) => GenerationContext | Promise<GenerationContext>;
-
-interface GenerationContext {
-  typeName: string;
-  typeInfo: TypeInfo;
-  config: GeneratorConfig;
-  imports: ImportInfo[];
-  plugins: Plugin[];
-  outputPath?: string;
-}
-
-// Example: Modify generation configuration
-const configPlugin: Plugin = {
-  name: 'custom-config',
-  hooks: {
-    beforeGeneration: (context) => {
-      return {
-        ...context,
-        config: {
-          ...context.config,
-          addComments: true,
-          indentSize: 4
-        }
-      };
-    }
-  }
-};
-```
-
-**AfterGenerationHook**: Executed after code generation
-
-```typescript
-type AfterGenerationHook = (
-  context: GenerationContext,
-  code: string
-) => string | Promise<string>;
-
-// Example: Add custom header
-const headerPlugin: Plugin = {
-  name: 'file-header',
-  hooks: {
-    afterGeneration: (context, code) => {
-      const header = `/**
- * Generated builder for ${context.typeName}
- * Created: ${new Date().toISOString()}
- * Generator: Fluent Gen
- */
-
-`;
-      return header + code;
-    }
-  }
-};
-```
-
-### Property-Level Hooks
-
-**BeforePropertyGenerationHook**: Executed before generating each property method
-
-```typescript
-type BeforePropertyGenerationHook = (
-  context: PropertyContext,
-  property: PropertyInfo
-) => PropertyInfo | Promise<PropertyInfo>;
-
-interface PropertyContext {
-  typeName: string;
-  propertyName: string;
-  parentContext: GenerationContext;
-  depth: number;
-}
-
-// Example: Add validation to properties
 const validationPlugin: Plugin = {
-  name: 'property-validation',
-  hooks: {
-    beforePropertyGeneration: (context, property) => {
-      if (property.type.kind === 'primitive' && property.type.name === 'string') {
-        return {
-          ...property,
-          validators: ['required', 'string'],
-          jsDoc: property.jsDoc + '\n@validation required, string'
-        };
-      }
-      return property;
-    }
-  }
-};
-```
-
-**AfterPropertyGenerationHook**: Executed after generating each property method
-
-```typescript
-type AfterPropertyGenerationHook = (
-  context: PropertyContext,
-  property: PropertyInfo,
-  method: MethodDeclaration
-) => MethodDeclaration | Promise<MethodDeclaration>;
-
-// Example: Add JSDoc to methods
-const jsdocPlugin: Plugin = {
-  name: 'method-jsdoc',
-  hooks: {
-    afterPropertyGeneration: (context, property, method) => {
-      const jsdoc = `/**
- * Set ${property.name} property
- * @param value The ${property.name} value
- * @returns Builder instance for chaining
- */`;
-
-      return {
-        ...method,
-        jsDoc: jsdoc
-      };
-    }
-  }
-};
-```
-
-### Method-Level Hooks
-
-**BeforeMethodGenerationHook**: Executed before generating individual methods
-
-```typescript
-type BeforeMethodGenerationHook = (
-  context: MethodContext,
-  methodInfo: MethodInfo
-) => MethodInfo | Promise<MethodInfo>;
-
-interface MethodContext {
-  methodName: string;
-  methodType: 'with' | 'build' | 'clone' | 'custom';
-  propertyContext?: PropertyContext;
-  generationContext: GenerationContext;
-}
-
-interface MethodInfo {
-  name: string;
-  parameters: ParameterInfo[];
-  returnType: TypeInfo;
-  body?: string;
-  jsDoc?: string;
-}
-```
-
-**AfterMethodGenerationHook**: Executed after generating individual methods
-
-```typescript
-type AfterMethodGenerationHook = (
-  context: MethodContext,
-  methodInfo: MethodInfo,
-  generatedCode: string
-) => string | Promise<string>;
-
-// Example: Add logging to methods
-const loggingPlugin: Plugin = {
-  name: 'method-logging',
-  hooks: {
-    afterMethodGeneration: (context, methodInfo, code) => {
-      if (context.methodType === 'with') {
-        const logStatement = `console.log('Setting ${methodInfo.name}:', value);`;
-        return code.replace(
-          'return new',
-          `${logStatement}\n    return new`
-        );
-      }
-      return code;
-    }
-  }
-};
-```
-
-### Transformation Hooks
-
-**ImportTransformHook**: Transform import statements
-
-```typescript
-type ImportTransformHook = (
-  imports: ImportInfo[],
-  context: GenerationContext
-) => ImportInfo[] | Promise<ImportInfo[]>;
-
-interface ImportInfo {
-  module: string;
-  imports: string[];
-  isTypeOnly: boolean;
-  alias?: string;
-}
-
-// Example: Add custom imports
-const customImportsPlugin: Plugin = {
-  name: 'custom-imports',
-  hooks: {
-    importTransform: (imports, context) => {
-      return [
-        ...imports,
-        {
-          module: '@/utils/validation',
-          imports: ['validate'],
-          isTypeOnly: false
-        }
-      ];
-    }
-  }
-};
-```
-
-**ValueTransformHook**: Transform property values
-
-```typescript
-type ValueTransformHook = (
-  value: any,
-  property: PropertyInfo,
-  context: PropertyContext
-) => any | Promise<any>;
-
-// Example: Transform date values
-const dateTransformPlugin: Plugin = {
-  name: 'date-transform',
-  hooks: {
-    valueTransform: (value, property, context) => {
-      if (property.type.kind === 'primitive' &&
-          property.type.name === 'Date' &&
-          typeof value === 'string') {
-        return new Date(value);
-      }
-      return value;
-    }
-  }
-};
-```
-
-## Plugin Registration
-
-### Programmatic Registration
-
-```typescript
-import { FluentGen } from 'fluent-gen';
-
-const generator = new FluentGen();
-
-// Register a single plugin
-generator.registerPlugin({
-  name: 'my-plugin',
-  hooks: {
-    beforeGeneration: (context) => {
-      console.log('Generating for:', context.typeName);
-      return context;
-    }
-  }
-});
-
-// Register multiple plugins
-const plugins = [plugin1, plugin2, plugin3];
-plugins.forEach(plugin => generator.registerPlugin(plugin));
-```
-
-### Configuration File Registration
-
-```json
-{
-  "generator": {
-    "outputDir": "./src/builders"
-  },
-  "plugins": [
-    "./plugins/validation-plugin.js",
-    "./plugins/logging-plugin.js",
-    "@company/fluent-gen-plugin-auth",
-    {
-      "path": "./plugins/custom-plugin.js",
-      "config": {
-        "enabled": true,
-        "options": {
-          "strict": true
-        }
-      }
-    }
-  ]
-}
-```
-
-### Dynamic Plugin Loading
-
-```typescript
-// Load plugin from file
-async function loadPlugin(pluginPath: string): Promise<Plugin> {
-  const pluginModule = await import(pluginPath);
-  return pluginModule.default || pluginModule;
-}
-
-// Load and register
-const plugin = await loadPlugin('./plugins/my-plugin.js');
-generator.registerPlugin(plugin);
-```
-
-## Creating Custom Plugins
-
-### Simple Plugin Example
-
-```typescript
-// plugins/string-transformer.js
-const stringTransformerPlugin = {
-  name: 'string-transformer',
+  name: 'validation-plugin',
   version: '1.0.0',
-  description: 'Transforms string properties to include validation',
-
-  hooks: {
-    beforePropertyGeneration: (context, property) => {
-      if (property.type.kind === 'primitive' && property.type.name === 'string') {
-        return {
-          ...property,
-          jsDoc: `${property.jsDoc || ''}\n@validation String property with length validation`
-        };
-      }
-      return property;
-    },
-
-    afterPropertyGeneration: (context, property, method) => {
-      if (property.type.kind === 'primitive' && property.type.name === 'string') {
-        // Add validation logic to the method
-        return {
-          ...method,
-          body: method.body?.replace(
-            'return new',
-            `if (typeof value !== 'string') throw new Error('Value must be a string');
-             return new`
-          )
-        };
-      }
-      return method;
-    }
-  }
+  transformProperty: property => {
+    // Add validation logic
+    return ok(property);
+  },
 };
 
-module.exports = stringTransformerPlugin;
+pluginManager.register(validationPlugin);
 ```
 
-### Advanced Plugin with Configuration
+**Validation:**
+
+- Plugin names must be unique
+- Throws error if plugin with same name already registered
+- Validates plugin structure
+
+#### unregister()
+
+Removes a plugin from the manager:
 
 ```typescript
-// plugins/validation-plugin.ts
-interface ValidationConfig {
-  enableStringValidation: boolean;
-  enableNumberValidation: boolean;
-  throwOnInvalid: boolean;
-  customValidators: Record<string, (value: any) => boolean>;
+unregister(name: string): boolean
+```
+
+**Returns:** `true` if plugin was found and removed, `false` otherwise
+
+**Example:**
+
+```typescript
+const removed = pluginManager.unregister('validation-plugin');
+console.log('Plugin removed:', removed);
+```
+
+#### executeHook()
+
+Executes a specific hook across all registered plugins:
+
+```typescript
+async executeHook<K extends HookType>(
+  options: ExecuteHookOptions<K>
+): Promise<Result<GetHookReturnType<K>>>
+```
+
+This method is used internally by the system but can be called directly for
+testing.
+
+## Hook Types and Contexts
+
+### HookType Enum
+
+```typescript
+enum HookType {
+  BeforeParse = 'beforeParse',
+  AfterParse = 'afterParse',
+  BeforeResolve = 'beforeResolve',
+  AfterResolve = 'afterResolve',
+  BeforeGenerate = 'beforeGenerate',
+  AfterGenerate = 'afterGenerate',
+  TransformType = 'transformType',
+  TransformProperty = 'transformProperty',
+  TransformBuildMethod = 'transformBuildMethod',
+  TransformPropertyMethod = 'transformPropertyMethod',
+  AddCustomMethods = 'addCustomMethods',
+  TransformValue = 'transformValue',
+}
+```
+
+### Context Interfaces
+
+#### Parse Contexts
+
+```typescript
+interface ParseContext {
+  readonly sourceFile: string; // Path to source file
+  readonly typeName: string; // Type being parsed
+}
+```
+
+#### Resolve Contexts
+
+```typescript
+interface ResolveContext {
+  readonly type: Type; // ts-morph Type object
+  readonly symbol?: Symbol; // TypeScript symbol
+  readonly sourceFile?: string; // Source file path
+  readonly typeName?: string; // Type name being resolved
+}
+```
+
+#### Generate Contexts
+
+```typescript
+interface GenerateContext {
+  readonly resolvedType: ResolvedType; // Complete type information
+  readonly options: Record<string, unknown>; // Generation options
+}
+```
+
+#### Builder Contexts
+
+```typescript
+interface BuilderContext extends BaseBuilderContext, BaseGenericsContext {
+  readonly properties: readonly PropertyInfo[];
 }
 
-function createValidationPlugin(config: ValidationConfig): Plugin {
-  return {
-    name: 'advanced-validation',
-    version: '2.1.0',
-    config,
+interface BaseBuilderContext extends BaseTypeContext {
+  readonly builderName: string; // Generated builder name
+}
 
-    hooks: {
-      beforePropertyGeneration: (context, property) => {
-        const validators: string[] = [];
+interface BaseTypeContext {
+  readonly typeName: string; // Original type name
+  readonly typeInfo: TypeInfo; // Type structure
+}
 
-        if (property.type.kind === 'primitive') {
-          switch (property.type.name) {
-            case 'string':
-              if (config.enableStringValidation) {
-                validators.push('string');
-              }
-              break;
-            case 'number':
-              if (config.enableNumberValidation) {
-                validators.push('number');
-              }
-              break;
-          }
-        }
+interface BaseGenericsContext {
+  readonly genericParams: string; // Generic parameter string
+  readonly genericConstraints: string; // Generic constraints
+}
+```
 
-        if (validators.length > 0) {
-          return {
-            ...property,
-            validators,
-            jsDoc: `${property.jsDoc || ''}\n@validation ${validators.join(', ')}`
-          };
-        }
+#### Method Contexts
 
-        return property;
+```typescript
+interface BuildMethodContext extends BaseBuilderContext, BaseGenericsContext {
+  readonly buildMethodCode: string; // Generated build method
+  readonly properties: readonly PropertyInfo[];
+  readonly options: GeneratorOptions;
+  readonly resolvedType: ResolvedType;
+}
+
+interface PropertyMethodContext extends BaseBuilderContext {
+  readonly property: PropertyInfo; // Property being processed
+  readonly originalType: string; // Original TypeScript type string
+}
+```
+
+#### Value Contexts
+
+```typescript
+interface ValueContext {
+  readonly property: string; // Property name
+  readonly valueVariable: string; // Variable name for value
+  readonly type: TypeInfo; // Property type
+  readonly isOptional: boolean; // Whether property is optional
+}
+```
+
+## Plugin Development Guide
+
+### Basic Plugin
+
+```typescript
+import type { Plugin } from 'fluent-gen-ts';
+import { ok } from 'fluent-gen-ts';
+
+const basicPlugin: Plugin = {
+  name: 'basic-example',
+  version: '1.0.0',
+
+  beforeGenerate: context => {
+    console.log(`Generating builder for: ${context.resolvedType.name}`);
+    return ok(context);
+  },
+
+  afterGenerate: (code, context) => {
+    console.log(
+      `Generated ${code.length} characters for ${context.resolvedType.name}`,
+    );
+    return ok(code);
+  },
+};
+```
+
+### Property Transformation Plugin
+
+```typescript
+const propertyTransformPlugin: Plugin = {
+  name: 'property-transformer',
+  version: '1.0.0',
+
+  transformProperty: property => {
+    // Add validation for required properties
+    if (!property.optional && property.type.kind === TypeKind.Primitive) {
+      const transformedProperty: PropertyInfo = {
+        ...property,
+        jsDoc: `${property.jsDoc || ''}\n@required This field is required.`,
+      };
+      return ok(transformedProperty);
+    }
+
+    return ok(property);
+  },
+};
+```
+
+### Custom Methods Plugin
+
+```typescript
+const customMethodsPlugin: Plugin = {
+  name: 'custom-methods',
+  version: '1.0.0',
+
+  addCustomMethods: context => {
+    const customMethods: CustomMethod[] = [
+      {
+        name: 'reset',
+        signature: 'reset(): this',
+        implementation: `
+          Object.keys(this).forEach(key => {
+            if (key.startsWith('_')) delete this[key];
+          });
+          return this;
+        `,
+        jsDoc: '/**\n * Resets all builder properties to undefined\n */',
       },
+      {
+        name: 'clone',
+        signature: 'clone(): typeof this',
+        implementation: `
+          const cloned = Object.create(Object.getPrototypeOf(this));
+          Object.assign(cloned, this);
+          return cloned;
+        `,
+        jsDoc: '/**\n * Creates a copy of this builder\n */',
+      },
+    ];
 
-      afterMethodGeneration: (context, methodInfo, code) => {
-        if (context.methodType === 'with' && context.propertyContext) {
-          const property = context.propertyContext;
-          const validators = (property as any).validators;
+    return ok(customMethods);
+  },
+};
 
-          if (validators?.length > 0) {
-            const validationCode = generateValidationCode(
-              validators,
-              config.throwOnInvalid
-            );
+interface CustomMethod {
+  readonly name: string;
+  readonly signature: string;
+  readonly implementation: string;
+  readonly jsDoc?: string;
+}
+```
 
-            return code.replace(
-              'return new',
-              `${validationCode}\n    return new`
-            );
+### Property Method Transformation Plugin
+
+```typescript
+const propertyMethodPlugin: Plugin = {
+  name: 'property-method-transformer',
+  version: '1.0.0',
+
+  transformPropertyMethod: context => {
+    // Add validation for email properties
+    if (context.property.name === 'email') {
+      const transform: PropertyMethodTransform = {
+        parameterType: 'string',
+        validate: `
+          if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(${context.property.name})) {
+            throw new Error('Invalid email format');
           }
-        }
-
-        return code;
-      }
+        `,
+        extractValue: context.property.name,
+      };
+      return ok(transform);
     }
-  };
-}
 
-function generateValidationCode(validators: string[], throwOnInvalid: boolean): string {
-  const checks = validators.map(validator => {
-    switch (validator) {
-      case 'string':
-        return 'typeof value === "string"';
-      case 'number':
-        return 'typeof value === "number" && !isNaN(value)';
-      default:
-        return 'true';
+    return ok({});
+  },
+};
+
+interface PropertyMethodTransform {
+  readonly parameterType?: string; // Override parameter type
+  readonly extractValue?: string; // Value extraction logic
+  readonly validate?: string; // Validation code
+}
+```
+
+### Value Transformation Plugin
+
+```typescript
+const valueTransformPlugin: Plugin = {
+  name: 'value-transformer',
+  version: '1.0.0',
+
+  transformValue: context => {
+    // Transform dates to ISO strings
+    if (
+      context.type.kind === TypeKind.Reference &&
+      context.type.name === 'Date'
+    ) {
+      const transform: ValueTransform = {
+        condition: `${context.valueVariable} instanceof Date`,
+        transform: `${context.valueVariable}.toISOString()`,
+      };
+      return ok(transform);
     }
-  }).join(' && ');
 
-  const action = throwOnInvalid
-    ? 'throw new Error(`Validation failed for ${methodInfo.name}`);'
-    : 'console.warn(`Validation failed for ${methodInfo.name}`);';
+    return ok(null); // No transformation
+  },
+};
 
-  return `if (!(${checks})) { ${action} }`;
+interface ValueTransform {
+  readonly condition?: string; // When to apply transform
+  readonly transform: string; // Transformation expression
 }
+```
 
-export default createValidationPlugin;
+### Type Transformation Plugin
+
+```typescript
+const typeTransformPlugin: Plugin = {
+  name: 'type-transformer',
+  version: '1.0.0',
+
+  transformType: (type, typeInfo) => {
+    // Convert string literals to branded types
+    if (
+      typeInfo.kind === TypeKind.Primitive &&
+      typeInfo.name === 'string' &&
+      typeInfo.literal
+    ) {
+      const brandedType: TypeInfo = {
+        kind: TypeKind.Reference,
+        name: `Branded<string, '${typeInfo.literal}'>`,
+      };
+      return ok(brandedType);
+    }
+
+    return ok(typeInfo);
+  },
+};
 ```
 
 ### Plugin with Dependencies
 
 ```typescript
-// plugins/database-plugin.ts
-const databasePlugin: Plugin = {
-  name: 'database-integration',
+const dependentPlugin: Plugin = {
+  name: 'dependent-plugin',
   version: '1.0.0',
-  dependencies: ['validation', 'logging'], // Requires these plugins
-
-  hooks: {
-    afterGeneration: async (context, code) => {
-      // Add database integration methods
-      const dbMethods = `
-
-  // Database integration methods
-  async save(): Promise<${context.typeName}> {
-    const data = this.build();
-    return await database.save('${context.typeName.toLowerCase()}', data);
-  }
-
-  static async findById(id: string): Promise<${context.typeName} | null> {
-    const data = await database.findById('${context.typeName.toLowerCase()}', id);
-    return data ? ${context.typeName.toLowerCase()}Builder().merge(data).build() : null;
-  }`;
-
-      return code.replace(
-        /}(\s*)$/, // Replace closing brace at end
-        `${dbMethods}\n}$1`
-      );
-    }
-  }
-};
-```
-
-## Built-in Plugins
-
-Fluent Gen comes with several built-in plugins:
-
-### ValidationPlugin
-
-Adds runtime validation to generated builders:
-
-```typescript
-import { ValidationPlugin } from 'fluent-gen/plugins';
-
-const generator = new FluentGen();
-generator.registerPlugin(ValidationPlugin({
-  enableStringValidation: true,
-  enableNumberValidation: true,
-  throwOnInvalid: false
-}));
-```
-
-### LoggingPlugin
-
-Adds logging to builder operations:
-
-```typescript
-import { LoggingPlugin } from 'fluent-gen/plugins';
-
-generator.registerPlugin(LoggingPlugin({
-  logLevel: 'debug',
-  logMethods: ['with', 'build'],
-  includeValues: true
-}));
-```
-
-### ImmutabilityPlugin
-
-Ensures immutable builder operations:
-
-```typescript
-import { ImmutabilityPlugin } from 'fluent-gen/plugins';
-
-generator.registerPlugin(ImmutabilityPlugin({
-  deepFreeze: true,
-  preventMutation: true
-}));
-```
-
-### SerializationPlugin
-
-Adds serialization methods to builders:
-
-```typescript
-import { SerializationPlugin } from 'fluent-gen/plugins';
-
-generator.registerPlugin(SerializationPlugin({
-  includeToJSON: true,
-  includeFromJSON: true,
-  includeToYAML: false
-}));
-```
-
-## Plugin Best Practices
-
-### 1. Plugin Structure
-
-```typescript
-// Good plugin structure
-const myPlugin: Plugin = {
-  name: 'my-plugin',
-  version: '1.0.0',
-  description: 'Clear description of what the plugin does',
-  author: 'Your Name <email@example.com>',
-
-  hooks: {
-    // Only implement hooks you need
-    beforeGeneration: (context) => {
-      // Clear, focused functionality
-      return context;
-    }
+  imports: {
+    runtime: ['zod'], // Runtime dependencies
+    types: ['@types/uuid'], // Type dependencies
   },
 
-  config: {
-    // Sensible defaults
-    enabled: true,
-    strictMode: false
-  }
+  transformProperty: property => {
+    // Add Zod validation for string properties
+    if (
+      property.type.kind === TypeKind.Primitive &&
+      property.type.name === 'string'
+    ) {
+      const enhanced: PropertyInfo = {
+        ...property,
+        jsDoc: `${property.jsDoc || ''}\n@validation z.string()`,
+      };
+      return ok(enhanced);
+    }
+
+    return ok(property);
+  },
 };
 ```
 
-### 2. Error Handling
+## Plugin Registration Patterns
+
+### With FluentGen
 
 ```typescript
-const robustPlugin: Plugin = {
-  name: 'robust-plugin',
-  hooks: {
-    afterGeneration: async (context, code) => {
-      try {
-        // Plugin logic here
-        return await processCode(code);
-      } catch (error) {
-        console.warn(`Plugin ${this.name} failed:`, error.message);
-        // Return original code on failure
-        return code;
-      }
-    }
-  }
-};
-```
+import { FluentGen } from 'fluent-gen-ts';
 
-### 3. Configuration Validation
+const generator = new FluentGen();
 
-```typescript
-function createMyPlugin(config: MyPluginConfig): Plugin {
-  // Validate configuration
-  if (!config.requiredOption) {
-    throw new Error('requiredOption is required');
-  }
-
-  return {
-    name: 'my-plugin',
-    config,
-    hooks: {
-      // Implementation
-    }
-  };
+const result = generator.registerPlugin(myPlugin);
+if (!result.ok) {
+  console.error('Plugin registration failed:', result.error.message);
 }
 ```
 
-### 4. Testing Plugins
+### With PluginManager
 
 ```typescript
-// plugin.test.ts
-import { FluentGen } from 'fluent-gen';
-import { myPlugin } from './my-plugin';
+import { PluginManager, FluentGen } from 'fluent-gen-ts';
+
+const pluginManager = new PluginManager();
+pluginManager.register(plugin1);
+pluginManager.register(plugin2);
+
+const generator = new FluentGen({
+  pluginManager,
+});
+```
+
+### Dynamic Plugin Loading
+
+```typescript
+async function loadPlugin(pluginPath: string): Promise<Plugin> {
+  const pluginModule = await import(pluginPath);
+  return pluginModule.default || pluginModule.plugin;
+}
+
+const plugin = await loadPlugin('./my-plugin.js');
+pluginManager.register(plugin);
+```
+
+## Error Handling in Plugins
+
+### Returning Errors
+
+```typescript
+const errorHandlingPlugin: Plugin = {
+  name: 'error-example',
+  version: '1.0.0',
+
+  transformProperty: property => {
+    try {
+      // Risky operation
+      const result = riskyTransformation(property);
+      return ok(result);
+    } catch (error) {
+      return err(new Error(`Property transformation failed: ${error.message}`));
+    }
+  },
+};
+```
+
+### Validation
+
+```typescript
+const validationPlugin: Plugin = {
+  name: 'validator',
+  version: '1.0.0',
+
+  beforeGenerate: context => {
+    if (!context.resolvedType.name) {
+      return err(new Error('Type name is required'));
+    }
+
+    if (context.resolvedType.typeInfo.kind !== TypeKind.Object) {
+      return err(new Error('Only object types are supported'));
+    }
+
+    return ok(context);
+  },
+};
+```
+
+## Plugin Execution Order
+
+Plugins execute in registration order for each hook:
+
+```typescript
+pluginManager.register(pluginA); // Executes first
+pluginManager.register(pluginB); // Executes second
+pluginManager.register(pluginC); // Executes third
+```
+
+The output of one plugin becomes the input to the next:
+
+```
+Input → PluginA → PluginB → PluginC → Output
+```
+
+## Testing Plugins
+
+### Unit Testing
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { ok } from 'fluent-gen-ts';
 
 describe('MyPlugin', () => {
-  it('should transform string properties', async () => {
-    const generator = new FluentGen();
-    generator.registerPlugin(myPlugin);
+  it('should transform string properties', () => {
+    const property: PropertyInfo = {
+      name: 'test',
+      type: { kind: TypeKind.Primitive, name: 'string' },
+      optional: false,
+      readonly: false,
+    };
 
-    const result = await generator.generateBuilder('./test-types.ts', 'TestType');
+    const result = myPlugin.transformProperty!(property);
 
     expect(result.ok).toBe(true);
-    expect(result.value).toContain('// Plugin transformation applied');
+    if (result.ok) {
+      expect(result.value.jsDoc).toContain('validation');
+    }
   });
 });
 ```
 
-## Plugin Development Tools
-
-### Plugin Debugging
+### Integration Testing
 
 ```typescript
-const debugPlugin: Plugin = {
-  name: 'debug-plugin',
-  hooks: {
-    beforeGeneration: (context) => {
-      console.log('Generation context:', context);
-      return context;
-    },
-    afterGeneration: (context, code) => {
-      console.log('Generated code length:', code.length);
-      return code;
-    }
-  }
-};
-```
+import { PluginManager, TypeExtractor } from 'fluent-gen-ts';
 
-### Plugin Performance Monitoring
+describe('Plugin Integration', () => {
+  it('should work with type extraction', async () => {
+    const pluginManager = new PluginManager();
+    pluginManager.register(myPlugin);
 
-```typescript
-const performancePlugin: Plugin = {
-  name: 'performance-monitor',
-  hooks: {
-    beforeGeneration: (context) => {
-      console.time(`generation-${context.typeName}`);
-      return context;
-    },
-    afterGeneration: (context, code) => {
-      console.timeEnd(`generation-${context.typeName}`);
-      return code;
-    }
-  }
-};
-```
+    const extractor = new TypeExtractor({ pluginManager });
+    const result = await extractor.extractType('./test-types.ts', 'TestType');
 
-### Plugin Composition
-
-```typescript
-// Combine multiple plugins
-function createPluginSuite(config: PluginSuiteConfig): Plugin[] {
-  return [
-    ValidationPlugin(config.validation),
-    LoggingPlugin(config.logging),
-    SerializationPlugin(config.serialization)
-  ];
-}
-
-// Usage
-const plugins = createPluginSuite({
-  validation: { enableStringValidation: true },
-  logging: { logLevel: 'info' },
-  serialization: { includeToJSON: true }
+    expect(result.ok).toBe(true);
+  });
 });
-
-plugins.forEach(plugin => generator.registerPlugin(plugin));
 ```
 
-## Publishing Plugins
+## Performance Considerations
 
-### Package Structure
+### Efficient Plugins
 
-```
-my-fluent-gen-plugin/
-├── src/
-│   ├── index.ts
-│   ├── plugin.ts
-│   └── types.ts
-├── dist/
-├── package.json
-├── README.md
-└── LICENSE
-```
+```typescript
+// Good: Early returns
+const efficientPlugin: Plugin = {
+  name: 'efficient',
+  version: '1.0.0',
 
-### Package.json
+  transformProperty: property => {
+    // Early return for non-relevant properties
+    if (property.type.kind !== TypeKind.Primitive) {
+      return ok(property);
+    }
 
-```json
-{
-  "name": "@yourorg/fluent-gen-plugin-name",
-  "version": "1.0.0",
-  "description": "Description of your plugin",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "keywords": ["fluent-gen", "plugin", "typescript"],
-  "peerDependencies": {
-    "fluent-gen": "^1.0.0"
+    // Only process what's needed
+    if (property.name === 'id') {
+      return ok({ ...property, readonly: true });
+    }
+
+    return ok(property);
   },
-  "fluent-gen": {
-    "plugin": true
-  }
+};
+
+// Bad: Unnecessary processing
+const inefficientPlugin: Plugin = {
+  name: 'inefficient',
+  version: '1.0.0',
+
+  transformProperty: property => {
+    // Always creates new object even when no changes needed
+    const transformed = JSON.parse(JSON.stringify(property));
+
+    if (property.name === 'id') {
+      transformed.readonly = true;
+    }
+
+    return ok(transformed);
+  },
+};
+```
+
+### Caching in Plugins
+
+```typescript
+const cachingPlugin: Plugin = {
+  name: 'caching-plugin',
+  version: '1.0.0',
+
+  transformProperty: (() => {
+    const cache = new Map<string, PropertyInfo>();
+
+    return (property: PropertyInfo) => {
+      const key = `${property.name}:${property.type.kind}`;
+
+      if (cache.has(key)) {
+        return ok(cache.get(key)!);
+      }
+
+      const transformed = expensiveTransformation(property);
+      cache.set(key, transformed);
+
+      return ok(transformed);
+    };
+  })(),
+};
+```
+
+## Best Practices
+
+### Plugin Structure
+
+1. **Single Responsibility**: Each plugin should have one clear purpose
+2. **Immutable Transformations**: Don't modify input objects directly
+3. **Error Handling**: Always return `Result<T>` types
+4. **Documentation**: Include JSDoc comments
+5. **Versioning**: Follow semantic versioning
+
+### Naming Conventions
+
+```typescript
+// Good naming
+const emailValidationPlugin: Plugin = {
+  name: 'email-validation',
+  version: '1.0.0',
+  // ...
+};
+
+// Bad naming
+const plugin1: Plugin = {
+  name: 'p1',
+  version: '1',
+  // ...
+};
+```
+
+### Configuration
+
+```typescript
+interface PluginConfig {
+  readonly enabled: boolean;
+  readonly options: Record<string, unknown>;
+}
+
+function createConfigurablePlugin(config: PluginConfig): Plugin {
+  return {
+    name: 'configurable-plugin',
+    version: '1.0.0',
+
+    transformProperty: property => {
+      if (!config.enabled) {
+        return ok(property);
+      }
+
+      // Apply transformations based on config.options
+      return ok(transformWithOptions(property, config.options));
+    },
+  };
 }
 ```
-
-### Plugin Registry
-
-Plugins can be discovered and shared through:
-- npm registry with `fluent-gen-plugin` keyword
-- GitHub topics: `fluent-gen-plugin`
-- Official plugin directory (coming soon)
 
 ## Next Steps
 
-- [See plugin examples in GitHub](https://github.com/rafbcampos/fluent-gen/tree/main/examples/plugins)
-- [Generator Functions Documentation](./generator.md)
-- [Type Resolution System](./resolver.md)
-- [Configuration Guide](../guide/configuration.md)
+- [Generator Functions Documentation](./generator.md) - Using plugins in
+  generation
+- [Type Resolution System](./resolver.md) - Plugins in type resolution
+- [CLI Usage](../guide/cli.md) - Command-line plugin usage
