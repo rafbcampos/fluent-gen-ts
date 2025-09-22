@@ -294,6 +294,9 @@ export class FluentGen {
 
       // Generate builders from each file
       for (const [filePath, typeNames] of fileTypeMap) {
+        // Reset resolver state before processing each file to prevent depth accumulation
+        this.extractor.clearCache();
+
         for (const typeName of typeNames) {
           const result = await this.generateBuilder(filePath, typeName);
           if (!result.ok) {

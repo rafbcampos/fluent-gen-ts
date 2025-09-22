@@ -45,7 +45,7 @@ export class TypeResolver {
   private genericContext: GenericContext;
 
   constructor(options: ResolverOptions = {}) {
-    this.maxDepth = options.maxDepth ?? 10;
+    this.maxDepth = options.maxDepth ?? 30;
     this.cache = options.cache ?? new TypeResolutionCache();
     this.pluginManager = options.pluginManager ?? new PluginManager();
     this.expandUtilityTypes = options.expandUtilityTypes ?? true;
@@ -940,6 +940,16 @@ export class TypeResolver {
 
   clearVisited(): void {
     this.visitedTypes.clear();
+  }
+
+  /**
+   * Reset all resolver state including visited types and generic context.
+   * This should be called between different type extractions to ensure clean state,
+   * especially important for multi-file batch processing to prevent depth accumulation.
+   */
+  resetState(): void {
+    this.visitedTypes.clear();
+    this.resetGenericContext();
   }
 
   /**

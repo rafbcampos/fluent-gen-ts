@@ -316,7 +316,7 @@ export class TypeExtractor {
 
   clearCache(): void {
     this.cache.clear();
-    this.resolver.clearVisited();
+    this.resolver.resetState();
   }
 }
 

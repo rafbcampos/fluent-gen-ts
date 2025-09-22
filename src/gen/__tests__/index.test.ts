@@ -28,6 +28,7 @@ describe('FluentGen', () => {
     mockTypeExtractor = {
       extractType: vi.fn(),
       scanFile: vi.fn(),
+      clearCache: vi.fn(),
     } as unknown as TypeExtractor;
 
     mockBuilderGenerator = {
