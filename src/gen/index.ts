@@ -77,6 +77,7 @@ function extractTypeExtractorOptions({
  */
 function extractGeneratorConfig({
   outputPath,
+  outputDir,
   useDefaults,
   contextType,
   addComments,
@@ -85,6 +86,10 @@ function extractGeneratorConfig({
 
   if (outputPath !== undefined) {
     config.outputPath = outputPath;
+  }
+
+  if (outputDir !== undefined) {
+    config.outputDir = outputDir;
   }
 
   if (useDefaults !== undefined) {

@@ -32,6 +32,11 @@ export interface InitOptions {
   overwrite?: boolean;
 }
 
+export interface SetupCommonOptions {
+  output?: string;
+  overwrite?: boolean;
+}
+
 export interface CommandOptions {
   tsConfigPath?: string;
   outputDir?: string;

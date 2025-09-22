@@ -18,6 +18,8 @@ import { ok, err } from '../core/result.js';
 export interface ImportGeneratorConfig {
   /** Whether generating multiple files */
   readonly isGeneratingMultiple: boolean;
+  /** Whether common.ts file exists in output directory */
+  readonly hasExistingCommon?: boolean;
   /** Path to common utilities */
   readonly commonImportPath: string;
   /** Plugin manager for additional imports */
@@ -153,7 +155,10 @@ export class ImportGenerator {
    * @param config - Import generation configuration
    */
   generateCommonImports(config: ImportGeneratorConfig): string {
-    if (!config || !config.isGeneratingMultiple) {
+    // Generate common imports if:
+    // 1. Generating multiple files (isGeneratingMultiple), OR
+    // 2. Single file generation but common.ts exists (hasExistingCommon)
+    if (!config || (!config.isGeneratingMultiple && !config.hasExistingCommon)) {
       return '';
     }
 

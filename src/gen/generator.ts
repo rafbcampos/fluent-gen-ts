@@ -8,11 +8,12 @@ import { ImportGenerator } from './import-generator.js';
 import { TypeStringGenerator } from './type-string-generator.js';
 import { DefaultValueGenerator } from './default-value-generator.js';
 import { MethodGenerator } from './method-generator.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Constants
 const DEFAULT_OUTPUT_PATH = './generated';
 const DEFAULT_CONTEXT_TYPE = 'BaseBuildContext';
-const DEFAULT_IMPORT_PATH = './common';
 
 /**
  * Type guard to check if typeInfo is an object type
@@ -26,6 +27,7 @@ const isObjectType = (
 export interface GeneratorConfig extends GeneratorOptions {
   addComments?: boolean;
   generateCommonFile?: boolean;
+  outputDir?: string;
 }
 
 /**
@@ -33,7 +35,7 @@ export interface GeneratorConfig extends GeneratorOptions {
  * Orchestrates code generation for fluent builders
  */
 export class BuilderGenerator {
-  private readonly config: Required<GeneratorConfig>;
+  private readonly config: GeneratorConfig;
   private readonly pluginManager: PluginManager;
   private readonly generatedBuilders = new Set<string>();
   private readonly importGenerator: ImportGenerator;
@@ -43,19 +45,33 @@ export class BuilderGenerator {
   private isGeneratingMultiple = false;
 
   constructor(config: GeneratorConfig = {}, pluginManager?: PluginManager) {
-    this.config = {
-      outputPath: config.outputPath ?? DEFAULT_OUTPUT_PATH,
-      useDefaults: config.useDefaults ?? true,
-      contextType: config.contextType ?? DEFAULT_CONTEXT_TYPE,
-      importPath: DEFAULT_IMPORT_PATH,
-      addComments: config.addComments ?? true,
-      generateCommonFile: false, // Will be determined by isGeneratingMultiple
-    };
+    this.config = config;
     this.pluginManager = pluginManager ?? new PluginManager();
     this.importGenerator = new ImportGenerator();
     this.typeStringGenerator = new TypeStringGenerator();
     this.defaultValueGenerator = new DefaultValueGenerator();
     this.methodGenerator = new MethodGenerator();
+  }
+
+  // Helper methods to get config values with defaults
+  private getOutputPath(): string {
+    return this.config.outputPath ?? DEFAULT_OUTPUT_PATH;
+  }
+
+  private getContextType(): string {
+    return this.config.contextType ?? DEFAULT_CONTEXT_TYPE;
+  }
+
+  private getUseDefaults(): boolean {
+    return this.config.useDefaults ?? true;
+  }
+
+  private getAddComments(): boolean {
+    return this.config.addComments ?? true;
+  }
+
+  private getOutputDir(): string | undefined {
+    return this.config.outputDir;
   }
 
   async generate(resolvedType: ResolvedType): Promise<Result<string>> {
@@ -65,7 +81,7 @@ export class BuilderGenerator {
 
     const hookResult = await this.pluginManager.executeHook({
       hookType: HookType.BeforeGenerate,
-      input: { resolvedType, options: this.config },
+      input: { resolvedType, options: this.config as Record<string, unknown> },
     });
 
     if (!hookResult.ok) {
@@ -78,7 +94,7 @@ export class BuilderGenerator {
       const afterHook = await this.pluginManager.executeHook({
         hookType: HookType.AfterGenerate,
         input: code,
-        additionalArgs: [{ resolvedType, options: this.config }],
+        additionalArgs: [{ resolvedType, options: this.config as Record<string, unknown> }],
       });
 
       if (!afterHook.ok) {
@@ -108,6 +124,20 @@ export class BuilderGenerator {
   }
 
   /**
+   * Checks if a common.ts file exists in the specified directory
+   * @param outputDir - The directory to check for common.ts
+   * @returns True if common.ts exists
+   */
+  private hasExistingCommonFile(outputDir: string): boolean {
+    try {
+      const commonTsPath = path.join(outputDir, 'common.ts');
+      return fs.existsSync(commonTsPath);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Generates the common utilities file content
    */
   generateCommonFile(): string {
@@ -125,9 +155,18 @@ export class BuilderGenerator {
 
     const parts: string[] = [];
 
-    // If generating a single file, add utilities at the beginning
+    // If generating a single file, check for existing common.ts and add utilities accordingly
     if (!this.isGeneratingMultiple) {
-      parts.push(getSingleFileUtilitiesTemplate());
+      // Use configured outputDir or fall back to default output path
+      const checkDir = this.getOutputDir() || DEFAULT_OUTPUT_PATH;
+      const hasCommon = this.hasExistingCommonFile(checkDir);
+      if (hasCommon) {
+        // common.ts exists, imports will be handled by ImportGenerator
+        // Don't inline utilities
+      } else {
+        // No common.ts found, inline utilities
+        parts.push(getSingleFileUtilitiesTemplate());
+      }
     }
 
     // Add the main builder parts
@@ -149,10 +188,15 @@ export class BuilderGenerator {
    * Generates import statements for the builder
    */
   private generateImports(resolvedType: ResolvedType): string {
+    // Use configured outputDir or fall back to default output path
+    const checkDir = this.getOutputDir() || DEFAULT_OUTPUT_PATH;
+    const hasCommon = this.hasExistingCommonFile(checkDir);
+
     const result = this.importGenerator.generateAllImports({
       resolvedType,
       config: {
         isGeneratingMultiple: this.isGeneratingMultiple,
+        hasExistingCommon: hasCommon,
         commonImportPath: './common.js',
         pluginManager: this.pluginManager,
       },
@@ -170,8 +214,8 @@ export class BuilderGenerator {
    */
   private async generateBuilderInterface(name: string, typeInfo: TypeInfo): Promise<string> {
     return this.methodGenerator.generateBuilderInterface(name, typeInfo, {
-      addComments: this.config.addComments,
-      contextType: this.config.contextType,
+      addComments: this.getAddComments(),
+      contextType: this.getContextType(),
       pluginManager: this.pluginManager,
     });
   }
@@ -329,7 +373,7 @@ export class BuilderGenerator {
   private generateDefaultsCode(typeInfo: TypeInfo): string {
     const defaults = this.defaultValueGenerator.generateDefaultsObject({
       typeInfo,
-      config: { useDefaults: this.config.useDefaults },
+      config: { useDefaults: this.getUseDefaults() },
     });
     return defaults
       ? `  private static readonly defaults: Record<string, unknown> = ${defaults};`
@@ -350,8 +394,8 @@ export class BuilderGenerator {
       builderName,
       genericConstraints,
       {
-        addComments: this.config.addComments,
-        contextType: this.config.contextType,
+        addComments: this.getAddComments(),
+        contextType: this.getContextType(),
         pluginManager: this.pluginManager,
       },
       name,
@@ -381,12 +425,11 @@ export class BuilderGenerator {
     } = params;
 
     return `
+/**
+* A builder for ${name}
+*/
 export class ${builderName}${genericParams} extends FluentBuilderBase<${name}${genericConstraints}> implements ${builderName}Methods${genericConstraints}, FluentBuilder<${name}${genericConstraints}, BaseBuildContext> {
 ${defaultsCode}
-
-  constructor(initial?: Partial<${name}${genericConstraints}>) {
-    super(initial);
-  }
 
 ${methods}
 
@@ -480,7 +523,7 @@ ${buildMethod}
    * Builds the final ${typeName} object
    * @param context - Optional build context for nested builders
    */
-  build(context?: ${this.config.contextType}): ${typeName}${genericConstraints} {
+  build(context?: ${this.getContextType()}): ${typeName}${genericConstraints} {
     return this.buildWithDefaults(${defaultsReference}, context);
   }`;
   }
@@ -492,7 +535,7 @@ ${buildMethod}
     return (
       this.defaultValueGenerator.generateDefaultsObject({
         typeInfo,
-        config: { useDefaults: this.config.useDefaults },
+        config: { useDefaults: this.getUseDefaults() },
       }) !== null
     );
   }
@@ -512,7 +555,7 @@ ${buildMethod}
 
     // Add JSDoc for the factory function
     const jsDoc =
-      this.config.addComments && isObjectType(typeInfo) && typeInfo.properties.length
+      this.getAddComments() && isObjectType(typeInfo) && typeInfo.properties.length
         ? `/**\n * Creates a new ${name} builder\n * @param initial Optional initial values\n * @returns A fluent builder for ${name}\n */\n`
         : '';
 

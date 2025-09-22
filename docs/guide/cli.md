@@ -44,14 +44,15 @@ npx fluent-gen-ts generate src/types.ts User
 
 ## Commands Overview
 
-fluent-gen-ts provides four main commands:
+fluent-gen-ts provides five main commands:
 
-| Command    | Alias | Description                                                   |
-| ---------- | ----- | ------------------------------------------------------------- |
-| `init`     | -     | Initialize configuration with interactive setup (recommended) |
-| `generate` | `gen` | Generate a builder for a specific type                        |
-| `batch`    | -     | Generate multiple builders from configuration                 |
-| `scan`     | -     | Scan files for types and generate builders                    |
+| Command        | Alias | Description                                                   |
+| -------------- | ----- | ------------------------------------------------------------- |
+| `init`         | -     | Initialize configuration with interactive setup (recommended) |
+| `setup-common` | -     | Create a customizable common.ts utilities file                |
+| `generate`     | `gen` | Generate a builder for a specific type                        |
+| `batch`        | -     | Generate multiple builders from configuration                 |
+| `scan`         | -     | Scan files for types and generate builders                    |
 
 ## Command: generate
 
@@ -439,6 +440,121 @@ selections:
 ```
 
 You can then customize this file for your project's needs.
+
+## Command: setup-common
+
+Create a customizable `common.ts` utilities file that contains shared helper
+functions for all generated builders. This file provides a foundation for
+consistent utilities across your builder implementations.
+
+### Syntax
+
+```bash
+fluent-gen-ts setup-common [options]
+```
+
+### Options
+
+| Option        | Alias | Type    | Description                             |
+| ------------- | ----- | ------- | --------------------------------------- |
+| `--output`    | `-o`  | string  | Output file path (default: ./common.ts) |
+| `--overwrite` | -     | boolean | Overwrite existing file if it exists    |
+
+### Purpose and Benefits
+
+The `setup-common` command creates a shared utilities file that:
+
+- **Reduces duplication**: Common helper functions are defined once and imported
+  by all builders
+- **Enables customization**: You can modify the utilities to fit your specific
+  needs
+- **Improves consistency**: All builders use the same utility functions
+- **Optimizes bundle size**: Shared code is not duplicated across multiple
+  builder files
+
+### Examples
+
+#### Basic Usage
+
+```bash
+# Create common.ts in current directory
+fluent-gen-ts setup-common
+
+# Create in specific location
+fluent-gen-ts setup-common --output src/builders/common.ts
+
+# Create in custom directory structure
+fluent-gen-ts setup-common -o lib/generated/utilities.ts
+```
+
+#### Working with Existing Files
+
+```bash
+# Check what would be created (safe)
+fluent-gen-ts setup-common --output ./shared/common.ts
+
+# Overwrite existing file
+fluent-gen-ts setup-common --overwrite
+
+# Overwrite with custom location
+fluent-gen-ts setup-common -o src/utils/builder-common.ts --overwrite
+```
+
+### Generated Content
+
+The created file contains essential builder utilities including:
+
+- **Type helpers**: Functions for type checking and validation
+- **Utility functions**: Common operations used across builders
+- **Constants**: Shared values and configurations
+- **Helper types**: TypeScript utility types for builder implementation
+
+Example generated content structure:
+
+```typescript
+/**
+ * Common utilities for fluent builders
+ */
+
+// Type helper functions
+export function isObject(value: unknown): value is Record<string, unknown> {
+  // Implementation...
+}
+
+// Utility functions for builders
+export function deepMerge<T>(target: T, source: Partial<T>): T {
+  // Implementation...
+}
+
+// Additional utilities...
+```
+
+### Integration with Builder Generation
+
+When a `common.ts` file exists in your project:
+
+1. **Automatic Detection**: The generator automatically detects the common file
+2. **Import Optimization**: Generated builders import utilities instead of
+   duplicating code
+3. **Customizable Base**: You can modify utilities to add project-specific
+   functionality
+
+### Workflow Integration
+
+1. **Setup Phase**: Run `setup-common` to create the utilities file
+2. **Customization**: Modify the generated file to fit your project needs
+3. **Generation**: Generate builders - they automatically use your common
+   utilities
+4. **Maintenance**: Update common utilities as needed; all builders benefit
+
+```bash
+# Complete workflow example
+fluent-gen-ts setup-common --output src/builders/common.ts
+# Edit src/builders/common.ts to add custom utilities
+fluent-gen-ts generate src/types.ts User --output src/builders/user.builder.ts
+fluent-gen-ts generate src/types.ts Product --output src/builders/product.builder.ts
+# Both generated builders will import from common.ts
+```
 
 ## Global Options
 

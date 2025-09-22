@@ -96,6 +96,15 @@ export class TypeStringGenerator {
         const elementType = this.typeInfoToString(prop.type.elementType);
         return `Array<${elementType} | ${elementBuilderType}>`;
       }
+
+      // Handle arrays of anonymous objects with nested builders
+      if (
+        this.isObjectType(prop.type.elementType) &&
+        this.hasNestedBuildableTypes(prop.type.elementType)
+      ) {
+        const elementType = this.getAnonymousObjectTypeWithBuilders(prop.type.elementType);
+        return `Array<${elementType}>`;
+      }
     }
 
     // Handle tuples with nested builders
@@ -106,6 +115,11 @@ export class TypeStringGenerator {
         return elementBuilder ? `${elementTypeStr} | ${elementBuilder}` : elementTypeStr;
       });
       return `[${tupleElements.join(', ')}]`;
+    }
+
+    // Handle anonymous objects with nested builders
+    if (this.isObjectType(prop.type) && this.hasNestedBuildableTypes(prop.type)) {
+      return this.getAnonymousObjectTypeWithBuilders(prop.type);
     }
 
     // Handle direct builder types
@@ -290,5 +304,83 @@ export class TypeStringGenerator {
     const trueType = this.typeInfoToString(typeInfo.trueType);
     const falseType = this.typeInfoToString(typeInfo.falseType);
     return `${checkType} extends ${extendsType} ? ${trueType} : ${falseType}`;
+  }
+
+  /**
+   * Checks if an object type has nested types that can have builders
+   * @param typeInfo - The object type to check
+   * @returns True if it has nested buildable types
+   */
+  private hasNestedBuildableTypes(typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>): boolean {
+    if (!this.options.includeBuilderTypes) {
+      return false;
+    }
+
+    // Only process anonymous objects (invalid names like __type)
+    if (typeInfo.name && isValidImportableTypeName(typeInfo.name)) {
+      return false;
+    }
+
+    // Check if any properties have buildable types
+    return typeInfo.properties?.some(prop => this.isTypeBuilderEligible(prop.type)) ?? false;
+  }
+
+  /**
+   * Checks if a type is eligible for builder generation
+   * @param typeInfo - The type to check
+   * @returns True if the type can have a builder
+   */
+  private isTypeBuilderEligible(typeInfo: TypeInfo): boolean {
+    if (typeInfo.kind === TypeKind.Object) {
+      // Named object types are eligible
+      if (typeInfo.name && isValidImportableTypeName(typeInfo.name)) {
+        return true;
+      }
+      // Anonymous objects with properties are also eligible
+      return typeInfo.properties && typeInfo.properties.length > 0;
+    }
+    return false;
+  }
+
+  /**
+   * Generates the type string for anonymous objects with builder support
+   * @param typeInfo - The anonymous object type
+   * @returns Type string with builder alternatives for eligible properties
+   */
+  private getAnonymousObjectTypeWithBuilders(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
+  ): string {
+    if (!typeInfo.properties || typeInfo.properties.length === 0) {
+      return 'object';
+    }
+
+    const propertyStrings = typeInfo.properties.map(prop => {
+      const propName = prop.name;
+      let propType = this.typeInfoToString(prop.type);
+
+      // Add builder alternative for eligible types
+      if (this.isTypeBuilderEligible(prop.type)) {
+        if (
+          this.isObjectType(prop.type) &&
+          prop.type.name &&
+          isValidImportableTypeName(prop.type.name)
+        ) {
+          // Named object type - use existing logic
+          const builderType = this.getBuilderTypeIfApplicable(prop.type);
+          if (builderType) {
+            propType = `${propType} | ${builderType}`;
+          }
+        } else if (this.isObjectType(prop.type) && prop.type.properties) {
+          // Anonymous nested object - recurse
+          const nestedType = this.getAnonymousObjectTypeWithBuilders(prop.type);
+          propType = nestedType;
+        }
+      }
+
+      const optionalMarker = prop.optional ? '?' : '';
+      return `${propName}${optionalMarker}: ${propType}`;
+    });
+
+    return `{ ${propertyStrings.join('; ')} }`;
   }
 }

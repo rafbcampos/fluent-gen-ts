@@ -1,29 +1,30 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ['./vitest.setup.ts'],
     coverage: {
       enabled: true,
-      provider: "v8",
-      reporter: ["text", "json", "html"],
-      reportsDirectory: "./coverage",
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage',
       exclude: [
-        "node_modules/**",
-        "dist/**",
-        "coverage/**",
-        "vitest-setup.ts",
-        "**/*.d.ts",
-        "**/*.config.*",
-        "**/rolldown.config.ts",
-        "**/__tests__/**",
-        "**/*.test.ts",
-        "**/*.generated/**",
-        ".generated/**",
-        "**/generated/**",
-        ".vitepress/**",
-        "src/cli/**",
-        "**/types.ts",
+        'node_modules/**',
+        'dist/**',
+        'coverage/**',
+        'vitest-setup.ts',
+        '**/*.d.ts',
+        '**/*.config.*',
+        '**/rolldown.config.ts',
+        '**/__tests__/**',
+        '**/*.test.ts',
+        '**/*.generated/**',
+        '.generated/**',
+        '**/generated/**',
+        '.vitepress/**',
+        'src/cli/**',
+        '**/types.ts',
+        '.prettierrc.js',
       ],
       thresholds: {
         global: {

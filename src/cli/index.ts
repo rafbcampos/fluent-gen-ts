@@ -106,6 +106,20 @@ program
     }
   });
 
+program
+  .command('setup-common')
+  .description('Create a customizable common.ts utilities file')
+  .option('-o, --output <path>', 'Output file path (default: ./common.ts)')
+  .option('--overwrite', 'Overwrite existing file')
+  .action(async options => {
+    try {
+      await commands.setupCommon(options);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error);
+      process.exit(1);
+    }
+  });
+
 program.parse(process.argv);
 
 if (!process.argv.slice(2).length) {
