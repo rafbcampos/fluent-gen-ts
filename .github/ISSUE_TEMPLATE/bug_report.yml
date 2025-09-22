@@ -1,0 +1,116 @@
+name: 🐛 Bug Report
+description: Report a bug or unexpected behavior
+title: '[Bug]: '
+labels: ['bug', 'needs-triage']
+assignees:
+  - rafbcampos
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! Please search existing issues before creating a new one.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Create interface with...
+        2. Run command...
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: minimal-example
+    attributes:
+      label: Minimal Example
+      description: If applicable, provide a minimal TypeScript interface or code example that reproduces the issue
+      render: typescript
+      placeholder: |
+        interface MyInterface {
+          // Your interface here
+        }
+
+  - type: input
+    id: version
+    attributes:
+      label: fluent-gen Version
+      description: What version of fluent-gen are you running?
+      placeholder: e.g., 1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: node-version
+    attributes:
+      label: Node.js Version
+      description: What version of Node.js are you running?
+      options:
+        - '18.x'
+        - '20.x'
+        - '22.x'
+        - 'Other (please specify in additional context)'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system are you using?
+      options:
+        - 'Windows'
+        - 'macOS'
+        - 'Linux'
+        - 'Other (please specify in additional context)'
+    validations:
+      required: true
+
+  - type: textarea
+    id: package-manager
+    attributes:
+      label: Package Manager
+      description: Which package manager and version are you using?
+      placeholder: e.g., npm 10.x, pnpm 9.x, yarn 4.x
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: If applicable, copy and paste any relevant log output. This will be automatically formatted into code, so no need for backticks.
+      render: shell
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here. Screenshots, TypeScript compiler version, etc.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

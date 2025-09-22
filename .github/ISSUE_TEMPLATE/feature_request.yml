@@ -1,0 +1,124 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: '[Feature]: '
+labels: ['enhancement', 'needs-triage']
+assignees:
+  - rafbcampos
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature! Please search existing issues and discussions before creating a new one.
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What type of feature are you requesting?
+      options:
+        - 'New CLI command or option'
+        - 'New builder functionality'
+        - 'TypeScript support enhancement'
+        - 'Performance improvement'
+        - 'Developer experience improvement'
+        - 'Documentation improvement'
+        - 'Other'
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe the problem you're trying to solve.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see
+      placeholder: I would like to see...
+    validations:
+      required: true
+
+  - type: textarea
+    id: example-usage
+    attributes:
+      label: Example Usage
+      description: Provide an example of how this feature would be used
+      render: typescript
+      placeholder: |
+        // Example interface
+        interface User {
+          id: string;
+          name: string;
+        }
+
+        // How the feature would work
+        const user = userBuilder()
+          .withId("123")
+          .withNewFeature() // Your proposed feature here
+          .build()
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - 'Low - nice to have'
+        - 'Medium - would be helpful'
+        - 'High - would significantly improve my workflow'
+        - 'Critical - blocking my use case'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: breaking-change
+    attributes:
+      label: Breaking Change
+      description: Would this feature require breaking changes?
+      options:
+        - 'No - this is purely additive'
+        - 'Maybe - might require minor API changes'
+        - 'Yes - would require breaking changes'
+        - 'Not sure'
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or related links about the feature request here
+
+  - type: checkboxes
+    id: research
+    attributes:
+      label: Research
+      description: Please confirm you have done the following
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have read the documentation
+          required: true
+        - label: I am willing to contribute to this feature if guidance is provided
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

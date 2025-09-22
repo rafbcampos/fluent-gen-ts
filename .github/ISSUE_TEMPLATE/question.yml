@@ -1,0 +1,95 @@
+name: ❓ Question
+description: Ask a question about usage, configuration, or concepts
+title: '[Question]: '
+labels: ['question', 'needs-response']
+assignees:
+  - rafbcampos
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your question! Please search existing issues and check the documentation before asking.
+
+        📚 **Documentation**: [fluent-gen.dev](https://fluent-gen.dev)
+        💬 **Discussions**: Consider using [GitHub Discussions](../../discussions) for general questions
+
+  - type: dropdown
+    id: question-type
+    attributes:
+      label: Question Type
+      description: What type of question is this?
+      options:
+        - 'Usage - how to use a specific feature'
+        - 'Configuration - how to configure or setup'
+        - 'TypeScript - types or interface related'
+        - 'Concepts - understanding how something works'
+        - "Troubleshooting - something isn't working as expected"
+        - 'Best practices - how to do something effectively'
+        - 'Other'
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: Please be as specific as possible...
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish? Provide any relevant context.
+      placeholder: I'm trying to...
+
+  - type: textarea
+    id: code-example
+    attributes:
+      label: Code Example
+      description: If applicable, provide a code example related to your question
+      render: typescript
+      placeholder: |
+        interface MyInterface {
+          // Your interface
+        }
+
+        // What you're trying to do
+        const result = myBuilder()...
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried?
+      description: What have you already tried? This helps us avoid suggesting things you've already attempted.
+
+  - type: input
+    id: version
+    attributes:
+      label: fluent-gen Version
+      description: What version are you using?
+      placeholder: e.g., 1.0.0
+
+  - type: checkboxes
+    id: research
+    attributes:
+      label: Research
+      description: Please confirm you have done the following
+      options:
+        - label: I have searched existing issues
+          required: true
+        - label: I have checked the documentation
+          required: true
+        - label: I have looked at the examples in the repository
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

@@ -1,0 +1,66 @@
+version: 2
+updates:
+  # Enable version updates for npm
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '04:00'
+      timezone: 'UTC'
+    open-pull-requests-limit: 10
+    reviewers:
+      - 'rafbcampos'
+    assignees:
+      - 'rafbcampos'
+    commit-message:
+      prefix: 'chore'
+      prefix-development: 'chore'
+      include: 'scope'
+    labels:
+      - 'dependencies'
+      - 'automated'
+    # Group updates to reduce PR noise
+    groups:
+      development-dependencies:
+        patterns:
+          - '@types/*'
+          - '@vitest/*'
+          - 'vitest*'
+          - 'typescript'
+          - 'oxlint'
+          - 'prettier'
+          - 'rolldown'
+          - 'vitepress'
+          - 'husky'
+          - 'lint-staged'
+        update-types:
+          - 'minor'
+          - 'patch'
+      build-tools:
+        patterns:
+          - '@changesets/*'
+          - '@commitlint/*'
+        update-types:
+          - 'minor'
+          - 'patch'
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '04:00'
+      timezone: 'UTC'
+    open-pull-requests-limit: 5
+    reviewers:
+      - 'rafbcampos'
+    assignees:
+      - 'rafbcampos'
+    commit-message:
+      prefix: 'ci'
+      include: 'scope'
+    labels:
+      - 'github-actions'
+      - 'automated'

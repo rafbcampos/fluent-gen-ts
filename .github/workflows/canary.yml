@@ -1,0 +1,79 @@
+name: Canary Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  canary:
+    name: Canary Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Create canary version
+        id: canary
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          CANARY_VERSION="0.0.0-canary.${TIMESTAMP}.${SHORT_SHA}"
+          echo "version=${CANARY_VERSION}" >> $GITHUB_OUTPUT
+
+          # Update package.json with canary version
+          npm version $CANARY_VERSION --no-git-tag-version
+
+      - name: Publish canary to NPM
+        run: npm publish --tag canary --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Comment on PR with canary version
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📦 Canary version published: \`${{ steps.canary.outputs.version }}\`
+
+              Install with:
+              \`\`\`bash
+              npm install fluent-gen@${{ steps.canary.outputs.version }}
+              \`\`\`
+
+              Or test with:
+              \`\`\`bash
+              npx fluent-gen@${{ steps.canary.outputs.version }} --version
+              \`\`\``
+            })
