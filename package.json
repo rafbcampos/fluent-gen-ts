@@ -44,8 +44,7 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "prepare": "husky",
-    "postinstall": "pnpm run generate:embedded"
+    "prepare": "husky"
   },
   "keywords": [
     "fluent",
