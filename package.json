@@ -30,7 +30,7 @@
     "build:lib": "rolldown -c rolldown.lib.config.ts",
     "build:cli": "rolldown -c rolldown.config.ts",
     "generate:embedded": "node scripts/generate-embedded-content.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "pnpm run generate:embedded && tsc --noEmit",
     "lint": "oxlint . --fix",
     "test": "vitest run",
     "test:unit": "vitest run --exclude 'src/__tests__/**'",
@@ -44,7 +44,8 @@
     "changeset": "changeset",
     "version": "changeset version",
     "release": "pnpm run build && changeset publish",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "pnpm run generate:embedded"
   },
   "keywords": [
     "fluent",
