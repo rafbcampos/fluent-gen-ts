@@ -9,6 +9,7 @@ import { FileService } from './file-service.js';
 export interface TaskRunnerOptions {
   parallel?: boolean;
   dryRun?: boolean;
+  generateCommonFile?: boolean;
   onProgress?: (message: string) => void;
 }
 
@@ -38,11 +39,14 @@ export class TaskRunner {
     generator: FluentGen,
     options: TaskRunnerOptions = {},
   ): Promise<TaskRunResult> {
-    const { parallel = false, dryRun = false, onProgress } = options;
+    const { parallel = false, dryRun = false, generateCommonFile = false, onProgress } = options;
 
     // Group tasks by output directory and determine which can be batched
     const taskGroups = this.groupTasksByOutputDir(tasks);
-    const { batchGroups, individualTasks } = this.categorizeTaskGroups(taskGroups);
+    const { batchGroups, individualTasks } = this.categorizeTaskGroups(
+      taskGroups,
+      generateCommonFile,
+    );
 
     if (parallel) {
       return this.runParallel(batchGroups, individualTasks, generator, dryRun, onProgress);
@@ -243,7 +247,10 @@ export class TaskRunner {
     }));
   }
 
-  private categorizeTaskGroups(taskGroups: TaskGroup[]): {
+  private categorizeTaskGroups(
+    taskGroups: TaskGroup[],
+    generateCommonFile: boolean,
+  ): {
     batchGroups: BatchTaskGroup[];
     individualTasks: Task[];
   } {
@@ -257,37 +264,66 @@ export class TaskRunner {
         continue;
       }
 
-      // Group generate tasks by file for batch processing
-      const generateTasksByFile = new Map<string, GenerateTask[]>();
-      const otherTasks: Task[] = [];
+      // If generateCommonFile is enabled, batch all generate tasks in the same output dir
+      if (generateCommonFile) {
+        const allGenerateTasks = group.tasks.filter(
+          (task): task is GenerateTask => task.type === 'generate',
+        );
+        const otherTasks = group.tasks.filter(task => task.type !== 'generate');
 
-      for (const task of group.tasks) {
-        if (task.type === 'generate') {
-          if (!generateTasksByFile.has(task.file)) {
-            generateTasksByFile.set(task.file, []);
+        if (allGenerateTasks.length > 0) {
+          // Create a multi-file batch group
+          const fileTypeMap = new Map<string, GenerateTask[]>();
+          for (const task of allGenerateTasks) {
+            if (!fileTypeMap.has(task.file)) {
+              fileTypeMap.set(task.file, []);
+            }
+            fileTypeMap.get(task.file)!.push(task);
           }
-          generateTasksByFile.get(task.file)!.push(task);
-        } else {
-          otherTasks.push(task);
-        }
-      }
 
-      // Convert groups with multiple types into batch groups
-      for (const [file, tasks] of generateTasksByFile) {
-        if (tasks.length > 1) {
+          // Create a special batch group that spans multiple files
           batchGroups.push({
-            file,
-            typeNames: tasks.map(t => t.typeName),
+            file: '__multi_file__', // Special marker for multi-file batch
+            typeNames: allGenerateTasks.map(t => t.typeName),
             outputDir: group.outputDir,
-            tasks,
+            tasks: allGenerateTasks,
           });
-        } else {
-          individualTasks.push(...tasks);
         }
-      }
 
-      // Add other tasks (scan, etc.) as individual tasks
-      individualTasks.push(...otherTasks);
+        individualTasks.push(...otherTasks);
+      } else {
+        // Original behavior: Group generate tasks by file for batch processing
+        const generateTasksByFile = new Map<string, GenerateTask[]>();
+        const otherTasks: Task[] = [];
+
+        for (const task of group.tasks) {
+          if (task.type === 'generate') {
+            if (!generateTasksByFile.has(task.file)) {
+              generateTasksByFile.set(task.file, []);
+            }
+            generateTasksByFile.get(task.file)!.push(task);
+          } else {
+            otherTasks.push(task);
+          }
+        }
+
+        // Convert groups with multiple types into batch groups
+        for (const [file, tasks] of generateTasksByFile) {
+          if (tasks.length > 1) {
+            batchGroups.push({
+              file,
+              typeNames: tasks.map(t => t.typeName),
+              outputDir: group.outputDir,
+              tasks,
+            });
+          } else {
+            individualTasks.push(...tasks);
+          }
+        }
+
+        // Add other tasks (scan, etc.) as individual tasks
+        individualTasks.push(...otherTasks);
+      }
     }
 
     return { batchGroups, individualTasks };
@@ -298,7 +334,23 @@ export class TaskRunner {
     generator: FluentGen,
     dryRun: boolean,
   ): Promise<TaskWithResult[]> {
-    const result = await generator.generateMultiple(group.file, group.typeNames);
+    let result;
+
+    // Check if this is a multi-file batch
+    if (group.file === '__multi_file__') {
+      // Build the file-to-types map for multi-file generation
+      const fileTypeMap = new Map<string, string[]>();
+      for (const task of group.tasks) {
+        if (!fileTypeMap.has(task.file)) {
+          fileTypeMap.set(task.file, []);
+        }
+        fileTypeMap.get(task.file)!.push(task.typeName);
+      }
+      result = await generator.generateMultipleFromFiles(fileTypeMap);
+    } else {
+      // Original single-file batch
+      result = await generator.generateMultiple(group.file, group.typeNames);
+    }
 
     if (!isOk(result)) {
       // If batch generation fails, return failed results for all tasks
@@ -318,8 +370,8 @@ export class TaskRunner {
           outputMap.set(commonPath, code);
         } else {
           // Find the corresponding task for this type
-          const typeName = path.basename(fileName, '.ts');
-          const task = group.tasks.find(t => t.typeName.toLowerCase() === typeName.toLowerCase());
+          const typeName = path.basename(fileName, '.builder.ts');
+          const task = group.tasks.find(t => t.typeName === typeName);
 
           if (task && task.outputFile) {
             const outputPath = this.fileService.resolveOutputPath(task.outputFile, {

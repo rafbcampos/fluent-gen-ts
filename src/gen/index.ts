@@ -263,6 +263,54 @@ export class FluentGen {
     }
   }
 
+  async generateMultipleFromFiles(
+    fileTypeMap: Map<string, string[]>,
+  ): Promise<Result<Map<string, string>>> {
+    // Validate inputs
+    if (!fileTypeMap || fileTypeMap.size === 0) {
+      return err(new Error('fileTypeMap cannot be empty'));
+    }
+
+    for (const [filePath, typeNames] of fileTypeMap) {
+      const filePathValidation = validateFilePath(filePath);
+      if (!filePathValidation.ok) {
+        return filePathValidation;
+      }
+
+      const typeNamesValidation = validateTypeNames(typeNames);
+      if (!typeNamesValidation.ok) {
+        return typeNamesValidation;
+      }
+    }
+
+    try {
+      // Set generator to multiple mode
+      this.generator.setGeneratingMultiple(true);
+
+      const results = new Map<string, string>();
+
+      // Generate common.ts file
+      results.set('common.ts', this.generator.generateCommonFile());
+
+      // Generate builders from each file
+      for (const [filePath, typeNames] of fileTypeMap) {
+        for (const typeName of typeNames) {
+          const result = await this.generateBuilder(filePath, typeName);
+          if (!result.ok) {
+            return result;
+          }
+          results.set(`${typeName}.builder.ts`, result.value);
+        }
+      }
+
+      return ok(results);
+    } finally {
+      // Reset generator state
+      this.generator.setGeneratingMultiple(false);
+      this.generator.clearCache();
+    }
+  }
+
   async generateToFile(
     filePath: string,
     typeName: string,

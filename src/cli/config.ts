@@ -9,6 +9,7 @@ export const GeneratorConfigSchema = z.object({
   contextType: z.string().optional(),
   importPath: z.string().optional(),
   addComments: z.boolean().optional(),
+  generateCommonFile: z.boolean().optional(),
 });
 
 export const TargetSchema = z.object({

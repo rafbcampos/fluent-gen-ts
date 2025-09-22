@@ -48,6 +48,7 @@ export class BatchCommand {
       const result = await this.taskRunner.runTasks(tasks, generator, {
         ...(options.parallel !== undefined && { parallel: options.parallel }),
         ...(options.dryRun !== undefined && { dryRun: options.dryRun }),
+        generateCommonFile: config.generator?.generateCommonFile ?? true,
         onProgress: message => {
           spinner.text = message;
         },

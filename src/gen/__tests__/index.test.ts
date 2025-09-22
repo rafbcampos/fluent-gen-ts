@@ -287,6 +287,81 @@ describe('FluentGen', () => {
     });
   });
 
+  describe('generateMultipleFromFiles', () => {
+    let fluentGen: FluentGen;
+
+    beforeEach(() => {
+      fluentGen = new FluentGen();
+    });
+
+    test('should generate builders from multiple files successfully', async () => {
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+
+      const fileTypeMap = new Map([
+        ['/test/user.ts', ['User']],
+        ['/test/product.ts', ['Product']],
+      ]);
+
+      const result = await fluentGen.generateMultipleFromFiles(fileTypeMap);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.size).toBe(3);
+        expect(result.value.get('common.ts')).toBe('common code');
+        expect(result.value.get('User.builder.ts')).toBe('generated code');
+        expect(result.value.get('Product.builder.ts')).toBe('generated code');
+      }
+
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(true);
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
+      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+    });
+
+    test('should return error for empty fileTypeMap', async () => {
+      const result = await fluentGen.generateMultipleFromFiles(new Map());
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toBe('fileTypeMap cannot be empty');
+      }
+    });
+
+    test('should validate all file paths', async () => {
+      const fileTypeMap = new Map([['', ['User']]]);
+
+      const result = await fluentGen.generateMultipleFromFiles(fileTypeMap);
+      expect(result.ok).toBe(false);
+    });
+
+    test('should validate all type names', async () => {
+      const fileTypeMap = new Map([['/test/file.ts', ['']]]);
+
+      const result = await fluentGen.generateMultipleFromFiles(fileTypeMap);
+      expect(result.ok).toBe(false);
+    });
+
+    test('should cleanup state even when generation fails', async () => {
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(err(new Error('Failed')));
+
+      const fileTypeMap = new Map([['/test/file.ts', ['User']]]);
+
+      const result = await fluentGen.generateMultipleFromFiles(fileTypeMap);
+      expect(result.ok).toBe(false);
+
+      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
+      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+    });
+  });
+
   describe('generateToFile', () => {
     let fluentGen: FluentGen;
 
