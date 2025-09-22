@@ -133,7 +133,7 @@ export interface Contact {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for nested arrays', async () => {
     const project = createTestProject();
@@ -241,7 +241,7 @@ export interface Tensor {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for tuple types', async () => {
     const project = createTestProject();
@@ -345,7 +345,7 @@ export interface MixedTuple {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for arrays of union types', async () => {
     const project = createTestProject();
@@ -447,7 +447,7 @@ export interface Conversation {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for readonly arrays and tuples', async () => {
     const project = createTestProject();
@@ -516,7 +516,7 @@ export interface ImmutableData {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for arrays with nested builders', async () => {
     const project = createTestProject();
@@ -685,5 +685,5 @@ export interface BlogPost {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });

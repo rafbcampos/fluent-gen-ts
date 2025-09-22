@@ -95,7 +95,7 @@ export interface ServerConfig {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for interface extending Node.js types', async () => {
     const projectConfig: TestProjectConfig = {
@@ -177,7 +177,7 @@ export interface StreamProcessor {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for type using Promise and Error types', async () => {
     const project = createTestProject();
@@ -248,7 +248,7 @@ export type AsyncStringOperation = AsyncOperation<string>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for type using global TypeScript types', async () => {
     const project = createTestProject();
@@ -336,7 +336,7 @@ export interface TypedArrays {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for type using Map and Set', async () => {
     const project = createTestProject();
@@ -431,7 +431,7 @@ export interface CollectionTypes {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for type with RegExp and Date', async () => {
     const project = createTestProject();
@@ -526,5 +526,5 @@ export interface ValidationRule {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });

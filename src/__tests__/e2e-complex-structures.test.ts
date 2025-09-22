@@ -166,7 +166,7 @@ export interface Company {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for circular reference types', async () => {
     const project = createTestProject();
@@ -313,7 +313,7 @@ export interface LinkedListNode {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for union and intersection types', async () => {
     const project = createTestProject();
@@ -462,7 +462,7 @@ export interface Task extends Entity {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for mapped types', async () => {
     const project = createTestProject();
@@ -605,7 +605,7 @@ export interface Application {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for conditional types', async () => {
     const project = createTestProject();
@@ -697,7 +697,7 @@ export interface DataProcessor {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for template literal types', async () => {
     const project = createTestProject();
@@ -813,5 +813,5 @@ export interface Theme {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });

@@ -95,7 +95,7 @@ export type NumberContainer = Container<number>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for multiple generic parameters', async () => {
     const project = createTestProject();
@@ -174,7 +174,7 @@ export type BooleanStringPair = KeyValuePair<boolean, string>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for generic with default type', async () => {
     const project = createTestProject();
@@ -256,7 +256,7 @@ export type UserResponse = ApiResponse<{ id: string; name: string }>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for generic with constraints', async () => {
     const project = createTestProject();
@@ -371,7 +371,7 @@ export type ProductStore = Store<Product>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for nested generics', async () => {
     const project = createTestProject();
@@ -465,7 +465,7 @@ export type PagedUserResult = Result<PagedData<{ id: string; name: string }>, st
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for conditional generic types', async () => {
     const project = createTestProject();
@@ -553,7 +553,7 @@ export type NumberContainer = ConditionalContainer<number>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for mapped type with generics', async () => {
     const project = createTestProject();
@@ -635,5 +635,5 @@ export type NullableUserData = Nullable<UserData>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });

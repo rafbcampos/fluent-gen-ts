@@ -3,7 +3,7 @@
 layout: home
 
 hero:
-  name: 'Fluent Gen'
+  name: 'Fluent Gen TS'
   text: 'Type-safe fluent builders'
   tagline:
     Generate fluent builders from TypeScript interfaces and types with zero
@@ -14,7 +14,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/rafbcampos/fluent-gen
+      link: https://github.com/rafbcampos/fluent-gen-ts
 
 features:
   - icon: 🔍
@@ -84,7 +84,7 @@ const user = userBuilder()
 const userData: User = user;
 ```
 
-## Why Fluent Gen?
+## Why Fluent Gen TS?
 
 - **Type Safety First**: Full TypeScript support with strict mode and advanced
   type checking
@@ -99,11 +99,11 @@ const userData: User = user;
 ## Installation
 
 ```bash
-npm install -D fluent-gen
+npm install -D fluent-gen-ts
 # or
-pnpm add -D fluent-gen
+pnpm add -D fluent-gen-ts
 # or
-yarn add -D fluent-gen
+yarn add -D fluent-gen-ts
 ```
 
 ## Quick Start
@@ -111,20 +111,23 @@ yarn add -D fluent-gen
 ### CLI Usage
 
 ```bash
+# Initialize configuration with interactive setup (recommended)
+npx fluent-gen-ts init
+
 # Generate a single builder
-npx fluent-gen generate ./src/types.ts User
+npx fluent-gen-ts generate ./src/types.ts User
 
 # Generate from configuration
-npx fluent-gen batch
+npx fluent-gen-ts batch
 
 # Scan and generate interactively
-npx fluent-gen scan "src/**/*.ts" --interactive
+npx fluent-gen-ts scan "src/**/*.ts" --interactive
 ```
 
 ### Programmatic API
 
 ```typescript
-import { FluentGen } from 'fluent-gen';
+import { FluentGen } from 'fluent-gen-ts';
 
 const generator = new FluentGen({
   useDefaults: true,
@@ -172,12 +175,12 @@ if (result.ok) {
 
 ## Community
 
-- [GitHub Issues](https://github.com/rafbcampos/fluent-gen/issues) - Report bugs
-  or request features
-- [Discussions](https://github.com/rafbcampos/fluent-gen/discussions) - Ask
+- [GitHub Issues](https://github.com/rafbcampos/fluent-gen-ts/issues) - Report
+  bugs or request features
+- [Discussions](https://github.com/rafbcampos/fluent-gen-ts/discussions) - Ask
   questions and share ideas
-- [Contributing Guide](https://github.com/rafbcampos/fluent-gen/blob/main/CONTRIBUTING.md) -
-  Help improve Fluent Gen
+- [Contributing Guide](https://github.com/rafbcampos/fluent-gen-ts/blob/main/CONTRIBUTING.md) -
+  Help improve Fluent Gen TS
 
 ## License
 

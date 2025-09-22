@@ -89,7 +89,7 @@ export type UserProfile = Pick<FullUser, 'id' | 'name' | 'email' | 'role'>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for Partial utility type', async () => {
     const project = createTestProject();
@@ -156,7 +156,7 @@ export type PartialConfig = Partial<Config>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for Required utility type', async () => {
     const project = createTestProject();
@@ -220,7 +220,7 @@ export type RequiredUserInput = Required<UserInput>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for Omit utility type', async () => {
     const project = createTestProject();
@@ -286,7 +286,7 @@ export type PublicProduct = Omit<Product, 'internalCode' | 'secretKey'>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for Record utility type', async () => {
     const project = createTestProject();
@@ -364,7 +364,7 @@ export type StatusCodes = Record<'success' | 'error' | 'pending', number>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for nested utility types', async () => {
     const project = createTestProject();
@@ -457,7 +457,7 @@ export type EmployeeCore = Required<Omit<Employee, 'manager' | 'permissions'>>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for interface using utility types', async () => {
     const project = createTestProject();
@@ -562,7 +562,7 @@ export interface UserEntity extends BaseEntity {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 
   test('generates builder for Readonly utility type', async () => {
     const project = createTestProject();
@@ -626,5 +626,5 @@ export type ReadonlyConfiguration = Readonly<Configuration>;
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });

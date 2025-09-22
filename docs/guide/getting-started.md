@@ -1,6 +1,6 @@
 # Getting Started
 
-This guide will help you get started with fluent-gen, a TypeScript type
+This guide will help you get started with fluent-gen-ts, a TypeScript type
 extraction system that generates fluent builders for any interface, type alias,
 or type literal.
 
@@ -14,23 +14,42 @@ Before you begin, ensure you have:
 
 ## Installation
 
-Install fluent-gen as a development dependency:
+Install fluent-gen-ts as a development dependency:
 
 ::: code-group
 
 ```bash [npm]
-npm install --save-dev fluent-gen
+npm install --save-dev fluent-gen-ts
 ```
 
 ```bash [pnpm]
-pnpm add -D fluent-gen
+pnpm add -D fluent-gen-ts
 ```
 
 ```bash [yarn]
-yarn add -D fluent-gen
+yarn add -D fluent-gen-ts
 ```
 
 :::
+
+## Quick Start with Interactive Setup
+
+The easiest way to get started with fluent-gen-ts is using the interactive init
+command:
+
+```bash
+npx fluent-gen-ts init
+```
+
+This command will guide you through:
+
+1. **File Discovery**: Specify patterns to find your TypeScript files
+2. **Interface Scanning**: Automatically detect all interfaces and types
+3. **Selection**: Choose which types you want to generate builders for
+4. **Output Configuration**: Set up output directory and naming conventions
+5. **Plugin Setup** (optional): Configure any custom plugins
+6. **Preview & Confirm**: Review the generated configuration before saving
+7. **Immediate Generation** (optional): Run batch generation right away
 
 ## Your First Builder
 
@@ -57,14 +76,14 @@ You can generate a builder using either the CLI or programmatic API.
 #### Using the CLI
 
 ```bash
-npx fluent-gen generate src/types/user.ts User
+npx fluent-gen-ts generate src/types/user.ts User
 ```
 
 This will output the generated builder code to the console. To save it to a
 file:
 
 ```bash
-npx fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
+npx fluent-gen-ts generate src/types/user.ts User -o src/builders/user.builder.ts
 ```
 
 #### Using the Programmatic API
@@ -72,7 +91,7 @@ npx fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
 Create a script `generate-builders.js`:
 
 ```javascript
-import { FluentGen } from 'fluent-gen';
+import { FluentGen } from 'fluent-gen-ts';
 
 const generator = new FluentGen({
   useDefaults: true,
@@ -165,7 +184,7 @@ export interface Order {
 Generate builders for all types:
 
 ```bash
-npx fluent-gen generate types/order.ts Order -o builders/order.builder.ts
+npx fluent-gen-ts generate types/order.ts Order -o builders/order.builder.ts
 ```
 
 Use the nested builders:
@@ -244,7 +263,7 @@ Create a `.fluentgenrc.json` file:
 Run batch generation:
 
 ```bash
-npx fluent-gen batch
+npx fluent-gen-ts batch
 ```
 
 ### Using Scan Command
@@ -252,13 +271,13 @@ npx fluent-gen batch
 Scan your codebase and select types interactively:
 
 ```bash
-npx fluent-gen scan "src/**/*.ts" --interactive
+npx fluent-gen-ts scan "src/**/*.ts" --interactive
 ```
 
 Or generate builders for all discovered types:
 
 ```bash
-npx fluent-gen scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
+npx fluent-gen-ts scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
 ```
 
 ## Generic Types
@@ -355,7 +374,8 @@ Now that you've learned the basics, explore more advanced features:
 
 ### TypeScript Configuration
 
-Ensure your `tsconfig.json` has proper settings:
+fluent-gen-ts will automatically use your project's `tsconfig.json`. Ensure it
+has proper settings:
 
 ```json
 {
@@ -381,7 +401,7 @@ If you encounter import errors, ensure:
 
 ### Type Not Found
 
-If fluent-gen can't find a type:
+If fluent-gen-ts can't find a type:
 
 1. Ensure the type is exported
 2. Check that the file path is correct
@@ -391,6 +411,6 @@ If fluent-gen can't find a type:
 
 - Check the [API Documentation](../api/overview.md)
 - Browse [Examples](../examples/basic.md)
-- Report issues on [GitHub](https://github.com/rafbcampos/fluent-gen/issues)
+- Report issues on [GitHub](https://github.com/rafbcampos/fluent-gen-ts/issues)
 - Join discussions on
-  [GitHub Discussions](https://github.com/rafbcampos/fluent-gen/discussions)
+  [GitHub Discussions](https://github.com/rafbcampos/fluent-gen-ts/discussions)

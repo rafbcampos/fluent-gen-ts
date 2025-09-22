@@ -1,4 +1,4 @@
-# fluent-gen
+# fluent-gen-ts
 
 [![CI](https://github.com/rafbcampos/fluent-gen-ts/actions/workflows/ci.yml/badge.svg)](https://github.com/rafbcampos/fluent-gen-ts/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/rafbcampos/fluent-gen-ts/graph/badge.svg?token=PQ45UU94C1)](https://codecov.io/gh/rafbcampos/fluent-gen-ts)
@@ -31,55 +31,58 @@
 
 ```bash
 # Install as a development dependency
-pnpm add -D fluent-gen
+pnpm add -D fluent-gen-ts
 
 # Or use npm
-npm install --save-dev fluent-gen
+npm install --save-dev fluent-gen-ts
 
 # Or use yarn
-yarn add -D fluent-gen
+yarn add -D fluent-gen-ts
 ```
 
 ## Quick Start
 
 ### CLI Usage
 
-fluent-gen provides four main commands:
+fluent-gen-ts provides five main commands:
 
 ```bash
+# Initialize a configuration file with interactive setup (recommended for new projects)
+fluent-gen-ts init [options]
+
 # Generate a builder for a single type
-fluent-gen generate <file> <type> [options]
+fluent-gen-ts generate <file> <type> [options]
 
 # Generate multiple builders from configuration
-fluent-gen batch [options]
+fluent-gen-ts batch [options]
 
 # Scan files and generate builders interactively or automatically
-fluent-gen scan <pattern> [options]
-
-# Initialize a configuration file
-fluent-gen init [options]
+fluent-gen-ts scan <pattern> [options]
 ```
 
 #### Examples
 
 ```bash
+# Initialize configuration with interactive setup (recommended first step)
+fluent-gen-ts init
+
 # Generate a builder for the User interface
-fluent-gen generate src/types/user.ts User
+fluent-gen-ts generate src/types/user.ts User
 
 # Generate with custom output location
-fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
+fluent-gen-ts generate src/types/user.ts User -o src/builders/user.builder.ts
 
 # Scan all TypeScript files and select types interactively
-fluent-gen scan "src/**/*.ts" --interactive
+fluent-gen-ts scan "src/**/*.ts" --interactive
 
 # Generate from configuration file
-fluent-gen batch
+fluent-gen-ts batch
 ```
 
 ### Programmatic Usage
 
 ```typescript
-import { FluentGen } from 'fluent-gen';
+import { FluentGen } from 'fluent-gen-ts';
 
 // Create an instance with options
 const generator = new FluentGen({
@@ -138,7 +141,7 @@ interface User {
 }
 ```
 
-fluent-gen generates type-safe builders:
+fluent-gen-ts generates type-safe builders:
 
 ```typescript
 import { user, address } from './user.builder';
@@ -167,7 +170,14 @@ const userData: User = newUser;
 
 ## Configuration
 
-Create a `.fluentgenrc.json` file in your project root:
+Create a `.fluentgenrc.json` file in your project root using the interactive
+init command:
+
+```bash
+fluent-gen-ts init
+```
+
+Or manually create the configuration:
 
 ```json
 {
@@ -214,7 +224,7 @@ Create a `.fluentgenrc.json` file in your project root:
 Generate a builder for a specific type.
 
 ```bash
-fluent-gen generate <file> <type> [options]
+fluent-gen-ts generate <file> <type> [options]
 ```
 
 **Options:**
@@ -232,7 +242,7 @@ fluent-gen generate <file> <type> [options]
 Generate builders from configuration file.
 
 ```bash
-fluent-gen batch [options]
+fluent-gen-ts batch [options]
 ```
 
 **Options:**
@@ -247,7 +257,7 @@ fluent-gen batch [options]
 Scan files for types and generate builders.
 
 ```bash
-fluent-gen scan <pattern> [options]
+fluent-gen-ts scan <pattern> [options]
 ```
 
 **Options:**
@@ -263,15 +273,26 @@ fluent-gen scan <pattern> [options]
 
 ### `init`
 
-Initialize a configuration file.
+Initialize a configuration file with an interactive guided setup. This is the
+recommended way to get started with fluent-gen-ts.
 
 ```bash
-fluent-gen init [options]
+fluent-gen-ts init [options]
 ```
 
 **Options:**
 
 - `--overwrite`: Overwrite existing configuration
+
+**Features:**
+
+- Interactive file discovery and scanning
+- Automatic interface detection
+- Guided selection of types to generate
+- Output directory and naming convention configuration
+- Optional plugin setup
+- Preview of generated configuration before saving
+- Option to immediately run batch generation
 
 ## Advanced Features
 
@@ -441,8 +462,8 @@ function isErr<T>(result: Result<T>): boolean;
 
 ```bash
 # Clone the repository
-git clone https://github.com/rafbcampos/fluent-gen.git
-cd fluent-gen
+git clone https://github.com/rafbcampos/fluent-gen-ts.git
+cd fluent-gen-ts
 
 # Install dependencies (automatically generates required files)
 pnpm install
@@ -489,4 +510,4 @@ MIT © [Rafael Campos](https://github.com/rafbcampos)
 ## Support
 
 - [Documentation](https://rafbcampos.github.io/fluent-gen-ts/)
-- [GitHub Issues](https://github.com/rafbcampos/fluent-gen/issues)
+- [GitHub Issues](https://github.com/rafbcampos/fluent-gen-ts/issues)

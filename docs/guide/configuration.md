@@ -1,13 +1,14 @@
 # Configuration
 
-fluent-gen offers flexible configuration options through configuration files,
+fluent-gen-ts offers flexible configuration options through configuration files,
 CLI arguments, and programmatic APIs. This guide covers all configuration
 aspects to help you customize the builder generation process.
 
 ## Configuration File
 
-fluent-gen uses [cosmiconfig](https://github.com/davidtheclark/cosmiconfig) for
-configuration discovery. It searches for configuration in the following order:
+fluent-gen-ts uses [cosmiconfig](https://github.com/davidtheclark/cosmiconfig)
+for configuration discovery. It searches for configuration in the following
+order:
 
 1. `.fluentgenrc` (JSON or YAML)
 2. `.fluentgenrc.json`
@@ -18,13 +19,63 @@ configuration discovery. It searches for configuration in the following order:
 
 ## Quick Setup
 
-Initialize a configuration file:
+The recommended way to create a configuration file is using the interactive init
+command:
 
 ```bash
-npx fluent-gen init
+npx fluent-gen-ts init
 ```
 
-This creates a `.fluentgenrc.json` file with sensible defaults.
+This launches an interactive guided setup that will:
+
+1. **Discover TypeScript Files**: Scan your project for TypeScript files based
+   on patterns you provide
+2. **Detect Interfaces & Types**: Automatically find all exportable types in
+   your codebase
+3. **Interactive Selection**: Let you choose which types to generate builders
+   for
+4. **Configure Output**: Set up output directory and naming conventions
+5. **Plugin Configuration** (optional): Set up any custom plugins
+6. **Preview & Save**: Show you the configuration before saving
+7. **Immediate Generation** (optional): Offer to run batch generation right away
+
+### Interactive Setup Example
+
+When you run `npx fluent-gen-ts init`, you'll be guided through:
+
+```
+🚀 Welcome to fluent-gen configuration setup!
+
+📂 Step 1: Discover TypeScript files
+? Enter glob patterns to find TypeScript files: src/**/*.ts
+
+🔍 Step 2: Scanning for interfaces...
+✔ Found 12 files with 25 interfaces
+
+✅ Step 3: Select interfaces
+? Select interfaces to generate builders for: (Press <space> to select)
+❯◉ User
+ ◉ Product
+ ◉ Order
+ ◯ Internal
+
+📁 Step 4: Configure output
+? Output directory: ./src/builders
+? File naming convention: {type}.builder
+
+🔌 Step 5: Configure plugins (optional)
+? Do you want to configure plugins? No
+
+📝 Configuration Preview:
+[Shows generated configuration]
+
+? Save this configuration? Yes
+✓ Configuration file created: .fluentgenrc.json
+
+? Would you like to generate builders now? Yes
+```
+
+This creates a `.fluentgenrc.json` file tailored to your project.
 
 ## Configuration Schema
 
@@ -317,7 +368,7 @@ Example:
 
 ```bash
 # CLI argument overrides config file
-npx fluent-gen generate src/types.ts User --defaults
+npx fluent-gen-ts generate src/types.ts User --defaults
 
 # Even if .fluentgenrc.json has useDefaults: false
 ```
@@ -415,21 +466,21 @@ CLI options can override configuration file settings:
 
 ```bash
 # Override output directory
-npx fluent-gen generate src/types.ts User -o ./custom/output.ts
+npx fluent-gen-ts generate src/types.ts User -o ./custom/output.ts
 
 # Override TypeScript config
-npx fluent-gen batch --tsconfig ./tsconfig.build.json
+npx fluent-gen-ts batch --tsconfig ./tsconfig.build.json
 
 # Force defaults even if config says false
-npx fluent-gen generate src/types.ts User --defaults
+npx fluent-gen-ts generate src/types.ts User --defaults
 
 # Disable comments for this run
-npx fluent-gen batch --no-comments
+npx fluent-gen-ts batch --no-comments
 ```
 
 ## Plugin Configuration
 
-Plugins extend fluent-gen's functionality. They can be npm packages or local
+Plugins extend fluent-gen-ts's functionality. They can be npm packages or local
 files:
 
 ```json
@@ -566,7 +617,7 @@ src/generated/builders/
 
 ## Validation
 
-fluent-gen validates configuration using Zod schemas. Invalid configurations
+fluent-gen-ts validates configuration using Zod schemas. Invalid configurations
 produce clear error messages:
 
 ```
@@ -584,7 +635,8 @@ Error: Invalid configuration
 Error: No configuration file found
 ```
 
-**Solution**: Run `npx fluent-gen init` or create `.fluentgenrc.json` manually.
+**Solution**: Run `npx fluent-gen-ts init` to use the interactive setup or
+create `.fluentgenrc.json` manually.
 
 ### Invalid JSON Syntax
 
@@ -634,6 +686,6 @@ If migrating from an older configuration format:
 ## Next Steps
 
 - [Learn CLI commands](./cli.md) - Master the command-line interface
-- [Explore the API](./api.md) - Use fluent-gen programmatically
-- [Create plugins](../api/plugins.md) - Extend fluent-gen functionality
+- [Explore the API](./api.md) - Use fluent-gen-ts programmatically
+- [Create plugins](../api/plugins.md) - Extend fluent-gen-ts functionality
 - [View examples](../examples/basic.md) - See real-world configurations

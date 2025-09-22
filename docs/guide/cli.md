@@ -1,8 +1,8 @@
 # CLI Usage
 
-The fluent-gen CLI provides powerful commands for generating builders from your
-TypeScript interfaces and types. This guide covers all available commands and
-their options.
+The fluent-gen-ts CLI provides powerful commands for generating builders from
+your TypeScript interfaces and types. This guide covers all available commands
+and their options.
 
 ## Installation
 
@@ -11,17 +11,17 @@ their options.
 Install globally for system-wide access:
 
 ```bash
-npm install -g fluent-gen
+npm install -g fluent-gen-ts
 # or
-pnpm install -g fluent-gen
+pnpm install -g fluent-gen-ts
 # or
-yarn global add fluent-gen
+yarn global add fluent-gen-ts
 ```
 
 Then use directly:
 
 ```bash
-fluent-gen generate src/types.ts User
+fluent-gen-ts generate src/types.ts User
 ```
 
 ### Local Installation
@@ -29,29 +29,29 @@ fluent-gen generate src/types.ts User
 Install as a dev dependency and use with npx:
 
 ```bash
-npm install --save-dev fluent-gen
+npm install --save-dev fluent-gen-ts
 # or
-pnpm add -D fluent-gen
+pnpm add -D fluent-gen-ts
 # or
-yarn add -D fluent-gen
+yarn add -D fluent-gen-ts
 ```
 
 Then use with npx:
 
 ```bash
-npx fluent-gen generate src/types.ts User
+npx fluent-gen-ts generate src/types.ts User
 ```
 
 ## Commands Overview
 
-fluent-gen provides four main commands:
+fluent-gen-ts provides four main commands:
 
-| Command    | Alias | Description                                   |
-| ---------- | ----- | --------------------------------------------- |
-| `generate` | `gen` | Generate a builder for a specific type        |
-| `batch`    | -     | Generate multiple builders from configuration |
-| `scan`     | -     | Scan files for types and generate builders    |
-| `init`     | -     | Initialize a configuration file               |
+| Command    | Alias | Description                                                   |
+| ---------- | ----- | ------------------------------------------------------------- |
+| `init`     | -     | Initialize configuration with interactive setup (recommended) |
+| `generate` | `gen` | Generate a builder for a specific type                        |
+| `batch`    | -     | Generate multiple builders from configuration                 |
+| `scan`     | -     | Scan files for types and generate builders                    |
 
 ## Command: generate
 
@@ -60,9 +60,9 @@ Generate a builder for a specific interface or type.
 ### Syntax
 
 ```bash
-fluent-gen generate <file> <type> [options]
+fluent-gen-ts generate <file> <type> [options]
 # or use the alias
-fluent-gen gen <file> <type> [options]
+fluent-gen-ts gen <file> <type> [options]
 ```
 
 ### Arguments
@@ -88,36 +88,36 @@ fluent-gen gen <file> <type> [options]
 
 ```bash
 # Generate and output to console
-fluent-gen generate src/types/user.ts User
+fluent-gen-ts generate src/types/user.ts User
 
 # Generate and save to file
-fluent-gen generate src/types/user.ts User -o src/builders/user.builder.ts
+fluent-gen-ts generate src/types/user.ts User -o src/builders/user.builder.ts
 
 # Use the alias
-fluent-gen gen src/types/user.ts User
+fluent-gen-ts gen src/types/user.ts User
 ```
 
 #### With Options
 
 ```bash
 # Generate with default values for optional properties
-fluent-gen generate src/types/product.ts Product --defaults
+fluent-gen-ts generate src/types/product.ts Product --defaults
 
 # Use custom tsconfig
-fluent-gen generate src/types/api.ts ApiResponse --tsconfig tsconfig.build.json
+fluent-gen-ts generate src/types/api.ts ApiResponse --tsconfig tsconfig.build.json
 
 # Dry run to preview the generated code
-fluent-gen generate src/types/order.ts Order --dry-run
+fluent-gen-ts generate src/types/order.ts Order --dry-run
 
 # Without JSDoc comments
-fluent-gen generate src/types/config.ts Config --no-comments
+fluent-gen-ts generate src/types/config.ts Config --no-comments
 
 # With plugins
-fluent-gen generate src/types/user.ts User \
+fluent-gen-ts generate src/types/user.ts User \
   --plugins ./plugins/custom-defaults.js ./plugins/custom-names.js
 
 # Multiple options combined
-fluent-gen generate src/types/models.ts Customer \
+fluent-gen-ts generate src/types/models.ts Customer \
   --output ./generated/customer.builder.ts \
   --defaults \
   --config .fluentgenrc.json \
@@ -131,7 +131,7 @@ Generate multiple builders based on a configuration file.
 ### Syntax
 
 ```bash
-fluent-gen batch [options]
+fluent-gen-ts batch [options]
 ```
 
 ### Options
@@ -147,19 +147,19 @@ fluent-gen batch [options]
 
 ```bash
 # Use default configuration file search
-fluent-gen batch
+fluent-gen-ts batch
 
 # Use specific configuration file
-fluent-gen batch --config ./config/fluent-gen.config.json
+fluent-gen-ts batch --config ./config/fluent-gen.config.json
 
 # Dry run to see what would be generated
-fluent-gen batch --dry-run
+fluent-gen-ts batch --dry-run
 
 # Generate in parallel for faster processing
-fluent-gen batch --parallel
+fluent-gen-ts batch --parallel
 
 # With custom plugins
-fluent-gen batch --plugins ./plugins/custom.js
+fluent-gen-ts batch --plugins ./plugins/custom.js
 ```
 
 ### Configuration File
@@ -203,7 +203,7 @@ Scan files for interfaces and types, then generate builders.
 ### Syntax
 
 ```bash
-fluent-gen scan <pattern> [options]
+fluent-gen-ts scan <pattern> [options]
 ```
 
 ### Arguments
@@ -229,39 +229,39 @@ fluent-gen scan <pattern> [options]
 
 ```bash
 # Scan all TypeScript files in src directory
-fluent-gen scan "src/**/*.ts"
+fluent-gen-ts scan "src/**/*.ts"
 
 # Scan with specific output pattern
-fluent-gen scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
+fluent-gen-ts scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
 
 # Scan only specific subdirectories
-fluent-gen scan "src/{models,types}/**/*.ts"
+fluent-gen-ts scan "src/{models,types}/**/*.ts"
 ```
 
 #### Interactive Mode
 
 ```bash
 # Select types interactively
-fluent-gen scan "src/**/*.ts" --interactive
+fluent-gen-ts scan "src/**/*.ts" --interactive
 
 # Interactive with exclusions
-fluent-gen scan "src/**/*.ts" -i --exclude "**/*.test.ts" "**/*.spec.ts"
+fluent-gen-ts scan "src/**/*.ts" -i --exclude "**/*.test.ts" "**/*.spec.ts"
 ```
 
 #### Filtered Scanning
 
 ```bash
 # Only generate specific types
-fluent-gen scan "src/**/*.ts" --types "User,Product,Order"
+fluent-gen-ts scan "src/**/*.ts" --types "User,Product,Order"
 
 # Exclude test files
-fluent-gen scan "src/**/*.ts" --exclude "**/*.test.ts" "**/*.spec.ts"
+fluent-gen-ts scan "src/**/*.ts" --exclude "**/*.test.ts" "**/*.spec.ts"
 
 # Only exported types
-fluent-gen scan "src/**/*.ts" --ignore-private
+fluent-gen-ts scan "src/**/*.ts" --ignore-private
 
 # Dry run to see what would be found
-fluent-gen scan "src/**/*.ts" --dry-run
+fluent-gen-ts scan "src/**/*.ts" --dry-run
 ```
 
 #### Output Patterns
@@ -273,23 +273,24 @@ The `--output` option supports placeholders:
 
 ```bash
 # Output to same directory as source
-fluent-gen scan "src/**/*.ts" -o "src/**/{file}.builder.ts"
+fluent-gen-ts scan "src/**/*.ts" -o "src/**/{file}.builder.ts"
 
 # Output to centralized builders directory
-fluent-gen scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
+fluent-gen-ts scan "src/**/*.ts" -o "src/builders/{type}.builder.ts"
 
 # Output with custom naming
-fluent-gen scan "src/**/*.ts" -o "generated/{type}-builder.generated.ts"
+fluent-gen-ts scan "src/**/*.ts" -o "generated/{type}-builder.generated.ts"
 ```
 
 ## Command: init
 
-Initialize a configuration file for your project.
+Initialize a configuration file for your project with an interactive guided
+setup. This is the recommended starting point for new projects.
 
 ### Syntax
 
 ```bash
-fluent-gen init [options]
+fluent-gen-ts init [options]
 ```
 
 ### Options
@@ -298,20 +299,127 @@ fluent-gen init [options]
 | ------------- | -------------------------------------------------- |
 | `--overwrite` | Overwrite existing configuration file if it exists |
 
+### Interactive Setup Process
+
+The `init` command provides a comprehensive interactive experience:
+
+1. **File Discovery** 📂
+   - Prompts for glob patterns to find TypeScript files
+   - Supports multiple patterns (e.g., `src/**/*.ts`, `lib/**/*.ts`)
+   - Automatically scans the specified directories
+
+2. **Interface Scanning** 🔍
+   - Automatically detects all interfaces and types in your codebase
+   - Shows count of discovered files and interfaces
+   - Handles nested directories and complex project structures
+
+3. **Type Selection** ✅
+   - Interactive checkbox list of all discovered types
+   - Use space to select/deselect, arrows to navigate
+   - Shows file location for each type
+   - Option to select all or specific types
+
+4. **Output Configuration** 📁
+   - Set output directory for generated builders
+   - Choose naming convention (e.g., `{type}.builder`, `{type}-builder`)
+   - Preview how files will be named
+
+5. **Plugin Configuration** 🔌 (Optional)
+   - Option to configure custom plugins
+   - Add plugin paths for extended functionality
+
+6. **Configuration Preview** 📝
+   - Shows the complete configuration before saving
+   - Allows review and confirmation
+   - Option to cancel if adjustments are needed
+
+7. **Immediate Generation** 🏗️
+   - Option to run batch generation immediately
+   - Generates all builders for selected types
+   - Shows progress and results
+
 ### Examples
 
 ```bash
-# Create a new configuration file
-fluent-gen init
+# Start interactive configuration setup
+fluent-gen-ts init
 
 # Overwrite existing configuration
-fluent-gen init --overwrite
+fluent-gen-ts init --overwrite
+```
+
+### Interactive Session Example
+
+```
+$ npx fluent-gen-ts init
+
+🚀 Welcome to fluent-gen configuration setup!
+
+📂 Step 1: Discover TypeScript files
+? Enter glob patterns to find TypeScript files: src/**/*.ts, lib/**/*.ts
+
+🔍 Step 2: Scanning for interfaces...
+✔ Found 15 files with 32 interfaces
+
+✅ Step 3: Select interfaces
+? Select interfaces to generate builders for:
+ ◉ User (src/types/user.ts)
+ ◉ Product (src/types/product.ts)
+ ◯ InternalConfig (src/config/internal.ts)
+ ◉ Order (src/types/order.ts)
+ ◉ Customer (src/types/customer.ts)
+
+📁 Step 4: Configure output
+? Output directory: ./src/builders
+? File naming convention:
+  ❯ {type}.builder (e.g., User.builder.ts)
+    {type}-builder (e.g., User-builder.ts)
+    {type}Builder (e.g., UserBuilder.ts)
+
+Preview: User → ./src/builders/User.builder.ts
+
+🔌 Step 5: Configure plugins (optional)
+? Do you want to configure plugins? No
+
+📝 Configuration Preview:
+{
+  "generator": {
+    "outputDir": "./src/builders",
+    "useDefaults": true,
+    "addComments": true
+  },
+  "targets": [
+    {
+      "file": "src/types/user.ts",
+      "types": ["User"],
+      "outputFile": "./src/builders/User.builder.ts"
+    },
+    {
+      "file": "src/types/product.ts",
+      "types": ["Product"],
+      "outputFile": "./src/builders/Product.builder.ts"
+    }
+  ],
+  "patterns": ["src/**/*.ts", "lib/**/*.ts"]
+}
+
+? Save this configuration? Yes
+✓ Configuration file created: .fluentgenrc.json
+
+? Would you like to generate builders now? Yes
+🏗️  Generating builders...
+✓ Generated User.builder.ts
+✓ Generated Product.builder.ts
+✓ Generated Order.builder.ts
+✓ Generated Customer.builder.ts
+
+✨ Setup complete! 4 builders generated.
 ```
 
 ### Generated Configuration
 
-The `init` command creates a `.fluentgenrc.json` file with a starter
-configuration:
+The `init` command creates a `.fluentgenrc.json` file tailored to your
+selections:
 
 ```json
 {
@@ -343,38 +451,38 @@ These options are available for all commands:
 
 ```bash
 # Get help for any command
-fluent-gen --help
-fluent-gen generate --help
-fluent-gen batch --help
+fluent-gen-ts --help
+fluent-gen-ts generate --help
+fluent-gen-ts batch --help
 
 # Check version
-fluent-gen --version
+fluent-gen-ts --version
 ```
 
 ## Exit Codes
 
-fluent-gen uses standard exit codes:
+fluent-gen-ts uses standard exit codes:
 
 - `0` - Success
 - `1` - Error occurred during execution
 
 ## Environment Variables
 
-You can set environment variables to configure fluent-gen behavior:
+You can set environment variables to configure fluent-gen-ts behavior:
 
 ```bash
 # Set TypeScript config path
-FLUENT_GEN_TSCONFIG=./tsconfig.build.json fluent-gen generate src/types.ts User
+FLUENT_GEN_TSCONFIG=./tsconfig.build.json fluent-gen-ts generate src/types.ts User
 
 # Enable debug output
-DEBUG=fluent-gen:* fluent-gen generate src/types.ts User
+DEBUG=fluent-gen:* fluent-gen-ts generate src/types.ts User
 ```
 
 ## Tips and Best Practices
 
 ### Project Setup
 
-1. **Install locally**: Install fluent-gen as a dev dependency for consistent
+1. **Install locally**: Install fluent-gen-ts as a dev dependency for consistent
    versions across team members.
 
 2. **Use configuration file**: Create a `.fluentgenrc.json` for consistent
@@ -385,9 +493,10 @@ DEBUG=fluent-gen:* fluent-gen generate src/types.ts User
 ```json
 {
   "scripts": {
-    "generate:builders": "fluent-gen batch",
-    "generate:single": "fluent-gen generate",
-    "scan:types": "fluent-gen scan 'src/**/*.ts' --interactive"
+    "generate:init": "fluent-gen-ts init",
+    "generate:builders": "fluent-gen-ts batch",
+    "generate:single": "fluent-gen-ts generate",
+    "scan:types": "fluent-gen-ts scan 'src/**/*.ts' --interactive"
   }
 }
 ```
@@ -442,12 +551,12 @@ If you get permission errors with global installation:
 ## Examples Repository
 
 For more examples and use cases, check out the
-[fluent-gen examples repository](https://github.com/rafbcampos/fluent-gen/tree/main/examples).
+[fluent-gen-ts examples repository](https://github.com/rafbcampos/fluent-gen-ts/tree/main/examples).
 
 ## Getting Help
 
-- Run `fluent-gen --help` for command help
+- Run `fluent-gen-ts --help` for command help
 - Check the [API documentation](./api.md) for programmatic usage
-- Report issues on [GitHub](https://github.com/rafbcampos/fluent-gen/issues)
+- Report issues on [GitHub](https://github.com/rafbcampos/fluent-gen-ts/issues)
 - Ask questions in
-  [Discussions](https://github.com/rafbcampos/fluent-gen/discussions)
+  [Discussions](https://github.com/rafbcampos/fluent-gen-ts/discussions)

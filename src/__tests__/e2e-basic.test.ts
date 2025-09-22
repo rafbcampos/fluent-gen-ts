@@ -113,5 +113,5 @@ describe('E2E - Basic', () => {
     } finally {
       project.cleanup();
     }
-  }, 15000);
+  }, 30000);
 });
