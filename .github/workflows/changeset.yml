@@ -3,6 +3,11 @@ name: Changesets
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - '.vitepress/**'
+      - '.github/workflows/docs.yml'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -20,7 +25,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.8.1
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v5

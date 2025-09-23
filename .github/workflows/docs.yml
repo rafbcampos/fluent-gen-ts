@@ -3,6 +3,11 @@ name: Deploy VitePress site to Pages
 on:
   push:
     branches: [main]
+    paths:
+      - 'docs/**'
+      - '.vitepress/**'
+      - '*.md'
+      - '.github/workflows/docs.yml'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +30,7 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10.8.1
+          version: 10
 
       - name: Setup Node
         uses: actions/setup-node@v5

@@ -1,7 +1,8 @@
 import { defineConfig } from 'rolldown';
 import { dts } from 'rolldown-plugin-dts';
 
-export default defineConfig({
+// Configuration for JavaScript build
+const jsConfig = defineConfig({
   input: 'src/index.ts',
   output: {
     dir: 'dist',
@@ -10,7 +11,7 @@ export default defineConfig({
     chunkFileNames: '[name]-[hash].js',
     sourcemap: true,
   },
-  plugins: [dts()],
+  plugins: [],
   external: [
     'ts-morph',
     'commander',
@@ -44,3 +45,48 @@ export default defineConfig({
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
   },
 });
+
+// Configuration for TypeScript declarations build
+const dtsConfig = defineConfig({
+  input: 'src/index.ts',
+  output: {
+    dir: 'dist',
+    format: 'esm',
+    entryFileNames: 'lib.d.ts',
+    chunkFileNames: '[name].d.ts',
+    sourcemap: true,
+  },
+  plugins: [
+    dts({
+      emitDtsOnly: true,
+    }),
+  ],
+  external: [
+    'ts-morph',
+    'commander',
+    'inquirer',
+    'chalk',
+    'ora',
+    'cosmiconfig',
+    'zod',
+    'glob',
+    'fast-glob',
+    'minimatch',
+    'fs',
+    'fs/promises',
+    'path',
+    'url',
+    'child_process',
+    'os',
+    'crypto',
+    'util',
+    'stream',
+    'events',
+    'readline',
+    'tty',
+    'process',
+    /^node:/,
+  ],
+});
+
+export default [jsConfig, dtsConfig];
