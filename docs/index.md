@@ -1,13 +1,12 @@
 ---
-# https://vitepress.dev/reference/default-theme-home-page
 layout: home
 
 hero:
-  name: 'Fluent Gen TS'
-  text: 'Type-safe fluent builders'
+  name: 'fluent-gen-ts'
+  text: 'Type-safe Fluent Builders for TypeScript'
   tagline:
-    Generate fluent builders from TypeScript interfaces and types with zero
-    runtime overhead
+    Transform your TypeScript interfaces into elegant, chainable builders with
+    zero runtime dependencies
   actions:
     - theme: brand
       text: Get Started
@@ -17,171 +16,202 @@ hero:
       link: https://github.com/rafbcampos/fluent-gen-ts
 
 features:
-  - icon: 🔍
-    title: Type Extraction
+  - icon: 🔧
+    title: Zero Dependencies
     details:
-      Automatically extracts and resolves TypeScript types including generics,
-      utility types, mapped types, and complex nested structures
-  - icon: 🏗️
-    title: Fluent Builders
-    details:
-      Generates type-safe fluent builder patterns with IntelliSense support and
-      JSDoc preservation
-  - icon: ⚡
-    title: Zero Runtime
-    details:
-      All generation happens at build time. No runtime dependencies or overhead
-      in your production code
-  - icon: 🔌
-    title: Plugin Architecture
-    details:
-      Extensible architecture with hooks for customizing generation behavior at
-      multiple stages
+      Generated builders have no runtime dependencies. The code is
+      self-contained and works in any TypeScript project.
+
   - icon: 🎯
-    title: Production Ready
+    title: Type-Safe & IntelliSense-Friendly
     details:
-      Strict TypeScript, comprehensive error handling with Result types, and
-      optimized for large codebases
-  - icon: 🛠️
-    title: CLI & API
+      Full TypeScript support with complete type inference. Enjoy autocomplete
+      and type checking at every step of the builder chain.
+
+  - icon: 🚀
+    title: Smart Defaults
     details:
-      Use via command line for quick generation or integrate programmatically
-      into your build pipeline
+      Automatically generates sensible defaults for required fields, ensuring
+      your builders always produce valid objects.
+
+  - icon: 🔄
+    title: Nested Builder Support
+    details:
+      Compose complex objects with nested builders. Deferred builds enable
+      context passing between parent and child builders.
+
+  - icon: 🧩
+    title: Plugin System
+    details:
+      Extend functionality with custom plugins for validation, custom methods,
+      imports transformation, and more.
+
+  - icon: ⚡
+    title: CLI & Programmatic API
+    details:
+      Use the interactive CLI for quick setup or integrate directly into your
+      build process with the programmatic API.
 ---
 
 ## Quick Example
 
-Transform your TypeScript interfaces into fluent builders:
+Transform this interface:
 
 ```typescript
-// Your interface
 interface User {
   id: string;
   name: string;
-  email: string;
-  age?: number;
-  address: {
-    street: string;
-    city: string;
-  };
+  email?: string;
+  role: 'admin' | 'user';
+  isActive: boolean;
 }
-
-// Generated builder usage
-const user = userBuilder()
-  .withId('user-123')
-  .withName('John Doe')
-  .withEmail('john@example.com')
-  .withAge(30)
-  .withAddress(
-    addressBuilder()
-      .withStreet('123 Main St')
-      .withCity('San Francisco')
-      .build(),
-  )
-  .build();
-
-// The result is fully typed as User
-const userData: User = user;
 ```
 
-## Why Fluent Gen TS?
+Into this fluent builder:
 
-- **Type Safety First**: Full TypeScript support with strict mode and advanced
-  type checking
-- **Developer Experience**: IntelliSense, JSDoc comments, and type hints
-  throughout
-- **Complex Type Support**: Handles generics, utility types, conditional types,
-  and circular references
-- **Performance**: Optimized type resolution and generation for large codebases
-- **Flexible Integration**: CLI for quick tasks, programmatic API for build
-  tools, and plugin system for customization
+```typescript
+const user = user()
+  .withId('123')
+  .withName('Alice')
+  .withEmail('alice@example.com')
+  .withRole('admin')
+  .withIsActive(true)
+  .build();
+```
 
 ## Installation
 
 ```bash
 npm install -D fluent-gen-ts
-# or
-pnpm add -D fluent-gen-ts
-# or
-yarn add -D fluent-gen-ts
 ```
 
 ## Quick Start
 
-### CLI Usage
+### Interactive Setup
 
 ```bash
-# Initialize configuration with interactive setup (recommended)
 npx fluent-gen-ts init
-
-# Generate a single builder
-npx fluent-gen-ts generate ./src/types.ts User
-
-# Generate from configuration
-npx fluent-gen-ts batch
-
-# Scan and generate interactively
-npx fluent-gen-ts scan "src/**/*.ts" --interactive
 ```
 
-### Programmatic API
+The interactive CLI will guide you through:
+
+- Scanning your TypeScript files
+- Selecting interfaces to generate builders for
+- Configuring output directory and naming conventions
+- Setting up a configuration file
+
+### Generate a Single Builder
+
+```bash
+npx fluent-gen-ts generate ./src/types.ts User --output ./src/builders/
+```
+
+### Batch Generation
+
+```bash
+npx fluent-gen-ts batch
+```
+
+## Why fluent-gen-ts?
+
+### The Problem
+
+Creating test data and complex object structures in TypeScript often leads to:
+
+- Verbose object literals with repetitive property assignments
+- Difficulty in creating variations of objects for testing
+- No IDE support while building objects incrementally
+- Manual maintenance of builder patterns
+
+### The Solution
+
+`fluent-gen-ts` automatically generates fluent builders that:
+
+- Provide a chainable API for building objects step by step
+- Offer full IntelliSense support at each step
+- Generate valid objects with smart defaults
+- Support complex scenarios like nested objects and arrays
+- Require zero runtime dependencies
+
+## Core Features
+
+### 🎯 Complete Type Safety
+
+Every generated builder maintains full type safety throughout the chain:
 
 ```typescript
-import { FluentGen } from 'fluent-gen-ts';
-
-const generator = new FluentGen({
-  useDefaults: true,
-  addComments: true,
-});
-
-// Generate builder code
-const result = await generator.generateBuilder('./src/types.ts', 'User');
-
-if (result.ok) {
-  console.log(result.value); // Generated builder code
-}
+const product = product()
+  .withId('P001') // ✓ string
+  .withPrice(99.99) // ✓ number
+  .withInStock(true) // ✓ boolean
+  .withCategories(['electronics', 'computers']) // ✓ string[]
+  .build();
 ```
 
-## Features
+### 🔄 Nested Builders with Deferred Builds
 
-### 🎯 Smart Type Resolution
+Build complex nested structures with ease:
 
-- Resolves complex TypeScript types including utility types (`Pick`, `Omit`,
-  `Partial`, `Required`, `Readonly`)
-- Handles conditional types and mapped types
-- Supports template literal types
-- Manages circular references automatically
+```typescript
+const order = order()
+  .withId('ORD-001')
+  .withCustomer(
+    customer().withName('John Doe').withAddress(
+      address().withStreet('123 Main St').withCity('New York'),
+      // No .build() needed - automatically handled!
+    ),
+  )
+  .withItems([
+    item().withName('Laptop').withPrice(999),
+    item().withName('Mouse').withPrice(29),
+  ])
+  .build();
+```
 
-### 🔧 Flexible Configuration
+### 🧩 Extensible Plugin System
 
-- Project-wide configuration with `.fluentgenrc.json`
-- Per-generation options
-- Custom context types for parent-child relationships
-- Configurable code formatting
+Create custom plugins to extend functionality:
 
-### 🚀 Advanced Patterns
+```typescript
+const validationPlugin: Plugin = {
+  name: 'validation-plugin',
+  version: '1.0.0',
 
-- Nested builders for complex object hierarchies
-- Generic type parameters with constraints
-- Context passing between builders
-- Custom default values
+  transformPropertyMethod(context) {
+    if (context.property.name === 'email') {
+      return ok({
+        validate: `
+          if (value && !value.includes('@')) {
+            throw new Error('Invalid email format');
+          }`,
+      });
+    }
+    return ok({});
+  },
+};
+```
 
-### 📦 Production Ready
+### ⚙️ Flexible Generation Modes
 
-- Result-based error handling (no exceptions)
-- Clean, maintainable code architecture
-- Extensive documentation and examples
-- Active development and support
+#### Single Builder Generation
 
-## Community
+Generates self-contained builders with inlined utilities - perfect for
+standalone use.
 
-- [GitHub Issues](https://github.com/rafbcampos/fluent-gen-ts/issues) - Report
-  bugs or request features
-- [Discussions](https://github.com/rafbcampos/fluent-gen-ts/discussions) - Ask
-  questions and share ideas
-- [Contributing Guide](https://github.com/rafbcampos/fluent-gen-ts/blob/main/CONTRIBUTING.md) -
-  Help improve Fluent Gen TS
+#### Batch Generation
 
-## License
+Creates a shared `common.ts` file with utilities that all builders import -
+ideal for generating multiple builders.
 
-MIT © Rafael Campos
+#### Custom Common File
+
+Use `setup-common` to create your own customizable common utilities file.
+
+## Learn More
+
+- [Getting Started Guide](/guide/getting-started) - Set up your first builder
+- [Core Concepts](/guide/core-concepts) - Understand the fundamentals
+- [CLI Commands](/guide/cli-commands) - Master the command-line interface
+- [Plugin System](/guide/plugins) - Extend with custom functionality
+- [API Reference](/api/reference) - Complete API documentation
+- [Examples](/examples) - Real-world usage patterns
