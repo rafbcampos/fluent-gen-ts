@@ -22,6 +22,13 @@ export interface PluginConfigAnswers {
   plugins?: string[];
 }
 
+export interface MonorepoConfigAnswers {
+  enabled: boolean;
+  workspaceRoot?: string;
+  dependencyResolutionStrategy?: 'auto' | 'workspace-root' | 'hoisted' | 'local-only';
+  customPaths?: string[];
+}
+
 export interface TypeSelection {
   file: string;
   type: string;
@@ -191,6 +198,114 @@ export class InteractiveService {
       },
     ]);
     return result.runBatch;
+  }
+
+  async askMonorepoConfig(): Promise<MonorepoConfigAnswers> {
+    const result = await inquirer.prompt<{ enabled: boolean }>([
+      {
+        type: 'confirm',
+        name: 'enabled',
+        message: 'Are you working in a monorepo environment?',
+        default: false,
+      },
+    ]);
+
+    if (!result.enabled) {
+      return { enabled: false };
+    }
+
+    const strategyAnswer = await inquirer.prompt<{
+      dependencyResolutionStrategy: 'auto' | 'workspace-root' | 'hoisted' | 'local-only';
+    }>([
+      {
+        type: 'list',
+        name: 'dependencyResolutionStrategy',
+        message: 'How should dependencies be resolved?',
+        choices: [
+          {
+            name: 'Auto-detect (recommended) - Try multiple strategies',
+            value: 'auto',
+          },
+          {
+            name: 'Workspace Root - Look in workspace root node_modules',
+            value: 'workspace-root',
+          },
+          {
+            name: 'Hoisted - Walk up directory tree',
+            value: 'hoisted',
+          },
+          {
+            name: 'Local Only - Only check local node_modules',
+            value: 'local-only',
+          },
+        ],
+        default: 'auto',
+      },
+    ]);
+
+    let workspaceRoot: string | undefined;
+    let customPaths: string[] | undefined;
+
+    if (strategyAnswer.dependencyResolutionStrategy === 'workspace-root') {
+      const workspaceRootAnswer = await inquirer.prompt<{ workspaceRoot: string }>([
+        {
+          type: 'input',
+          name: 'workspaceRoot',
+          message: 'Path to workspace root:',
+          default: process.cwd(),
+          validate: (input: string) => {
+            return this.fileService.directoryExists(input) || 'Directory does not exist';
+          },
+        },
+      ]);
+      workspaceRoot = workspaceRootAnswer.workspaceRoot;
+    }
+
+    const customPathsAnswer = await inquirer.prompt<{ hasCustomPaths: boolean }>([
+      {
+        type: 'confirm',
+        name: 'hasCustomPaths',
+        message: 'Do you have custom paths where dependencies might be located?',
+        default: false,
+      },
+    ]);
+
+    if (customPathsAnswer.hasCustomPaths) {
+      const pathsAnswer = await inquirer.prompt<{ customPaths: string }>([
+        {
+          type: 'input',
+          name: 'customPaths',
+          message: 'Custom dependency paths (comma-separated):',
+          validate: (input: string) => {
+            const paths = input
+              .split(',')
+              .map(p => p.trim())
+              .filter(Boolean);
+
+            for (const path of paths) {
+              if (!this.fileService.directoryExists(path)) {
+                return `Directory does not exist: ${path}`;
+              }
+            }
+
+            return paths.length > 0 || 'Please provide at least one path.';
+          },
+          filter: (input: string) =>
+            input
+              .split(',')
+              .map(p => p.trim())
+              .filter(Boolean),
+        },
+      ]);
+      customPaths = pathsAnswer.customPaths as unknown as string[];
+    }
+
+    return {
+      enabled: true,
+      dependencyResolutionStrategy: strategyAnswer.dependencyResolutionStrategy,
+      ...(workspaceRoot !== undefined && { workspaceRoot }),
+      ...(customPaths !== undefined && { customPaths }),
+    };
   }
 
   showFileNamePreview(config: FileNamingConfig): void {

@@ -67,10 +67,28 @@ export class GeneratorService {
       ...overrides,
     });
 
-    return new FluentGen({
+    const fluentGenOptions: FluentGenOptions = {
       ...genOptions,
       ...(pluginManager && { pluginManager }),
-    });
+    };
+
+    if (config.monorepo && config.monorepo.enabled) {
+      const monorepoConfig: import('../../core/package-resolver.js').MonorepoConfig = {
+        enabled: config.monorepo.enabled,
+        ...(config.monorepo.workspaceRoot !== undefined && {
+          workspaceRoot: config.monorepo.workspaceRoot,
+        }),
+        ...(config.monorepo.dependencyResolutionStrategy !== undefined && {
+          dependencyResolutionStrategy: config.monorepo.dependencyResolutionStrategy,
+        }),
+        ...(config.monorepo.customPaths !== undefined && {
+          customPaths: config.monorepo.customPaths,
+        }),
+      };
+      fluentGenOptions.monorepoConfig = monorepoConfig;
+    }
+
+    return new FluentGen(fluentGenOptions);
   }
 
   mergeGeneratorOptions(

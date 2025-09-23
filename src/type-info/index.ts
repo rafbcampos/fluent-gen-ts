@@ -16,11 +16,14 @@ import path from 'node:path';
 import { access, constants } from 'node:fs/promises';
 import type { SourceFile } from 'ts-morph';
 
+import type { MonorepoConfig } from '../core/package-resolver.js';
+
 export interface TypeExtractorOptions {
   tsConfigPath?: string;
   cache?: TypeResolutionCache;
   pluginManager?: PluginManager;
   maxDepth?: number;
+  monorepoConfig?: MonorepoConfig;
 }
 
 export class TypeExtractor {
@@ -42,6 +45,7 @@ export class TypeExtractor {
       ...(options.tsConfigPath && { tsConfigPath: options.tsConfigPath }),
       cache: this.cache,
       pluginManager: this.pluginManager,
+      ...(options.monorepoConfig && { monorepoConfig: options.monorepoConfig }),
     });
 
     this.resolver = new TypeResolver({

@@ -2,6 +2,16 @@ import { z } from 'zod';
 import { cosmiconfigSync } from 'cosmiconfig';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
+import type { MonorepoConfig as CoreMonorepoConfig } from '../core/package-resolver.js';
+
+export const MonorepoConfigSchema = z.object({
+  enabled: z.boolean(),
+  workspaceRoot: z.string().optional(),
+  dependencyResolutionStrategy: z
+    .enum(['auto', 'workspace-root', 'hoisted', 'local-only'])
+    .optional(),
+  customPaths: z.array(z.string()).optional(),
+});
 
 export const GeneratorConfigSchema = z.object({
   outputDir: z.string().optional(),
@@ -20,6 +30,7 @@ export const TargetSchema = z.object({
 
 export const ConfigSchema = z.object({
   tsConfigPath: z.string().optional(),
+  monorepo: MonorepoConfigSchema.optional(),
   generator: GeneratorConfigSchema.optional(),
   targets: z.array(TargetSchema).optional(),
   patterns: z.array(z.string()).optional(),
@@ -30,6 +41,7 @@ export const ConfigSchema = z.object({
 export type Config = z.infer<typeof ConfigSchema>;
 export type Target = z.infer<typeof TargetSchema>;
 export type GeneratorConfig = z.infer<typeof GeneratorConfigSchema>;
+export type { CoreMonorepoConfig as MonorepoConfig };
 
 export class ConfigLoader {
   private readonly explorer = cosmiconfigSync('fluentgen', {

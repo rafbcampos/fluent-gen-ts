@@ -26,6 +26,8 @@ provide full IntelliSense support and type safety at every step.
 - **📝 JSDoc Preservation** - Maintains your documentation and comments
 - **🎨 Flexible Generation Modes** - Single file or batch generation with shared
   utilities
+- **📦 Monorepo Support** - Intelligent dependency resolution for pnpm, yarn,
+  and npm workspaces
 
 ## 🚀 Quick Start
 
@@ -82,7 +84,38 @@ This will guide you through:
 - 📁 Scanning your TypeScript files
 - 🎯 Selecting interfaces to generate builders for
 - ⚙️ Configuring output and naming conventions
+- 📦 Setting up monorepo configuration (if needed)
 - 🔧 Setting up your configuration file
+
+### 📦 Monorepo Support
+
+fluent-gen-ts provides intelligent dependency resolution for monorepo setups:
+
+```javascript
+// fluent-gen.config.js
+module.exports = {
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'auto', // or 'workspace-root' | 'hoisted' | 'local-only'
+    workspaceRoot: './path/to/workspace/root', // optional, for workspace-root strategy
+    customPaths: ['./custom/deps'], // optional, for custom dependency locations
+  },
+  // ... other config
+};
+```
+
+**Supported Package Managers:**
+
+- **pnpm workspaces** - Automatically resolves from `.pnpm` store and symlinks
+- **yarn workspaces** - Finds hoisted dependencies and workspace root packages
+- **npm workspaces** - Standard node_modules resolution with workspace support
+
+**Resolution Strategies:**
+
+- `auto` - Try multiple strategies automatically (recommended)
+- `workspace-root` - Look only in workspace root node_modules
+- `hoisted` - Walk up directory tree for hoisted dependencies
+- `local-only` - Only check local node_modules directories
 
 ## 🏗️ Core Concepts
 

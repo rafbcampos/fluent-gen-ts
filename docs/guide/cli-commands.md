@@ -42,9 +42,15 @@ npx fluent-gen-ts init [options]
    - File naming convention (kebab, camel, pascal, snake)
    - File suffix (e.g., `builder` for `user.builder.ts`)
 
-4. **Plugin Configuration**: Optional plugin paths
+4. **Monorepo Configuration**: Optional workspace dependency setup
+   - Enable monorepo support
+   - Choose dependency resolution strategy
+   - Set workspace root path (if needed)
+   - Configure custom dependency paths
 
-5. **Save & Generate**: Save config and optionally run generation
+5. **Plugin Configuration**: Optional plugin paths
+
+6. **Save & Generate**: Save config and optionally run generation
 
 ### Example
 

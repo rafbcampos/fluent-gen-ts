@@ -99,8 +99,12 @@ export class InitCommand {
       suffix: outputConfig.suffix,
     });
 
-    // Step 5: Plugin configuration
-    console.log(chalk.cyan('\n🔌 Step 5: Configure plugins (optional)'));
+    // Step 5: Monorepo configuration
+    console.log(chalk.cyan('\n📦 Step 5: Configure monorepo settings (optional)'));
+    const monorepoConfig = await this.interactiveService.askMonorepoConfig();
+
+    // Step 6: Plugin configuration
+    console.log(chalk.cyan('\n🔌 Step 6: Configure plugins (optional)'));
     const pluginConfig = await this.interactiveService.askPluginConfig();
 
     // Build configuration
@@ -108,6 +112,7 @@ export class InitCommand {
       patterns,
       interfaceSelection.selectedInterfaces,
       outputConfig,
+      monorepoConfig,
       pluginConfig,
     );
   }
@@ -116,6 +121,7 @@ export class InitCommand {
     patterns: string[],
     selectedInterfaces: any[],
     outputConfig: any,
+    monorepoConfig: any,
     pluginConfig: any,
   ): Config {
     // Group interfaces by file to create targets
@@ -143,6 +149,7 @@ export class InitCommand {
       },
       targets,
       patterns,
+      ...(monorepoConfig.enabled && { monorepo: monorepoConfig }),
       ...(pluginConfig.hasPlugins && { plugins: pluginConfig.plugins }),
     };
   }

@@ -3,6 +3,166 @@
 This guide covers advanced scenarios and patterns for using fluent-gen-ts
 effectively in complex projects.
 
+## Monorepo Configuration
+
+fluent-gen-ts provides comprehensive support for monorepo setups with
+intelligent dependency resolution across different package managers and
+workspace configurations.
+
+### Package Manager Support
+
+#### pnpm Workspaces
+
+fluent-gen-ts automatically handles pnpm's unique `.pnpm` store structure:
+
+```json
+// pnpm-workspace.yaml
+packages:
+  - "packages/*"
+  - "apps/*"
+
+// fluent-gen.config.js
+module.exports = {
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'auto', // Detects pnpm automatically
+  }
+}
+```
+
+The resolver will:
+
+- Detect pnpm via `pnpm-lock.yaml`
+- Resolve symlinks from `node_modules/.pnpm/` store
+- Handle scoped packages correctly (`@scope/package` → `@scope+package`)
+
+#### Yarn Workspaces
+
+Works seamlessly with yarn's hoisting behavior:
+
+```json
+// package.json (workspace root)
+{
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"]
+}
+
+// fluent-gen.config.js
+module.exports = {
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'hoisted', // Optimal for yarn
+  }
+}
+```
+
+#### Custom Configurations
+
+For complex setups or non-standard layouts:
+
+```javascript
+// fluent-gen.config.js
+module.exports = {
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'workspace-root',
+    workspaceRoot: '/path/to/workspace/root',
+    customPaths: [
+      './shared-dependencies',
+      '../common-packages/node_modules',
+      './custom-resolution-path',
+    ],
+  },
+};
+```
+
+### Resolution Strategies
+
+#### Auto (Recommended)
+
+Tries multiple strategies in order until dependencies are found:
+
+1. Local `node_modules`
+2. Hoisted dependencies (walking up tree)
+3. Package manager store (pnpm `.pnpm`)
+4. Workspace root
+
+```javascript
+{
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'auto'
+  }
+}
+```
+
+#### Workspace Root
+
+Explicitly looks in workspace root first:
+
+```javascript
+{
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'workspace-root',
+    workspaceRoot: './../../' // relative to config file
+  }
+}
+```
+
+#### Hoisted
+
+Walks up directory tree for hoisted dependencies:
+
+```javascript
+{
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'hoisted'
+  }
+}
+```
+
+#### Local Only
+
+Only checks local `node_modules` (useful for strict isolation):
+
+```javascript
+{
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'local-only'
+  }
+}
+```
+
+### Troubleshooting
+
+#### Verbose Logging
+
+Enable detailed resolution logging:
+
+```bash
+DEBUG=fluent-gen:resolution npx fluent-gen-ts generate ./src/types.ts MyType
+```
+
+Common resolution messages:
+
+- `Package 'pkg' resolved from workspace-root at: /path/to/pkg`
+- `Package 'pkg' resolved from local at: /path/to/pkg`
+- `Package 'pkg' resolved from pnpm-store at: /path/to/.pnpm/pkg@version/node_modules/pkg`
+
+#### Common Issues
+
+**Issue**: Package not found despite being installed **Solution**: Try `auto`
+strategy or check `customPaths`
+
+**Issue**: pnpm symlinks not resolved **Solution**: Ensure
+`dependencyResolutionStrategy: 'auto'` or `'pnpm-store'`
+
+**Issue**: yarn workspaces not finding hoisted deps **Solution**: Use
+`dependencyResolutionStrategy: 'hoisted'`
+
 ## Complex Type Scenarios
 
 ### Generic Types with Constraints

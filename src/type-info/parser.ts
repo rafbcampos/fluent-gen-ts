@@ -3,14 +3,16 @@ import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import { TypeResolutionCache } from '../core/cache.js';
 import { PluginManager, HookType } from '../core/plugin.js';
+import { PackageResolver } from '../core/package-resolver.js';
 import path from 'node:path';
-import fs from 'node:fs';
-import { glob } from 'glob';
+
+import type { MonorepoConfig } from '../core/package-resolver.js';
 
 export interface ParserOptions {
   readonly tsConfigPath?: string;
   readonly cache?: TypeResolutionCache;
   readonly pluginManager?: PluginManager;
+  readonly monorepoConfig?: MonorepoConfig;
 }
 
 interface TypeDeclaration {
@@ -37,6 +39,8 @@ export class TypeScriptParser {
   private readonly project: Project;
   private readonly cache: TypeResolutionCache;
   private readonly pluginManager: PluginManager;
+  private readonly packageResolver: PackageResolver;
+  private readonly monorepoConfig?: MonorepoConfig;
 
   constructor(options: ParserOptions = {}) {
     const projectOptions: any = {
@@ -65,10 +69,17 @@ export class TypeScriptParser {
 
     this.cache = options.cache ?? new TypeResolutionCache();
     this.pluginManager = options.pluginManager ?? new PluginManager();
+    this.packageResolver = new PackageResolver();
+    if (options.monorepoConfig !== undefined) {
+      (this as unknown as { monorepoConfig?: MonorepoConfig }).monorepoConfig =
+        options.monorepoConfig;
+    }
   }
 
   /**
    * Load external dependencies into the TypeScript project for better resolution
+   * Uses robust package resolution that handles monorepo scenarios including
+   * pnpm workspaces, yarn workspaces, and hoisted dependencies
    *
    * @param packageNames Array of package names to load (e.g., ['@player-ui/types'])
    * @param projectRoot The root directory to search for node_modules
@@ -78,44 +89,78 @@ export class TypeScriptParser {
     projectRoot: string,
   ): Promise<Result<void>> {
     try {
-      for (const packageName of packageNames) {
-        // Find the package in node_modules
-        const nodeModulesPath = path.join(projectRoot, 'node_modules', packageName);
+      const packageManager = await this.packageResolver.detectPackageManager(projectRoot);
+      const loadedPackages: string[] = [];
+      const failedPackages: string[] = [];
 
-        if (!fs.existsSync(nodeModulesPath)) {
-          console.warn(`Package ${packageName} not found in ${nodeModulesPath}`);
+      for (const packageName of packageNames) {
+        console.log(`Resolving package: ${packageName}`);
+
+        const resolveResult = await this.packageResolver.resolvePackage({
+          packageName,
+          startPath: projectRoot,
+          packageManager,
+          ...(this.monorepoConfig !== undefined && { monorepoConfig: this.monorepoConfig }),
+        });
+
+        if (!resolveResult.ok) {
+          console.warn(
+            `Failed to resolve package '${packageName}': ${resolveResult.error.message}`,
+          );
+          failedPackages.push(packageName);
           continue;
         }
 
-        // Look for package.json to find the types entry
-        const packageJsonPath = path.join(nodeModulesPath, 'package.json');
+        const resolvedPackage = resolveResult.value;
+        console.log(
+          `Package '${packageName}' resolved from ${resolvedPackage.resolvedFrom} at: ${resolvedPackage.path}`,
+        );
 
-        if (fs.existsSync(packageJsonPath)) {
-          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+        let typesLoaded = false;
 
-          // Try to find TypeScript declaration files
-          const typesEntry = packageJson.types || packageJson.typings;
-
-          if (typesEntry) {
-            const typesPath = path.resolve(nodeModulesPath, typesEntry);
-
-            if (fs.existsSync(typesPath)) {
-              console.log(`Loading types from ${typesPath}`);
-              this.project.addSourceFileAtPath(typesPath);
-            }
-          } else {
-            // Fallback: look for .d.ts files in the package
-            const dtsFiles = await glob(`${nodeModulesPath}/**/*.d.ts`, {
-              ignore: ['**/node_modules/**'],
-              absolute: true,
-            });
-
-            for (const dtsFile of dtsFiles) {
-              console.log(`Loading declaration file ${dtsFile}`);
-              this.project.addSourceFileAtPath(dtsFile);
-            }
+        // Load primary types entry if available
+        if (resolvedPackage.typesPath) {
+          try {
+            console.log(`Loading types from: ${resolvedPackage.typesPath}`);
+            this.project.addSourceFileAtPath(resolvedPackage.typesPath);
+            typesLoaded = true;
+          } catch (error) {
+            console.warn(`Failed to load types from ${resolvedPackage.typesPath}: ${error}`);
           }
         }
+
+        // Load declaration files as fallback or supplement
+        if (resolvedPackage.declarationFiles.length > 0) {
+          let filesLoaded = 0;
+          for (const dtsFile of resolvedPackage.declarationFiles) {
+            try {
+              this.project.addSourceFileAtPath(dtsFile);
+              filesLoaded++;
+            } catch (error) {
+              console.warn(`Failed to load declaration file ${dtsFile}: ${error}`);
+            }
+          }
+
+          if (filesLoaded > 0) {
+            console.log(`Loaded ${filesLoaded} declaration files for package '${packageName}'`);
+            typesLoaded = true;
+          }
+        }
+
+        if (typesLoaded) {
+          loadedPackages.push(packageName);
+        } else {
+          console.warn(`No TypeScript definitions found for package '${packageName}'`);
+          failedPackages.push(packageName);
+        }
+      }
+
+      // Log summary
+      if (loadedPackages.length > 0) {
+        console.log(`Successfully loaded external dependencies: ${loadedPackages.join(', ')}`);
+      }
+      if (failedPackages.length > 0) {
+        console.warn(`Failed to load external dependencies: ${failedPackages.join(', ')}`);
       }
 
       return ok(undefined);

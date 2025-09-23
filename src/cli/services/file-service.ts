@@ -21,6 +21,10 @@ export class FileService {
     return existsSync(filePath);
   }
 
+  directoryExists(dirPath: string): boolean {
+    return existsSync(dirPath);
+  }
+
   resolveOutputPath(template: string, replacements: Record<string, string>): string {
     let result = template;
     for (const [key, value] of Object.entries(replacements)) {

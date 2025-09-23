@@ -50,6 +50,7 @@ function extractTypeExtractorOptions({
   cache,
   pluginManager,
   maxDepth,
+  monorepoConfig,
 }: FluentGenOptions): TypeExtractorOptions {
   const options: TypeExtractorOptions = {};
 
@@ -67,6 +68,10 @@ function extractTypeExtractorOptions({
 
   if (maxDepth !== undefined) {
     options.maxDepth = maxDepth;
+  }
+
+  if (monorepoConfig !== undefined) {
+    options.monorepoConfig = monorepoConfig;
   }
 
   return options;
