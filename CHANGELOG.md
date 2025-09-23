@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.1
+
+### Patch Changes
+
+- a174aa1: Release 0.1.1 - initial version to npm
+
 ## 0.1.0
 
 ### Minor Changes
