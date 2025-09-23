@@ -1,9 +1,11 @@
-import { Project, SourceFile, Type } from 'ts-morph';
+import { Project, SourceFile, Type, ts } from 'ts-morph';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import { TypeResolutionCache } from '../core/cache.js';
 import { PluginManager, HookType } from '../core/plugin.js';
 import path from 'node:path';
+import fs from 'node:fs';
+import { glob } from 'glob';
 
 export interface ParserOptions {
   readonly tsConfigPath?: string;
@@ -37,13 +39,89 @@ export class TypeScriptParser {
   private readonly pluginManager: PluginManager;
 
   constructor(options: ParserOptions = {}) {
-    this.project = new Project({
+    const projectOptions: any = {
       ...(options.tsConfigPath && { tsConfigFilePath: options.tsConfigPath }),
       skipAddingFilesFromTsConfig: !options.tsConfigPath,
-    });
+      compilerOptions: {
+        allowJs: false,
+        declaration: true,
+        emitDeclarationOnly: false,
+        noEmit: true,
+        skipLibCheck: true,
+        moduleResolution: ts.ModuleResolutionKind.NodeNext,
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        resolveJsonModule: true,
+        ...(options.tsConfigPath && {
+          baseUrl: path.dirname(options.tsConfigPath),
+          paths: {
+            '*': ['node_modules/*', '*/node_modules/*'],
+          },
+        }),
+      },
+    };
+
+    this.project = new Project(projectOptions);
 
     this.cache = options.cache ?? new TypeResolutionCache();
     this.pluginManager = options.pluginManager ?? new PluginManager();
+  }
+
+  /**
+   * Load external dependencies into the TypeScript project for better resolution
+   *
+   * @param packageNames Array of package names to load (e.g., ['@player-ui/types'])
+   * @param projectRoot The root directory to search for node_modules
+   */
+  async loadExternalDependencies(
+    packageNames: string[],
+    projectRoot: string,
+  ): Promise<Result<void>> {
+    try {
+      for (const packageName of packageNames) {
+        // Find the package in node_modules
+        const nodeModulesPath = path.join(projectRoot, 'node_modules', packageName);
+
+        if (!fs.existsSync(nodeModulesPath)) {
+          console.warn(`Package ${packageName} not found in ${nodeModulesPath}`);
+          continue;
+        }
+
+        // Look for package.json to find the types entry
+        const packageJsonPath = path.join(nodeModulesPath, 'package.json');
+
+        if (fs.existsSync(packageJsonPath)) {
+          const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
+          // Try to find TypeScript declaration files
+          const typesEntry = packageJson.types || packageJson.typings;
+
+          if (typesEntry) {
+            const typesPath = path.resolve(nodeModulesPath, typesEntry);
+
+            if (fs.existsSync(typesPath)) {
+              console.log(`Loading types from ${typesPath}`);
+              this.project.addSourceFileAtPath(typesPath);
+            }
+          } else {
+            // Fallback: look for .d.ts files in the package
+            const dtsFiles = await glob(`${nodeModulesPath}/**/*.d.ts`, {
+              ignore: ['**/node_modules/**'],
+              absolute: true,
+            });
+
+            for (const dtsFile of dtsFiles) {
+              console.log(`Loading declaration file ${dtsFile}`);
+              this.project.addSourceFileAtPath(dtsFile);
+            }
+          }
+        }
+      }
+
+      return ok(undefined);
+    } catch (error) {
+      return err(new Error(`Failed to load external dependencies: ${error}`));
+    }
   }
 
   async parseFile(filePath: string): Promise<Result<SourceFile>> {

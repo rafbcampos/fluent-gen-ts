@@ -14,6 +14,7 @@ import {
 } from './type-guards.js';
 import path from 'node:path';
 import { access, constants } from 'node:fs/promises';
+import type { SourceFile } from 'ts-morph';
 
 export interface TypeExtractorOptions {
   tsConfigPath?: string;
@@ -138,6 +139,9 @@ export class TypeExtractor {
     }
 
     const sourceFile = sourceFileResult.value;
+
+    // Auto-detect and load external dependencies
+    await this.loadExternalDependencies(sourceFile, path.dirname(absolutePath));
 
     // Normal type resolution
     const typeResult = await this.parser.findType({ sourceFile, typeName });
@@ -314,15 +318,62 @@ export class TypeExtractor {
     return ok(dependencies);
   }
 
+  /**
+   * Auto-detect and load external dependencies from import statements
+   */
+  private async loadExternalDependencies(
+    sourceFile: SourceFile,
+    projectRoot: string,
+  ): Promise<void> {
+    try {
+      const importDeclarations = sourceFile.getImportDeclarations();
+      const externalPackages = new Set<string>();
+
+      for (const importDecl of importDeclarations) {
+        const moduleSpecifier = importDecl.getModuleSpecifierValue();
+
+        // Check if it's an external package (not relative import)
+        if (!moduleSpecifier.startsWith('.') && !moduleSpecifier.startsWith('/')) {
+          // Extract package name
+          const packageName = moduleSpecifier.startsWith('@')
+            ? moduleSpecifier.split('/').slice(0, 2).join('/') // @scope/package
+            : moduleSpecifier.split('/')[0]; // package
+
+          if (packageName) externalPackages.add(packageName);
+        }
+      }
+
+      if (externalPackages.size > 0) {
+        console.log(`Detected external packages: ${Array.from(externalPackages).join(', ')}`);
+
+        // Find project root by looking for package.json
+        let searchDir = projectRoot;
+        while (searchDir !== path.dirname(searchDir)) {
+          const packageJsonPath = path.join(searchDir, 'package.json');
+          if (
+            await access(packageJsonPath, constants.F_OK)
+              .then(() => true)
+              .catch(() => false)
+          ) {
+            projectRoot = searchDir;
+            break;
+          }
+          searchDir = path.dirname(searchDir);
+        }
+
+        // Load the dependencies
+        await this.parser.loadExternalDependencies(Array.from(externalPackages), projectRoot);
+      }
+    } catch (error) {
+      console.warn(`Failed to load external dependencies: ${error}`);
+    }
+  }
+
   clearCache(): void {
     this.cache.clear();
     this.resolver.resetState();
   }
 }
-
-// Main API - TypeExtractor and TypeExtractorOptions are already exported above
-// export { TypeExtractor }; // Already defined in this file
-// export type { TypeExtractorOptions }; // Already defined in this file
 
 // Core types that consumers might need
 export type {
