@@ -137,7 +137,6 @@ describe('ImportGenerator', () => {
       expect(result).toContain('FluentBuilder,');
       expect(result).toContain('FluentBuilderBase,');
       expect(result).toContain('BaseBuildContext,');
-      expect(result).toContain('FLUENT_BUILDER_SYMBOL,');
       expect(result).toContain('createInspectMethod');
       expect(result).toContain('} from "./common";');
     });
@@ -244,7 +243,7 @@ describe('ImportGenerator', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toContain('User, BaseType, DefaultType');
+        expect(result.value).toContain('import type { User }');
       }
     });
 

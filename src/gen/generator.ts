@@ -200,6 +200,7 @@ export class BuilderGenerator {
         hasExistingCommon: hasCommon,
         commonImportPath: './common.js',
         pluginManager: this.pluginManager,
+        outputDir: checkDir,
       },
     });
 

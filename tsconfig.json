@@ -16,5 +16,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true
   },
-  "exclude": ["src/__temp__/**/*", "dist"]
+  "exclude": ["src/__temp__/**/*", "dist", "test-repo"]
 }

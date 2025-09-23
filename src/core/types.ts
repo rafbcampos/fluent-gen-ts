@@ -50,6 +50,7 @@ export type TypeInfo =
       readonly indexSignature?: IndexSignature;
       readonly unresolvedGenerics?: readonly GenericParam[];
       readonly typeArguments?: readonly TypeInfo[];
+      readonly sourceFile?: string;
     }
   | {
       readonly kind: TypeKind.Array;

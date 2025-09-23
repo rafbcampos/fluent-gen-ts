@@ -555,6 +555,7 @@ export class TypeResolver {
   }): Promise<Result<TypeInfo>> {
     const { type, depth, context } = params;
     const symbol = type.getSymbol();
+    const sourceFile = symbol?.getDeclarations()?.[0]?.getSourceFile();
 
     // Check if this is a type reference to a type alias
     if (symbol && this.isTypeAlias(symbol)) {
@@ -584,7 +585,18 @@ export class TypeResolver {
     const indexSignature = await this.resolveIndexSignature(type, depth, context);
     if (!indexSignature.ok) return indexSignature;
 
-    const objectName = symbol?.getName();
+    let objectName = symbol?.getName();
+
+    // If the symbol name is '__type', try to extract the actual type name from the type text
+    if (objectName === '__type') {
+      const typeText = type.getText();
+      // Extract type name from patterns like "import(...).Type<T>"
+      const match = typeText.match(/\.([A-Z][a-zA-Z0-9]+)(?:<|$)/);
+      if (match && match[1]) {
+        objectName = match[1];
+      }
+    }
+
     const unresolvedGenerics = context.getUnresolvedGenerics();
 
     // Capture type arguments for generic instantiations (e.g., PagedData<User>)
@@ -611,6 +623,9 @@ export class TypeResolver {
       genericParams = genericParamsResult.value;
     }
 
+    // Track source file for this type
+    const typeSourceFile = sourceFile?.getFilePath();
+
     return ok({
       kind: TypeKind.Object,
       ...(objectName && { name: objectName }),
@@ -625,6 +640,7 @@ export class TypeResolver {
       ...(unresolvedGenerics.length > 0 && {
         unresolvedGenerics,
       }),
+      ...(typeSourceFile && { sourceFile: typeSourceFile }),
     });
   }
 

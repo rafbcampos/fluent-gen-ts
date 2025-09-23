@@ -25,6 +25,8 @@ export interface ImportGeneratorConfig {
   readonly commonImportPath: string;
   /** Plugin manager for additional imports */
   readonly pluginManager?: PluginManager;
+  /** Output directory for generated files */
+  readonly outputDir?: string;
 }
 
 /**
@@ -32,6 +34,7 @@ export interface ImportGeneratorConfig {
  */
 export class ImportGenerator {
   private readonly importResolver = new ImportResolver();
+  private currentOutputDir?: string;
 
   /**
    * Generates imports for Node.js built-in types
@@ -115,10 +118,30 @@ export class ImportGenerator {
   }
 
   /**
+   * Extracts module names from named import statements
+   * @param importStatements - String containing import statements
+   */
+  private extractModulesFromNamedImports(importStatements: string): Set<string> {
+    const modules = new Set<string>();
+    const importRegex = /import\s+type\s+\{[^}]+\}\s+from\s+["']([^"']+)["']/g;
+    let match;
+    while ((match = importRegex.exec(importStatements)) !== null) {
+      if (match[1]) {
+        modules.add(match[1]);
+      }
+    }
+    return modules;
+  }
+
+  /**
    * Generates module imports from resolved type dependencies
    * @param resolvedType - The resolved type information
+   * @param excludeModules - Set of module names to exclude from namespace imports
    */
-  generateModuleImports(resolvedType: ResolvedType): Result<string[]> {
+  generateModuleImports(
+    resolvedType: ResolvedType,
+    excludeModules?: Set<string>,
+  ): Result<string[]> {
     try {
       if (!resolvedType || !Array.isArray(resolvedType.imports)) {
         return err(new Error('Invalid resolved type or imports array'));
@@ -141,7 +164,13 @@ export class ImportGenerator {
             info: importInfo,
             sourceFilePath: resolvedType.sourceFile,
           });
-          moduleImports.push(`import type * as ${importInfo.moduleName} from "${formattedPath}";`);
+
+          // Skip namespace import if this module already has named imports
+          if (!excludeModules || !excludeModules.has(formattedPath)) {
+            moduleImports.push(
+              `import type * as ${importInfo.moduleName} from "${formattedPath}";`,
+            );
+          }
         }
       }
 
@@ -167,13 +196,65 @@ export class ImportGenerator {
       throw new Error('Invalid common import path provided');
     }
 
-    return `import {
+    return `import type {
   FluentBuilder,
-  FluentBuilderBase,
   BaseBuildContext,
-  FLUENT_BUILDER_SYMBOL,
+} from "${config.commonImportPath}";
+import {
+  FluentBuilderBase,
   createInspectMethod
 } from "${config.commonImportPath}";`;
+  }
+
+  /**
+   * Generates external type imports as named imports
+   * @param externalTypes - Map of type name to source file
+   */
+  private generateExternalTypeImports(externalTypes: Map<string, string>): Result<string> {
+    try {
+      // Group types by their source module
+      const moduleToTypes = new Map<string, string[]>();
+
+      for (const [typeName, sourceFile] of externalTypes) {
+        let moduleName: string | undefined;
+
+        // Try pnpm structure first
+        const pnpmMatch = sourceFile.match(
+          /\.pnpm\/([^@]+@[^/]+)\/node_modules\/([^/]+(?:\/[^/]+)?)/,
+        );
+        if (pnpmMatch && pnpmMatch[2]) {
+          moduleName = pnpmMatch[2];
+        } else {
+          // Try regular node_modules structure - find the last occurrence
+          const matches = Array.from(sourceFile.matchAll(/node_modules\/([^/]+(?:\/[^/]+)?)/g));
+          const lastMatch = matches[matches.length - 1];
+          if (lastMatch && lastMatch[1]) {
+            moduleName = lastMatch[1];
+          }
+        }
+
+        if (moduleName) {
+          if (!moduleToTypes.has(moduleName)) {
+            moduleToTypes.set(moduleName, []);
+          }
+          const typeList = moduleToTypes.get(moduleName);
+          if (typeList) {
+            typeList.push(typeName);
+          }
+        }
+      }
+
+      // Generate import statements
+      const imports: string[] = [];
+      for (const [moduleName, types] of moduleToTypes) {
+        const uniqueTypes = Array.from(new Set(types)).sort();
+        imports.push(`import type { ${uniqueTypes.join(', ')} } from "${moduleName}";`);
+      }
+
+      return ok(imports.join('\n'));
+    } catch (error) {
+      return err(new Error(`Failed to generate external type imports: ${error}`));
+    }
   }
 
   /**
@@ -193,6 +274,9 @@ export class ImportGenerator {
         return err(new Error('Invalid resolved type or configuration'));
       }
 
+      // Set the current output directory for relative path resolution
+      this.currentOutputDir = config.outputDir || '';
+
       const imports: string[] = [];
 
       // Add common imports
@@ -207,18 +291,23 @@ export class ImportGenerator {
         imports.push(...nodeImports);
       }
 
-      // Add module imports
-      const moduleImportsResult = this.generateModuleImports(resolvedType);
+      // First, generate type imports to see which modules have named imports
+      const typeImportsResult = this.generateTypeImports(resolvedType);
+      if (!typeImportsResult.ok) {
+        return typeImportsResult;
+      }
+
+      // Extract module names that have named imports to avoid namespace duplicates
+      const namedImportModules = this.extractModulesFromNamedImports(typeImportsResult.value || '');
+
+      // Add module imports only for modules that don't have named imports
+      const moduleImportsResult = this.generateModuleImports(resolvedType, namedImportModules);
       if (!moduleImportsResult.ok) {
         return moduleImportsResult;
       }
       imports.push(...moduleImportsResult.value);
 
-      // Add type imports
-      const typeImportsResult = this.generateTypeImports(resolvedType);
-      if (!typeImportsResult.ok) {
-        return typeImportsResult;
-      }
+      // Add the type imports
       imports.push(typeImportsResult.value);
 
       // Add plugin imports if available
@@ -303,68 +392,92 @@ export class ImportGenerator {
         return err(new Error('Invalid resolved type or missing name'));
       }
 
-      const imports: string[] = [resolvedType.name];
+      const localImports: string[] = [resolvedType.name];
+      const externalTypes: Map<string, string> = new Map(); // type -> sourceFile
 
       // Add nested type names
       if (this.isObjectType(resolvedType.typeInfo)) {
         for (const prop of resolvedType.typeInfo.properties) {
-          this.collectImportableTypes(prop.type, imports);
+          this.collectTypesWithOrigin(
+            prop.type,
+            localImports,
+            externalTypes,
+            resolvedType.sourceFile,
+          );
         }
       }
 
       // Add generic constraint types
       if (this.isObjectType(resolvedType.typeInfo) && resolvedType.typeInfo.genericParams) {
         for (const param of resolvedType.typeInfo.genericParams) {
-          this.collectGenericTypeImports(param, imports);
+          this.collectGenericTypesWithOrigin(
+            param,
+            localImports,
+            externalTypes,
+            resolvedType.sourceFile,
+          );
         }
       }
 
-      // Remove duplicates and filter out invalid type names
-      const uniqueImports = Array.from(new Set(imports)).filter(isValidImportableTypeName);
+      // Generate local type imports
+      const uniqueLocalImports = Array.from(new Set(localImports)).filter(
+        isValidImportableTypeName,
+      );
+      let result = '';
 
-      if (uniqueImports.length === 0) {
+      if (uniqueLocalImports.length > 0) {
+        const importPath = this.resolveImportPath(resolvedType, this.currentOutputDir);
+        result = `import type { ${uniqueLocalImports.join(', ')} } from "${importPath}";`;
+      }
+
+      // Generate external type imports as named imports
+      if (externalTypes.size > 0) {
+        const externalImportsResult = this.generateExternalTypeImports(externalTypes);
+        if (externalImportsResult.ok && externalImportsResult.value) {
+          result = result
+            ? `${result}\n${externalImportsResult.value}`
+            : externalImportsResult.value;
+        }
+      }
+
+      if (!result) {
         return err(new Error('No valid importable types found'));
       }
 
-      const importPath = this.resolveImportPath(resolvedType);
-      return ok(`import type { ${uniqueImports.join(', ')} } from "${importPath}";`);
+      return ok(result);
     } catch (error) {
       return err(new Error(`Failed to generate type imports: ${error}`));
     }
   }
 
   /**
-   * Collects type imports from generic parameters
+   * Collects type imports from generic parameter and generic
+   * type imports with origin tracking
    */
-  private collectGenericTypeImports(param: GenericParam, imports: string[]): void {
-    if (!param || !Array.isArray(imports)) {
+  private collectGenericTypesWithOrigin(
+    param: GenericParam,
+    localImports: string[],
+    externalTypes: Map<string, string>,
+    localSourceFile?: string,
+  ): void {
+    if (!param || !Array.isArray(localImports) || !externalTypes) {
       return;
     }
 
-    if (
-      param.constraint &&
-      'name' in param.constraint &&
-      typeof param.constraint.name === 'string' &&
-      isValidImportableTypeName(param.constraint.name)
-    ) {
-      imports.push(param.constraint.name);
+    if (param.constraint) {
+      this.collectTypesWithOrigin(param.constraint, localImports, externalTypes, localSourceFile);
     }
-    if (
-      param.default &&
-      'name' in param.default &&
-      typeof param.default.name === 'string' &&
-      isValidImportableTypeName(param.default.name)
-    ) {
-      imports.push(param.default.name);
+    if (param.default) {
+      this.collectTypesWithOrigin(param.default, localImports, externalTypes, localSourceFile);
     }
   }
 
   /**
    * Resolves the import path for a type
-   * For local files, returns the source file path as-is
+   * For local files, returns relative path from output directory
    * For package files, attempts to resolve to proper import specifier
    */
-  private resolveImportPath(resolvedType: ResolvedType): string {
+  private resolveImportPath(resolvedType: ResolvedType, outputDir?: string): string {
     if (!resolvedType || typeof resolvedType.sourceFile !== 'string') {
       throw new Error('Invalid resolved type or source file path');
     }
@@ -386,6 +499,19 @@ export class ImportGenerator {
             sourceFilePath: sourceFile,
           });
         }
+      }
+    }
+
+    // For local files, calculate relative path from output directory
+    if (outputDir && !this.looksLikePackagePath(sourceFile)) {
+      try {
+        const relativePath = path.relative(outputDir, sourceFile);
+        // Remove .ts extension and add .js extension for ES modules
+        const jsPath = relativePath.replace(/\.ts$/, '.js');
+        // Ensure relative path starts with ./ or ../
+        return jsPath.startsWith('.') ? jsPath : `./${jsPath}`;
+      } catch (error) {
+        console.warn(`Failed to resolve relative path for ${sourceFile}:`, error);
       }
     }
 
@@ -507,13 +633,6 @@ export class ImportGenerator {
   }
 
   /**
-   * Type guard to check if a type can be imported
-   */
-  private isImportableType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { name: string }> {
-    return this.isObjectType(typeInfo) && isValidImportableTypeName(typeInfo.name);
-  }
-
-  /**
    * Checks if a type is a global type that doesn't need importing
    * Uses globalThis to detect built-in types and global constructors
    */
@@ -533,10 +652,15 @@ export class ImportGenerator {
   }
 
   /**
-   * Recursively collects all importable type names from a type
+   * Recursively collects type names, separating local and external types
    */
-  private collectImportableTypes(typeInfo: TypeInfo, imports: string[]): void {
-    if (!typeInfo || !Array.isArray(imports)) {
+  private collectTypesWithOrigin(
+    typeInfo: TypeInfo,
+    localImports: string[],
+    externalTypes: Map<string, string>,
+    localSourceFile?: string,
+  ): void {
+    if (!typeInfo || !Array.isArray(localImports) || !externalTypes) {
       return;
     }
 
@@ -546,24 +670,35 @@ export class ImportGenerator {
     }
 
     // Handle object types
-    if (this.isImportableType(typeInfo)) {
-      // Check if this is a global type that doesn't need importing
+    if (this.isObjectType(typeInfo) && typeInfo.name && isValidImportableTypeName(typeInfo.name)) {
+      const typeSourceFile = typeInfo.sourceFile;
+      const isLocalType = !typeSourceFile || typeSourceFile === localSourceFile;
+
       if (!this.isGlobalType(typeInfo.name)) {
-        imports.push(typeInfo.name);
+        if (isLocalType) {
+          localImports.push(typeInfo.name);
+        } else if (typeSourceFile) {
+          externalTypes.set(typeInfo.name, typeSourceFile);
+        }
       }
       return;
     }
 
     // Handle array types - extract element type
     if (typeInfo.kind === TypeKind.Array) {
-      this.collectImportableTypes(typeInfo.elementType, imports);
+      this.collectTypesWithOrigin(
+        typeInfo.elementType,
+        localImports,
+        externalTypes,
+        localSourceFile,
+      );
       return;
     }
 
     // Handle union types - process all union members
     if (typeInfo.kind === TypeKind.Union) {
       for (const unionType of typeInfo.unionTypes) {
-        this.collectImportableTypes(unionType, imports);
+        this.collectTypesWithOrigin(unionType, localImports, externalTypes, localSourceFile);
       }
       return;
     }
@@ -571,7 +706,7 @@ export class ImportGenerator {
     // Handle intersection types - process all intersection members
     if (typeInfo.kind === TypeKind.Intersection) {
       for (const intersectionType of typeInfo.intersectionTypes) {
-        this.collectImportableTypes(intersectionType, imports);
+        this.collectTypesWithOrigin(intersectionType, localImports, externalTypes, localSourceFile);
       }
       return;
     }

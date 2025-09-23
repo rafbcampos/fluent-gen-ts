@@ -590,8 +590,7 @@ ${methods}
 
     const jsDoc = this.utils.generateJsDoc(params.property, params.config.addComments);
 
-    return `${jsDoc}
-  ${methodName}(value: ${paramType}): ${params.builderName}${params.genericConstraints} {
+    return `${jsDoc}  ${methodName}(value: ${paramType}): ${params.builderName}${params.genericConstraints} {
     ${implementation}
   }`;
   }

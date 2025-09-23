@@ -4,5 +4,5 @@ dist
 .generated
 .vitepress/dist
 .vitepress/cache
+test-repo
 
-# Auto-generated files
