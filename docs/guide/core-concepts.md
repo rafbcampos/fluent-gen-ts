@@ -407,4 +407,4 @@ For large codebases:
 - Learn about [Advanced Usage](./advanced-usage.md) for complex scenarios
 - Explore the [Plugin System](./plugins.md) to extend functionality
 - Check out [CLI Commands](./cli-commands.md) for all options
-- See practical [Examples](/examples) of real-world usage
+- See practical [Examples](/examples/) of real-world usage

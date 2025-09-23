@@ -726,6 +726,6 @@ export default createValidationPlugin();
 ## Next Steps
 
 - See [Advanced Usage](./advanced-usage.md) for complex scenarios
-- Check [Examples](/examples) for real-world plugin usage
+- Check [Examples](/examples/) for real-world plugin usage
 - Browse the [API Reference](/api/reference) for detailed interfaces
 - Look at the [CLI Commands](./cli-commands.md) for plugin configuration

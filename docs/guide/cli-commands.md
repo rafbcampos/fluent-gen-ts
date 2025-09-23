@@ -398,4 +398,4 @@ Or commit generated files for:
 - Explore [Plugin Development](./plugins.md) to extend the CLI
 - Learn about [Advanced Usage](./advanced-usage.md)
 - Check the [API Reference](/api/reference) for programmatic usage
-- See [Examples](/examples) for real-world usage patterns
+- See [Examples](/examples/) for real-world usage patterns

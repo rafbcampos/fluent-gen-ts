@@ -295,7 +295,8 @@ interface Config {
 | `scan <pattern>`         | Scan and display found types           |
 | `setup-common`           | Create customizable common utilities   |
 
-See the [CLI documentation](https://docs.fluent-gen-ts.dev/guide/cli-commands)
+See the
+[CLI documentation](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-commands)
 for detailed options.
 
 ## ⚙️ Configuration
@@ -404,19 +405,20 @@ const config = appConfig()
 
 ## 📖 Documentation
 
-- **[Getting Started](https://docs.fluent-gen-ts.dev/guide/getting-started)** -
+- **[Getting Started](https://rafbcampos.github.io/fluent-gen-ts/guide/getting-started)** -
   Your first builder in less than a minute
-- **[Core Concepts](https://docs.fluent-gen-ts.dev/guide/core-concepts)** -
+- **[Core Concepts](https://rafbcampos.github.io/fluent-gen-ts/guide/core-concepts)** -
   Understanding the fundamentals
-- **[CLI Commands](https://docs.fluent-gen-ts.dev/guide/cli-commands)** -
+- **[CLI Commands](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-commands)** -
   Complete CLI reference
-- **[Plugin System](https://docs.fluent-gen-ts.dev/guide/plugins)** - Extending
-  with plugins
-- **[Advanced Usage](https://docs.fluent-gen-ts.dev/guide/advanced-usage)** -
+- **[Plugin System](https://rafbcampos.github.io/fluent-gen-ts/guide/plugins)** -
+  Extending with plugins
+- **[Advanced Usage](https://rafbcampos.github.io/fluent-gen-ts/guide/advanced-usage)** -
   Complex scenarios and patterns
-- **[API Reference](https://docs.fluent-gen-ts.dev/api/reference)** - Complete
-  API documentation
-- **[Examples](https://docs.fluent-gen-ts.dev/examples)** - Use patterns
+- **[API Reference](https://rafbcampos.github.io/fluent-gen-ts/api/reference)** -
+  Complete API documentation
+- **[Examples](https://rafbcampos.github.io/fluent-gen-ts/examples/)** - Use
+  patterns
 
 ## 🤝 Why fluent-gen-ts?
 
@@ -496,8 +498,8 @@ MIT © [Rafael Campos](https://github.com/rafbcampos)
 
 <div align="center">
 
-**[Documentation](https://docs.fluent-gen-ts.dev) •
-[Examples](https://docs.fluent-gen-ts.dev/examples) •
+**[Documentation](https://rafbcampos.github.io/fluent-gen-ts/) •
+[Examples](https://rafbcampos.github.io/fluent-gen-ts/examples/) •
 [GitHub](https://github.com/rafbcampos/fluent-gen-ts) •
 [NPM](https://www.npmjs.com/package/fluent-gen-ts)**
 

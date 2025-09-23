@@ -258,7 +258,7 @@ export default {
 - Explore [Advanced Usage](./advanced-usage.md) for complex scenarios
 - Check out [Plugin Development](./plugins.md) to extend functionality
 - See [CLI Commands](./cli-commands.md) for all available commands
-- Browse [Examples](/examples) for real-world usage patterns
+- Browse [Examples](/examples/) for real-world usage patterns
 
 ## Troubleshooting
 
@@ -286,5 +286,5 @@ export default {
 
 - [GitHub Issues](https://github.com/rafbcampos/fluent-gen-ts/issues) - Report
   bugs or request features
-- [Examples](/examples) - See working examples
+- [Examples](/examples/) - See working examples
 - [API Reference](/api/reference) - Detailed API documentation

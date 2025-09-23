@@ -214,4 +214,4 @@ Use `setup-common` to create your own customizable common utilities file.
 - [CLI Commands](/guide/cli-commands) - Master the command-line interface
 - [Plugin System](/guide/plugins) - Extend with custom functionality
 - [API Reference](/api/reference) - Complete API documentation
-- [Examples](/examples) - Real-world usage patterns
+- [Examples](/examples/) - Real-world usage patterns

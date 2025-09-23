@@ -801,6 +801,6 @@ const userListResponse = ApiResponseFactory.paginated(
 ## Next Steps
 
 - Explore [Plugin Development](./plugins.md) for extending functionality
-- Check out [Examples](/examples) for real-world usage patterns
+- Check out [Examples](/examples/) for real-world usage patterns
 - Review the [API Reference](/api/reference) for detailed API information
 - See [CLI Commands](./cli-commands.md) for automation options
