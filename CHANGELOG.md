@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.2
+
+### Patch Changes
+
+- 1df08e9: Fix named external imports
+
 ## 0.1.1
 
 ### Patch Changes
