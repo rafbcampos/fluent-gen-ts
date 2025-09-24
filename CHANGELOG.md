@@ -1,5 +1,15 @@
 # fluent-gen-ts
 
+## 0.1.1
+
+### Patch Changes
+
+- 296c594: Plugin system rework
+
+  In this release we expose the new plugin system leveraging a fluent builder
+  API, add support to file naming expressions and fix the types definition file
+  in the bundle.
+
 ## 0.1.0
 
 ### Minor Changes
