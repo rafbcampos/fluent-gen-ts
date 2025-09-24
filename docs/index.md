@@ -173,22 +173,47 @@ const order = order()
 Create custom plugins to extend functionality:
 
 ```typescript
-const validationPlugin: Plugin = {
-  name: 'validation-plugin',
-  version: '1.0.0',
+import { createPlugin, primitive } from 'fluent-gen-ts';
 
-  transformPropertyMethod(context) {
-    if (context.property.name === 'email') {
-      return ok({
-        validate: `
-          if (value && !value.includes('@')) {
-            throw new Error('Invalid email format');
-          }`,
-      });
-    }
-    return ok({});
-  },
-};
+const validationPlugin = createPlugin('validation-plugin', '1.0.0')
+  .setDescription('Adds email validation and custom methods')
+
+  // Configure required imports
+  .requireImports(imports => imports.addExternal('validator', ['isEmail']))
+
+  // Transform property methods with type-safe matching
+  .transformPropertyMethods(builder =>
+    builder
+      .when(
+        ctx => ctx.property.name === 'email' && ctx.type.isPrimitive('string'),
+      )
+      .setParameter('string')
+      .setValidator(
+        `
+      if (value && !isEmail(value)) {
+        throw new Error('Invalid email format');
+      }
+    `,
+      )
+      .done(),
+  )
+
+  // Add custom builder methods
+  .addMethod(method =>
+    method
+      .name('withRandomId')
+      .param('prefix', 'string', { defaultValue: '"user"' })
+      .returns('this')
+      .implementation(
+        `
+      const id = \`\${prefix}-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
+      return this.withId(id);
+    `,
+      )
+      .jsDoc('/**\\n * Generates and sets a random ID\\n */'),
+  )
+
+  .build();
 ```
 
 ### ⚙️ Flexible Generation Modes

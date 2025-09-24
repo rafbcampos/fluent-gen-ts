@@ -260,7 +260,7 @@ const validationPlugin = createPlugin('advanced-validation', '1.0.0')
 
   .requireImports(imports =>
     imports
-      .addExternalLibrary('validator', ['isEmail', 'isURL', 'isLength'])
+      .addExternal('validator', ['isEmail', 'isURL', 'isLength'])
       .addInternalTypes('./validation-rules.js', ['ValidationRule']),
   )
 
@@ -474,8 +474,8 @@ const dbPlugin = createPlugin('database-integration', '1.0.0')
 
   .requireImports(imports =>
     imports
-      .addExternalLibrary('prisma', ['PrismaClient'])
-      .addExternalLibrary('uuid', ['v4 as uuidv4']),
+      .addExternal('prisma', ['PrismaClient'])
+      .addExternal('uuid', ['v4 as uuidv4']),
   )
 
   .transformBuildMethod(transform =>
@@ -537,7 +537,7 @@ const dbPlugin = createPlugin('database-integration', '1.0.0')
 const testingPlugin = createPlugin('testing-utilities', '1.0.0')
   .setDescription('Enhanced testing utilities and factories')
 
-  .requireImports(imports => imports.addExternalLibrary('faker', ['faker']))
+  .requireImports(imports => imports.addExternal('faker', ['faker']))
 
   .addMethod(method =>
     method
@@ -673,7 +673,7 @@ Always use Result types for proper error handling:
       return false;
     }
   })
-  .setValidation(`
+  .setValidator(`
     try {
       validateValue(value);
     } catch (error) {
@@ -765,6 +765,874 @@ Package your plugins for reuse:
   "keywords": ["fluent-gen-ts", "plugin", "validation"],
   "files": ["dist/"]
 }
+```
+
+## Complete API Reference
+
+### Core Plugin Builder Functions
+
+#### `createPlugin(name: string, version: string): PluginBuilder`
+
+Creates a new plugin builder instance.
+
+```typescript
+const plugin = createPlugin('my-plugin', '1.0.0')
+  .setDescription('Plugin description')
+  .build();
+```
+
+#### PluginBuilder Methods
+
+##### `.setDescription(description: string): this`
+
+Sets a human-readable description for the plugin.
+
+##### `.requireImports(configurator: (manager: ImportManager) => ImportManager): this`
+
+Configures import requirements using the fluent ImportManager API.
+
+##### `.transformPropertyMethods(configurator: (builder: PropertyMethodTransformBuilder) => PropertyMethodTransformBuilder): this`
+
+Defines how property methods should be transformed.
+
+##### `.addMethod(configurator: (builder: CustomMethodBuilder) => CustomMethodBuilder): this`
+
+Adds custom methods to generated builders.
+
+##### `.transformValues(configurator: (builder: ValueTransformBuilder) => ValueTransformBuilder): this`
+
+Defines value transformations for build process.
+
+##### `.transformBuildMethod(configurator: (builder: BuildMethodTransformBuilder) => BuildMethodTransformBuilder): this`
+
+Modifies the build method implementation.
+
+##### Lifecycle Hooks
+
+- `.beforeParse(hook: (context: ParseContext) => Result<ParseContext>): this`
+- `.afterParse(hook: (context: ParseContext, type: Type) => Result<Type>): this`
+- `.beforeResolve(hook: (context: ResolveContext) => Result<ResolveContext>): this`
+- `.afterResolve(hook: (context: ResolveContext, typeInfo: TypeInfo) => Result<TypeInfo>): this`
+- `.beforeGenerate(hook: (context: GenerateContext) => Result<GenerateContext>): this`
+- `.afterGenerate(hook: (code: string, context: GenerateContext) => Result<string>): this`
+- `.transformType(hook: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>): this`
+- `.transformProperty(hook: (property: PropertyInfo) => Result<PropertyInfo>): this`
+- `.transformImports(hook: (context: ImportTransformContext) => Result<ImportTransformContext>): this`
+
+### Type Matcher Functions
+
+All type matcher functions for creating powerful type-based conditions:
+
+#### `primitive(...names: string[]): TypeMatcher`
+
+Matches primitive types. If no names provided, matches any primitive.
+
+```typescript
+// Match specific primitives
+.when(ctx => ctx.type.matches(primitive('string', 'number')))
+
+// Match any primitive
+.when(ctx => ctx.type.matches(primitive()))
+```
+
+#### `object(name?: string): ObjectTypeMatcher`
+
+Matches object types with fluent API for further refinement.
+
+```typescript
+// Match any object
+.when(ctx => ctx.type.matches(object()))
+
+// Match specific object
+.when(ctx => ctx.type.matches(object('User')))
+
+// Match object with specific properties
+.when(ctx => ctx.type.matches(
+  object('User')
+    .withProperty('email', primitive('string'))
+    .withProperty('age', primitive('number'))
+))
+
+// Match object with generic parameters
+.when(ctx => ctx.type.matches(object('Response').withGeneric('T')))
+```
+
+#### `array(): ArrayTypeMatcher`
+
+Matches array types with element type matching.
+
+```typescript
+// Match any array
+.when(ctx => ctx.type.matches(array()))
+
+// Match array of specific type
+.when(ctx => ctx.type.matches(array().of(primitive('string'))))
+.when(ctx => ctx.type.matches(array().of(object('User'))))
+```
+
+#### `union(): UnionTypeMatcher`
+
+Matches union types with flexible containment checking.
+
+```typescript
+// Match union containing specific type
+.when(ctx => ctx.type.matches(union().containing(primitive('string'))))
+
+// Match exact union
+.when(ctx => ctx.type.matches(union().exact(
+  primitive('string'),
+  primitive('number')
+)))
+```
+
+#### `intersection(): IntersectionTypeMatcher`
+
+Matches intersection types.
+
+```typescript
+// Match intersection including specific type
+.when(ctx => ctx.type.matches(intersection().including(object('User'))))
+
+// Match exact intersection
+.when(ctx => ctx.type.matches(intersection().exact(
+  object('User'),
+  object('Timestamped')
+)))
+```
+
+#### `reference(name?: string): TypeMatcher`
+
+Matches type references.
+
+```typescript
+// Match any reference
+.when(ctx => ctx.type.matches(reference()))
+
+// Match specific reference
+.when(ctx => ctx.type.matches(reference('MyType')))
+```
+
+#### `generic(name?: string): TypeMatcher`
+
+Matches generic types.
+
+```typescript
+// Match any generic
+.when(ctx => ctx.type.matches(generic()))
+
+// Match specific generic
+.when(ctx => ctx.type.matches(generic('Promise')))
+```
+
+#### `literal(value: string | number | boolean): TypeMatcher`
+
+Matches literal types.
+
+```typescript
+.when(ctx => ctx.type.matches(literal('admin')))
+.when(ctx => ctx.type.matches(literal(42)))
+.when(ctx => ctx.type.matches(literal(true)))
+```
+
+#### `any(): TypeMatcher`
+
+Matches any type.
+
+#### `never(): TypeMatcher`
+
+Matches never type.
+
+#### Combinators
+
+##### `or(...matchers: TypeMatcher[]): TypeMatcher`
+
+Logical OR operation on matchers.
+
+```typescript
+.when(ctx => ctx.type.matches(or(
+  primitive('string'),
+  primitive('number')
+)))
+```
+
+##### `and(...matchers: TypeMatcher[]): TypeMatcher`
+
+Logical AND operation on matchers.
+
+```typescript
+.when(ctx => ctx.type.matches(and(
+  object('User'),
+  reference('Timestamped')
+)))
+```
+
+##### `not(matcher: TypeMatcher): TypeMatcher`
+
+Logical NOT operation on matcher.
+
+```typescript
+.when(ctx => ctx.type.matches(not(primitive('string'))))
+```
+
+### Import Management API
+
+#### `ImportManager` Methods
+
+##### `.addInternal(path: string, imports: string | string[], options?): this`
+
+Adds internal project imports.
+
+```typescript
+.requireImports(imports => imports
+  .addInternal('../types.js', ['User', 'Product'])
+  .addInternal('./utils.js', 'helper')
+)
+```
+
+##### `.addExternal(packageName: string, imports: string | string[], options?): this`
+
+Adds external package imports.
+
+```typescript
+.requireImports(imports => imports
+  .addExternal('lodash', ['isEmpty', 'isString'])
+  .addExternal('uuid', ['v4 as generateId'])
+)
+```
+
+##### `.addInternalDefault(path: string, defaultName: string): this`
+
+Adds default import from internal file.
+
+```typescript
+.requireImports(imports => imports
+  .addInternalDefault('./config.js', 'config')
+)
+```
+
+##### `.addExternalDefault(packageName: string, defaultName: string): this`
+
+Adds default import from external package.
+
+```typescript
+.requireImports(imports => imports
+  .addExternalDefault('moment', 'moment')
+)
+```
+
+##### `.addInternalTypes(path: string, types: string | string[]): this`
+
+Adds type-only imports from internal file.
+
+```typescript
+.requireImports(imports => imports
+  .addInternalTypes('../types.js', ['User', 'Product'])
+)
+```
+
+##### `.addExternalTypes(packageName: string, types: string | string[]): this`
+
+Adds type-only imports from external package.
+
+```typescript
+.requireImports(imports => imports
+  .addExternalTypes('@types/node', ['Buffer'])
+)
+```
+
+### Transform Builder APIs
+
+#### PropertyMethodTransformBuilder
+
+##### `.when(predicate: (context: PropertyMethodContext) => boolean): this`
+
+Starts a new transformation rule with a condition.
+
+##### `.setParameter(type: string | ((original: string) => string)): this`
+
+Sets the parameter type for the method.
+
+##### `.setExtractor(code: string): this`
+
+Sets the value extraction code.
+
+##### `.setValidator(code: string): this`
+
+Sets validation code that runs before assignment.
+
+##### `.done(): this`
+
+Completes the current transformation rule.
+
+#### ValueTransformBuilder
+
+##### `.when(predicate: (context: ValueContext) => boolean): this`
+
+Starts a new value transformation rule.
+
+##### `.setTransform(code: string): this`
+
+Sets the transformation code.
+
+##### `.wrap(wrapper: string): this`
+
+Wraps the value with a function call.
+
+##### `.done(): this`
+
+Completes the current transformation rule.
+
+#### BuildMethodTransformBuilder
+
+##### `.insertBefore(marker: string | RegExp, code: string | ((context: BuildMethodContext) => string)): this`
+
+Inserts code before a marker in the build method.
+
+##### `.insertAfter(marker: string | RegExp, code: string | ((context: BuildMethodContext) => string)): this`
+
+Inserts code after a marker in the build method.
+
+##### `.replace(pattern: string | RegExp, replacement: string | ((match: string, context: BuildMethodContext) => string)): this`
+
+Replaces matched pattern with new code.
+
+##### `.wrapMethod(before: string | ((context: BuildMethodContext) => string), after: string | ((match: string, context: BuildMethodContext) => string)): this`
+
+Wraps the entire method with before and after code.
+
+#### CustomMethodBuilder
+
+##### `.name(name: string): this`
+
+Sets the method name.
+
+##### `.param(name: string, type: string, options?: { optional?: boolean; defaultValue?: string }): this`
+
+Adds a parameter to the method.
+
+##### `.parameters(params: MethodParameter[]): this`
+
+Sets all parameters at once.
+
+##### `.returns(type: string | ((context: BuilderContext) => string)): this`
+
+Sets the return type.
+
+##### `.implementation(code: string | ((context: BuilderContext) => string)): this`
+
+Sets the method implementation code.
+
+##### `.jsDoc(doc: string): this`
+
+Sets JSDoc documentation for the method.
+
+### Context Objects and Utilities
+
+#### PropertyMethodContext
+
+Provides information about the property being transformed:
+
+- `property: PropertyInfo` - The property information
+- `propertyType: TypeInfo` - Type information for the property
+- `typeName: string` - Name of the containing type
+- `typeInfo: TypeInfo` - Information about the containing type
+- `builderName: string` - Name of the generated builder
+- `originalTypeString: string` - Original TypeScript type string
+- `type: TypeMatcherInterface` - Type utilities for matching
+
+**Helper Methods:**
+
+- `hasGeneric(name: string): boolean` - Check if type has specific generic
+- `getGenericConstraint(name: string): string | undefined` - Get generic
+  constraint
+- `isOptional(): boolean` - Check if property is optional
+- `isReadonly(): boolean` - Check if property is readonly
+- `getPropertyPath(): string[]` - Get property path for nested properties
+- `getMethodName(): string` - Get the generated method name
+
+#### BuilderContext
+
+Provides information about the builder being generated:
+
+- `typeName: string` - Name of the type
+- `typeInfo: TypeInfo` - Type information
+- `builderName: string` - Builder class name
+- `genericParams: string` - Generic parameters string
+- `genericConstraints: string` - Generic constraints string
+- `properties: readonly PropertyInfo[]` - All properties
+
+**Helper Methods:**
+
+- `hasProperty(name: string): boolean` - Check if builder has property
+- `getProperty(name: string): PropertyInfo | undefined` - Get property by name
+- `getRequiredProperties(): readonly PropertyInfo[]` - Get required properties
+- `getOptionalProperties(): readonly PropertyInfo[]` - Get optional properties
+
+#### ValueContext
+
+Provides information during value transformation:
+
+- `property: string` - Property name
+- `valueVariable: string` - Name of the value variable
+- `type: TypeInfo` - Type information
+- `isOptional: boolean` - Whether property is optional
+- `typeChecker: TypeMatcherInterface` - Type matching utilities
+
+#### BuildMethodContext
+
+Provides information during build method transformation:
+
+- `typeName: string` - Type name
+- `typeInfo: TypeInfo` - Type information
+- `builderName: string` - Builder name
+- `genericParams: string` - Generic parameters
+- `genericConstraints: string` - Generic constraints
+- `buildMethodCode: string` - Current build method code
+- `properties: readonly PropertyInfo[]` - All properties
+- `options: GeneratorOptions` - Generator options
+- `resolvedType: ResolvedType` - Resolved type information
+
+## Additional Practical Examples
+
+### React Component Props Plugin
+
+A plugin for generating builders for React component props with proper types and
+defaults:
+
+```typescript
+import { createPlugin, primitive, object, union } from 'fluent-gen-ts';
+
+const reactPropsPlugin = createPlugin('react-component-props', '1.0.0')
+  .setDescription('Enhanced React component props builders')
+
+  .requireImports(imports =>
+    imports
+      .addExternalTypes('react', ['ReactNode', 'CSSProperties'])
+      .addExternal('clsx', ['clsx']),
+  )
+
+  .transformPropertyMethods(builder =>
+    builder
+      // Handle className prop with clsx support
+      .when(ctx => ctx.property.name === 'className')
+      .setParameter('string | string[] | Record<string, boolean>')
+      .setExtractor(
+        'typeof value === "object" && !Array.isArray(value) ? clsx(value) : Array.isArray(value) ? clsx(value) : value',
+      )
+      .done()
+
+      // Handle style prop with better typing
+      .when(ctx => ctx.property.name === 'style')
+      .setParameter(
+        'CSSProperties | ((current: CSSProperties) => CSSProperties)',
+      )
+      .setExtractor(
+        'typeof value === "function" ? value(this.get("style") || {}) : { ...this.get("style"), ...value }',
+      )
+      .done()
+
+      // Handle children with flexible types
+      .when(ctx => ctx.property.name === 'children')
+      .setParameter('ReactNode | ((props: Partial<T>) => ReactNode)')
+      .setExtractor(
+        'typeof value === "function" ? value(this.buildPartial()) : value',
+      )
+      .done()
+
+      // Handle event handlers with proper typing
+      .when(
+        ctx =>
+          ctx.property.name.startsWith('on') &&
+          ctx.type.isPrimitive('function'),
+      )
+      .setParameter(
+        `${ctx.originalTypeString} | ((event: any, props: Partial<T>) => void)`,
+      )
+      .setExtractor(
+        'typeof value === "function" && value.length > 1 ? (e) => value(e, this.buildPartial()) : value',
+      )
+      .done(),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withConditionalProps')
+      .param('condition', 'boolean | (() => boolean)')
+      .param('props', 'Partial<T> | ((current: Partial<T>) => Partial<T>)')
+      .returns('this')
+      .implementation(
+        `
+      const shouldApply = typeof condition === 'function' ? condition() : condition;
+      if (shouldApply) {
+        const propsToApply = typeof props === 'function' ? props(this.buildPartial()) : props;
+        return this.merge(propsToApply);
+      }
+      return this;
+    `,
+      )
+      .jsDoc('/**\\n * Conditionally applies props based on a condition\\n */'),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withVariant')
+      .param('variant', 'string')
+      .param('variantMap', 'Record<string, Partial<T>>')
+      .returns('this')
+      .implementation(
+        `
+      const variantProps = variantMap[variant];
+      if (variantProps) {
+        return this.merge(variantProps);
+      }
+      return this;
+    `,
+      )
+      .jsDoc('/**\\n * Applies props based on a variant mapping\\n */'),
+  )
+
+  .build();
+```
+
+### API Response Transform Plugin
+
+A plugin for transforming API responses with validation and normalization:
+
+```typescript
+import { createPlugin, object, array, primitive, union } from 'fluent-gen-ts';
+
+const apiTransformPlugin = createPlugin('api-response-transform', '2.0.0')
+  .setDescription('Transform and validate API responses')
+
+  .requireImports(imports =>
+    imports
+      .addExternal('zod', ['z'])
+      .addExternal('date-fns', ['parseISO', 'isValid'])
+      .addInternalTypes('../api/types.js', ['ApiResponse', 'ApiError']),
+  )
+
+  .transformPropertyMethods(builder =>
+    builder
+      // Transform date strings to Date objects
+      .when(
+        ctx =>
+          (ctx.property.name.includes('date') ||
+            ctx.property.name.includes('Date') ||
+            ctx.property.name.includes('time') ||
+            ctx.property.name.includes('Time')) &&
+          ctx.type.isPrimitive('string'),
+      )
+      .setParameter('string | Date')
+      .setExtractor(
+        `
+      if (value instanceof Date) return value;
+      if (typeof value === 'string') {
+        const parsed = parseISO(value);
+        if (!isValid(parsed)) {
+          throw new Error(\`Invalid date format: \${value}\`);
+        }
+        return parsed;
+      }
+      return value;
+    `,
+      )
+      .done()
+
+      // Transform API IDs to ensure string format
+      .when(
+        ctx => ctx.property.name.endsWith('Id') || ctx.property.name === 'id',
+      )
+      .setParameter('string | number')
+      .setExtractor('String(value)')
+      .setValidator(
+        `
+      if (!value || String(value).trim() === '') {
+        throw new Error(\`ID cannot be empty: \${property.name}\`);
+      }
+    `,
+      )
+      .done()
+
+      // Handle nested API responses
+      .when(ctx => ctx.type.matches(object().withProperty('data')))
+      .setParameter(
+        `${ctx.originalTypeString} | ApiResponse<${ctx.originalTypeString}>`,
+      )
+      .setExtractor(
+        `
+      if ('data' in value && 'success' in value) {
+        // It's an API response wrapper
+        if (!value.success) {
+          throw new Error(\`API Error: \${value.error?.message || 'Unknown error'}\`);
+        }
+        return value.data;
+      }
+      return value;
+    `,
+      )
+      .done()
+
+      // Transform array responses with validation
+      .when(ctx => ctx.type.isArray())
+      .setValidator(
+        `
+      if (value && !Array.isArray(value)) {
+        throw new Error(\`Expected array for \${property.name}, got \${typeof value}\`);
+      }
+    `,
+      )
+      .done(),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withApiValidation')
+      .param('schema', 'z.ZodSchema<T>')
+      .returns('this')
+      .implementation(
+        `
+      try {
+        const current = this.buildPartial();
+        schema.parse(current);
+        return this;
+      } catch (error) {
+        throw new Error(\`API validation failed: \${error.message}\`);
+      }
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Validates the current builder state against a Zod schema\\n */',
+      ),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withApiDefaults')
+      .param('apiVersion', 'string', { defaultValue: '"v1"' })
+      .returns('this').implementation(`
+      const defaults = {
+        apiVersion,
+        timestamp: new Date(),
+        version: 1,
+        ...this.buildPartial()
+      };
+      return this.merge(defaults);
+    `),
+  )
+
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return this.buildWithDefaults',
+      `
+      // API Response validation
+      const result = this.buildWithDefaults();
+
+      // Log API response for debugging in development
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('API Response Built:', result);
+      }
+
+      // Ensure required API fields are present
+      if (!result.id && this.has('id')) {
+        throw new Error('API response missing required ID');
+      }
+    `,
+    ),
+  )
+
+  .build();
+```
+
+### Form Validation Plugin
+
+A comprehensive plugin for form builders with validation and error handling:
+
+```typescript
+import { createPlugin, primitive, object, array, union } from 'fluent-gen-ts';
+
+const formValidationPlugin = createPlugin('form-validation', '1.5.0')
+  .setDescription('Advanced form validation and error handling')
+
+  .requireImports(imports =>
+    imports
+      .addExternal('yup', [
+        'string',
+        'number',
+        'object',
+        'array',
+        'ValidationError',
+      ])
+      .addInternalTypes('./form-types.js', [
+        'FormField',
+        'ValidationRule',
+        'FieldError',
+      ]),
+  )
+
+  .transformPropertyMethods(builder =>
+    builder
+      // Email fields with comprehensive validation
+      .when(
+        ctx =>
+          ctx.property.name.toLowerCase().includes('email') &&
+          ctx.type.isPrimitive('string'),
+      )
+      .setParameter('string')
+      .setValidator(
+        `
+      if (value) {
+        const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+        if (!emailRegex.test(value)) {
+          throw new ValidationError('Please enter a valid email address');
+        }
+      }
+    `,
+      )
+      .done()
+
+      // Password fields with strength validation
+      .when(
+        ctx =>
+          ctx.property.name.toLowerCase().includes('password') &&
+          ctx.type.isPrimitive('string'),
+      )
+      .setValidator(
+        `
+      if (value) {
+        if (value.length < 8) {
+          throw new ValidationError('Password must be at least 8 characters long');
+        }
+        if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)/.test(value)) {
+          throw new ValidationError('Password must contain uppercase, lowercase, and number');
+        }
+      }
+    `,
+      )
+      .done()
+
+      // Phone number validation
+      .when(
+        ctx =>
+          (ctx.property.name.toLowerCase().includes('phone') ||
+            ctx.property.name.toLowerCase().includes('mobile')) &&
+          ctx.type.isPrimitive('string'),
+      )
+      .setValidator(
+        `
+      if (value) {
+        const phoneRegex = /^[\\+]?[1-9][\\d]{0,15}$/;
+        const cleaned = value.replace(/[\\s\\-\\(\\)]/g, '');
+        if (!phoneRegex.test(cleaned)) {
+          throw new ValidationError('Please enter a valid phone number');
+        }
+      }
+    `,
+      )
+      .setExtractor('value ? value.replace(/[\\s\\-\\(\\)]/g, "") : value')
+      .done()
+
+      // Required field validation
+      .when(ctx => !ctx.isOptional() && ctx.type.isPrimitive('string'))
+      .setValidator(
+        `
+      if (!value || value.trim() === '') {
+        throw new ValidationError(\`\${property.name} is required\`);
+      }
+    `,
+      )
+      .done()
+
+      // Numeric range validation
+      .when(ctx => ctx.type.isPrimitive('number'))
+      .setParameter('number | string')
+      .setExtractor('typeof value === "string" ? parseFloat(value) : value')
+      .setValidator(
+        `
+      if (value !== undefined && value !== null) {
+        if (isNaN(value)) {
+          throw new ValidationError(\`\${property.name} must be a valid number\`);
+        }
+      }
+    `,
+      )
+      .done(),
+  )
+
+  .addMethod(method =>
+    method
+      .name('validateField')
+      .param('fieldName', 'keyof T')
+      .returns('{ isValid: boolean; error?: string }')
+      .implementation(
+        `
+      try {
+        const value = this.get(fieldName as string);
+        // Run field-specific validation
+        this.validateSingleField(fieldName as string, value);
+        return { isValid: true };
+      } catch (error) {
+        return {
+          isValid: false,
+          error: error instanceof ValidationError ? error.message : String(error)
+        };
+      }
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Validates a single field and returns validation result\\n */',
+      ),
+  )
+
+  .addMethod(method =>
+    method
+      .name('validateAll')
+      .returns('{ isValid: boolean; errors: Record<keyof T, string> }')
+      .implementation(
+        `
+      const errors: Record<string, string> = {};
+      let isValid = true;
+
+      // Get all field names from the type
+      const fields = Object.keys(this.buildPartial()) as (keyof T)[];
+
+      for (const field of fields) {
+        const validation = this.validateField(field);
+        if (!validation.isValid && validation.error) {
+          errors[field as string] = validation.error;
+          isValid = false;
+        }
+      }
+
+      return { isValid, errors };
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Validates all fields and returns comprehensive validation result\\n */',
+      ),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withFieldError')
+      .param('fieldName', 'keyof T')
+      .param('error', 'string')
+      .returns('this').implementation(`
+      // Store field errors in auxiliary data
+      return this.pushAuxiliary('fieldErrors', { field: fieldName, error });
+    `),
+  )
+
+  .addMethod(method =>
+    method.name('clearFieldError').param('fieldName', 'keyof T').returns('this')
+      .implementation(`
+      const errors = this.getAuxiliaryArray('fieldErrors') || [];
+      const filtered = errors.filter(e => e.field !== fieldName);
+      this.setAuxiliary('fieldErrors', filtered);
+      return this;
+    `),
+  )
+
+  .build();
 ```
 
 ## Next Steps
