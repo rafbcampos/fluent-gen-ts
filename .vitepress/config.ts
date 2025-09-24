@@ -20,8 +20,8 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'API', link: '/api/overview' },
-      { text: 'Examples', link: '/examples/basic' },
+      { text: 'API', link: '/api/reference' },
+      { text: 'Examples', link: '/examples/' },
     ],
 
     sidebar: [
@@ -29,29 +29,19 @@ export default defineConfig({
         text: 'Guide',
         items: [
           { text: 'Getting Started', link: '/guide/getting-started' },
-          { text: 'Installation', link: '/guide/installation' },
-          { text: 'Configuration', link: '/guide/configuration' },
-          { text: 'CLI Usage', link: '/guide/cli' },
-          { text: 'Programmatic API', link: '/guide/api' },
+          { text: 'Core Concepts', link: '/guide/core-concepts' },
+          { text: 'CLI Commands', link: '/guide/cli-commands' },
+          { text: 'Advanced Usage', link: '/guide/advanced-usage' },
+          { text: 'Plugins', link: '/guide/plugins' },
         ],
       },
       {
         text: 'Examples',
-        items: [
-          { text: 'Basic Usage', link: '/examples/basic' },
-          { text: 'Nested Builders', link: '/examples/nested' },
-          { text: 'Generic Types', link: '/examples/generics' },
-          { text: 'Advanced Patterns', link: '/examples/advanced' },
-        ],
+        items: [{ text: 'Examples', link: '/examples/' }],
       },
       {
         text: 'API Reference',
-        items: [
-          { text: 'Overview', link: '/api/overview' },
-          { text: 'Generator Functions', link: '/api/generator' },
-          { text: 'Type Resolution', link: '/api/resolver' },
-          { text: 'Plugin System', link: '/api/plugins' },
-        ],
+        items: [{ text: 'API Reference', link: '/api/reference' }],
       },
     ],
 
