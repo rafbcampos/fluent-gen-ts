@@ -379,8 +379,9 @@ describe('ImportGenerator', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toContain('FluentBuilder');
-        expect(result.value).toContain('import type * as react from "react"');
         expect(result.value).toContain('import type { User } from "/project/src/user.ts"');
+        // With our fix, react should not get a namespace import since we preserve named imports
+        expect(result.value).not.toContain('import type * as react from "react"');
       }
     });
 
@@ -536,6 +537,167 @@ describe('ImportGenerator', () => {
 
       const result2 = (generator as any).deduplicateImports([1, 2, 'valid']);
       expect(result2).toEqual(['valid']);
+    });
+  });
+
+  describe('selective type imports', () => {
+    test('preserves named imports and prevents namespace imports for external modules', () => {
+      const resolvedType: ResolvedType = {
+        sourceFile: '/project/src/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+        imports: ['@some/external-module'],
+        dependencies: [],
+      };
+
+      const result = generator.generateModuleImports(
+        resolvedType,
+        new Set(['@some/external-module']),
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should not create namespace import when module is excluded
+        expect(result.value).toHaveLength(0);
+      }
+    });
+
+    test('extractModulesFromNamedImports detects various import formats', () => {
+      const importStatements = `
+import type { TypeA, InterfaceB } from '@some/external-module';
+import type {
+  MultilineType,
+  AnotherType
+} from '@another/module';
+import type  {  SpacedType  }  from  "spaced-module";
+import { type MixedTypeA, RegularImport } from 'mixed-module';
+import { ComponentA, TypeB } from 'component-module';
+      `.trim();
+
+      const result = (generator as any).extractModulesFromNamedImports(importStatements);
+
+      expect(result.size).toBeGreaterThan(0);
+      expect(result.has('@some/external-module')).toBe(true);
+      expect(result.has('@another/module')).toBe(true);
+      expect(result.has('spaced-module')).toBe(true);
+      expect(result.has('mixed-module')).toBe(true);
+      expect(result.has('component-module')).toBe(true);
+    });
+
+    test('shouldPreserveNamedImports returns true for external modules', () => {
+      const resolvedType: ResolvedType = {
+        sourceFile: '/project/src/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      const shouldPreserve = (generator as any).shouldPreserveNamedImports(
+        '@external/module',
+        resolvedType,
+      );
+      expect(shouldPreserve).toBe(true);
+    });
+
+    test('shouldPreserveNamedImports returns false for relative imports', () => {
+      const resolvedType: ResolvedType = {
+        sourceFile: '/project/src/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      const shouldPreserve1 = (generator as any).shouldPreserveNamedImports(
+        './relative-module',
+        resolvedType,
+      );
+      const shouldPreserve2 = (generator as any).shouldPreserveNamedImports(
+        '../parent-module',
+        resolvedType,
+      );
+
+      expect(shouldPreserve1).toBe(false);
+      expect(shouldPreserve2).toBe(false);
+    });
+
+    test('generateAllImports preserves selective type imports from external modules', async () => {
+      const resolvedType: ResolvedType = {
+        sourceFile: '/project/src/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+        imports: ['@external/types-module'],
+        dependencies: [],
+      };
+
+      const config: ImportGeneratorConfig = {
+        isGeneratingMultiple: false,
+        commonImportPath: './common',
+      };
+
+      const result = await generator.generateAllImports({ resolvedType, config });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should not contain namespace imports for external modules when preserving named imports
+        expect(result.value).not.toContain(
+          'import type * as types_module from "@external/types-module"',
+        );
+        // Should contain the original named import instead
+        expect(result.value).toContain('import type { User } from "/project/src/user.ts"');
+      }
+    });
+
+    test('multiline import statements are properly detected', () => {
+      const multilineImports = `
+import type {
+  TypeA,
+  InterfaceB,
+  TypeC
+} from '@some/external-module';
+
+import type {
+  AnotherType
+} from '@another/module';
+      `.trim();
+
+      const result = (generator as any).extractModulesFromNamedImports(multilineImports);
+
+      expect(result.has('@some/external-module')).toBe(true);
+      expect(result.has('@another/module')).toBe(true);
+    });
+
+    test('mixed import statements with types are detected', () => {
+      const mixedImports = `
+import { type TypeA, ComponentB, type InterfaceC } from '@mixed/module';
+import { UtilityFunction, TypeDefinition } from '@util/module';
+      `.trim();
+
+      const result = (generator as any).extractModulesFromNamedImports(mixedImports);
+
+      expect(result.has('@mixed/module')).toBe(true);
+      expect(result.has('@util/module')).toBe(true);
+    });
+
+    test('still creates namespace imports when no named imports are detected', () => {
+      const resolvedType: ResolvedType = {
+        sourceFile: '/project/src/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+        imports: ['lodash'], // No named imports detected
+        dependencies: [],
+      };
+
+      // Don't exclude any modules - simulating no named imports detected
+      const result = generator.generateModuleImports(resolvedType, new Set());
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should still create namespace import when no named imports are detected
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toContain('import type * as lodash from "lodash"');
+      }
     });
   });
 

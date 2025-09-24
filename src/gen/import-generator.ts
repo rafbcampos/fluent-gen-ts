@@ -123,13 +123,34 @@ export class ImportGenerator {
    */
   private extractModulesFromNamedImports(importStatements: string): Set<string> {
     const modules = new Set<string>();
-    const importRegex = /import\s+type\s+\{[^}]+\}\s+from\s+["']([^"']+)["']/g;
+
+    // Capture:
+    // 1. import type { ... } from "module"
+    // 2. import type { ... } from 'module'
+    // 3. import type {\n  ...\n} from "module" (multiline)
+    // 4. import type  {  ...  }  from  "module" (extra whitespace)
+    const namedTypeImportRegex = /import\s+type\s+\{\s*[^}]+\s*\}\s+from\s+["']([^"']+)["']/gm;
+
+    // Also check for regular named imports that might contain types
+    // import { type TypeA, InterfaceB } from "module"
+    const mixedImportRegex =
+      /import\s+\{\s*[^}]*(?:type\s+\w+|[A-Z]\w*)[^}]*\}\s+from\s+["']([^"']+)["']/gm;
+
+    // Process type-only named imports
     let match;
-    while ((match = importRegex.exec(importStatements)) !== null) {
+    while ((match = namedTypeImportRegex.exec(importStatements)) !== null) {
       if (match[1]) {
         modules.add(match[1]);
       }
     }
+
+    // Process mixed imports that likely contain types (starting with capital letters)
+    while ((match = mixedImportRegex.exec(importStatements)) !== null) {
+      if (match[1]) {
+        modules.add(match[1]);
+      }
+    }
+
     return modules;
   }
 
@@ -298,7 +319,21 @@ import {
       }
 
       // Extract module names that have named imports to avoid namespace duplicates
-      const namedImportModules = this.extractModulesFromNamedImports(typeImportsResult.value || '');
+      let namedImportModules = this.extractModulesFromNamedImports(typeImportsResult.value || '');
+
+      // Also check for any existing named imports in the current imports array
+      // This handles cases where user's source files already have selective imports
+      if (resolvedType.imports && Array.isArray(resolvedType.imports)) {
+        for (const importPath of resolvedType.imports) {
+          if (typeof importPath === 'string' && importPath.trim() !== '') {
+            // If this looks like a module that might have named imports, add it to exclusions
+            // We're being conservative here - if there's any doubt, preserve user's intent
+            if (this.shouldPreserveNamedImports(importPath, resolvedType)) {
+              namedImportModules.add(importPath);
+            }
+          }
+        }
+      }
 
       // Add module imports only for modules that don't have named imports
       const moduleImportsResult = this.generateModuleImports(resolvedType, namedImportModules);
@@ -640,6 +675,26 @@ import {
       // If there's any error accessing globalThis, assume it's not global
       return false;
     }
+  }
+
+  /**
+   * Determines if we should preserve named imports for a given module path
+   * This helps prevent converting user's selective imports to namespace imports
+   */
+  private shouldPreserveNamedImports(importPath: string, resolvedType: ResolvedType): boolean {
+    if (!importPath || !resolvedType) {
+      return false;
+    }
+
+    // Check if this is an external module (not relative path)
+    const resolveResult = this.importResolver.resolve({ importPath });
+    if (!resolveResult.ok || !resolveResult.value.isNodeModule) {
+      return false;
+    }
+
+    // If the resolved type has external types from this module, assume named imports
+    // This is conservative - we err on the side of preserving user intent
+    return true;
   }
 
   /**
