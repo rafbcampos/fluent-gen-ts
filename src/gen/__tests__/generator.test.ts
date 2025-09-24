@@ -1,9 +1,9 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { BuilderGenerator } from '../generator.js';
-import { PluginManager } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
 import { TypeKind } from '../../core/types.js';
 import type { ResolvedType, PropertyInfo } from '../../core/types.js';
-import type { Plugin, BuildMethodContext } from '../../core/plugin.js';
+import type { Plugin, BuildMethodContext } from '../../core/plugin/index.js';
 import type { GeneratorConfig } from '../generator.js';
 import { ok, err } from '../../core/result.js';
 

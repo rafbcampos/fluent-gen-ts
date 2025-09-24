@@ -2,7 +2,7 @@ import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { ResolvedType, TypeInfo, GeneratorOptions } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
-import { PluginManager, HookType, type BuildMethodContext } from '../core/plugin.js';
+import { PluginManager, HookType, type BuildMethodContext } from '../core/plugin/index.js';
 import { getCommonFileTemplate, getSingleFileUtilitiesTemplate } from './template-generator.js';
 import { ImportGenerator } from './import-generator.js';
 import { TypeStringGenerator } from './type-string-generator.js';

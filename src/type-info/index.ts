@@ -4,7 +4,7 @@ import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { ResolvedType, TypeInfo } from '../core/types.js';
 import { TypeResolutionCache } from '../core/cache.js';
-import { PluginManager } from '../core/plugin.js';
+import { PluginManager } from '../core/plugin/index.js';
 import {
   isObjectTypeInfo,
   isArrayTypeInfo,
@@ -400,4 +400,4 @@ export { TypeResolver } from './resolver.js';
 
 // Cache and plugin system for advanced usage
 export { TypeResolutionCache } from '../core/cache.js';
-export { PluginManager } from '../core/plugin.js';
+export { PluginManager } from '../core/plugin/index.js';

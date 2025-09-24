@@ -2,7 +2,7 @@ import { dirname, basename } from 'node:path';
 import { FluentGen, type FluentGenOptions } from '../../gen/index.js';
 import type { Config, GeneratorConfig } from '../config.js';
 import type { CommandOptions } from '../types.js';
-import type { PluginManager } from '../../core/plugin.js';
+import type { PluginManager } from '../../core/plugin/index.js';
 
 export class GeneratorService {
   buildFluentGenOptions(options: CommandOptions): Partial<FluentGenOptions> {

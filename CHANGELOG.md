@@ -4,26 +4,26 @@
 
 ### Minor Changes
 
-- 80054cd: # Early adopters release
+- 80054cd: Early adopters release
 
   This release marks the transition from experimental canaries to early adopter
   testing phase. While the core functionality is stable, the API may still
   evolve based on community feedback.
 
-  ## What's Ready for Testing
+  ### What's Ready for Testing
   - Core fluent builder generation from TypeScript interfaces
   - CLI tool with interactive and batch modes
   - Basic TypeScript features support (generics, unions, utility types)
   - Plugin system foundation
   - Monorepo dependency resolution
 
-  ## Known Limitations
+  ### Known Limitations
   - API may change in future versions
   - Some advanced TypeScript patterns still being refined
   - Documentation and examples being expanded
   - Performance optimizations ongoing
 
-  ## For Early Adopters
+  ### For Early Adopters
 
   Perfect for:
   - Prototyping and experimentation

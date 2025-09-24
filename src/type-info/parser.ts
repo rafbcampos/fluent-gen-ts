@@ -2,7 +2,7 @@ import { Project, SourceFile, Type, ts } from 'ts-morph';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import { TypeResolutionCache } from '../core/cache.js';
-import { PluginManager, HookType } from '../core/plugin.js';
+import { PluginManager, HookType } from '../core/plugin/index.js';
 import { PackageResolver } from '../core/package-resolver.js';
 import path from 'node:path';
 

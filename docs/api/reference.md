@@ -1,64 +1,47 @@
 # API Reference
 
-This document provides comprehensive API documentation for fluent-gen-ts.
-
 ## FluentGen
-
-The main class for generating fluent builders.
 
 ### Constructor
 
 ```typescript
-constructor(options?: FluentGenOptions)
+new FluentGen(options?: FluentGenOptions)
 ```
 
-#### FluentGenOptions
+### FluentGenOptions
 
-| Property        | Type            | Description               | Default               |
-| --------------- | --------------- | ------------------------- | --------------------- |
-| `outputDir`     | `string`        | Default output directory  | `./generated`         |
-| `fileName`      | `string`        | Default file name pattern | `{type}.builder.ts`   |
-| `useDefaults`   | `boolean`       | Generate smart defaults   | `true`                |
-| `addComments`   | `boolean`       | Include JSDoc comments    | `true`                |
-| `contextType`   | `string`        | Custom context type name  | `BaseBuildContext`    |
-| `tsConfigPath`  | `string`        | Path to tsconfig.json     | Auto-detected         |
-| `cache`         | `Cache`         | Custom cache instance     | `new Cache()`         |
-| `pluginManager` | `PluginManager` | Plugin manager instance   | `new PluginManager()` |
-| `maxDepth`      | `number`        | Max recursion depth       | `10`                  |
+| Property         | Type             | Description                             |
+| ---------------- | ---------------- | --------------------------------------- |
+| `outputDir`      | `string`         | Output directory for generated builders |
+| `fileName`       | `string`         | File name pattern                       |
+| `outputPath`     | `string`         | Output file path                        |
+| `useDefaults`    | `boolean`        | Generate default values                 |
+| `addComments`    | `boolean`        | Include JSDoc comments                  |
+| `contextType`    | `string`         | Context type name                       |
+| `tsConfigPath`   | `string`         | Path to tsconfig.json                   |
+| `cache`          | `Cache`          | Cache instance                          |
+| `pluginManager`  | `PluginManager`  | Plugin manager instance                 |
+| `maxDepth`       | `number`         | Maximum recursion depth (1-100)         |
+| `monorepoConfig` | `MonorepoConfig` | Monorepo configuration                  |
 
 ### Methods
 
 #### generateBuilder
 
-Generate a single builder for a type.
-
 ```typescript
 async generateBuilder(filePath: string, typeName: string): Promise<Result<string>>
 ```
 
+Generates a builder for a single type.
+
 **Parameters:**
 
-- `filePath`: Path to TypeScript file containing the type
-- `typeName`: Name of the type/interface to generate builder for
+- `filePath`: Path to TypeScript file (.ts, .tsx, or .d.ts)
+- `typeName`: Name of the type to generate builder for
 
-**Returns:** `Result<string>` containing the generated builder code
-
-**Example:**
-
-```typescript
-const gen = new FluentGen();
-const result = await gen.generateBuilder('./types.ts', 'User');
-
-if (result.ok) {
-  console.log(result.value); // Generated builder code
-} else {
-  console.error(result.error.message);
-}
-```
+**Returns:** `Result<string>` - Generated builder code or error
 
 #### generateMultiple
-
-Generate multiple builders from a single file with shared common utilities.
 
 ```typescript
 async generateMultiple(
@@ -67,33 +50,17 @@ async generateMultiple(
 ): Promise<Result<Map<string, string>>>
 ```
 
+Generates multiple builders from a single file. Creates a common.ts file with
+shared utilities.
+
 **Parameters:**
 
 - `filePath`: Path to TypeScript file
-- `typeNames`: Array of type names to generate builders for
+- `typeNames`: Array of type names
 
-**Returns:** `Result<Map<string, string>>` where keys are file names and values
-are generated code
-
-**Example:**
-
-```typescript
-const result = await gen.generateMultiple('./types.ts', [
-  'User',
-  'Product',
-  'Order',
-]);
-
-if (result.ok) {
-  result.value.forEach((code, fileName) => {
-    console.log(`${fileName}:\n${code}`);
-  });
-}
-```
+**Returns:** `Result<Map<string, string>>` - Map of file names to generated code
 
 #### generateMultipleFromFiles
-
-Generate builders from multiple files.
 
 ```typescript
 async generateMultipleFromFiles(
@@ -101,20 +68,15 @@ async generateMultipleFromFiles(
 ): Promise<Result<Map<string, string>>>
 ```
 
-**Example:**
+Generates builders from multiple files.
 
-```typescript
-const fileTypeMap = new Map([
-  ['./src/user.ts', ['User', 'UserProfile']],
-  ['./src/product.ts', ['Product', 'Category']],
-]);
+**Parameters:**
 
-const result = await gen.generateMultipleFromFiles(fileTypeMap);
-```
+- `fileTypeMap`: Map of file paths to arrays of type names
+
+**Returns:** `Result<Map<string, string>>` - Map of file names to generated code
 
 #### generateToFile
-
-Generate and write a builder directly to a file.
 
 ```typescript
 async generateToFile(
@@ -124,117 +86,1002 @@ async generateToFile(
 ): Promise<Result<string>>
 ```
 
-**Returns:** `Result<string>` containing the output file path
+Generates and writes a builder to a file.
+
+**Parameters:**
+
+- `filePath`: Source TypeScript file path
+- `typeName`: Type name
+- `outputPath`: Output path (optional)
+
+**Returns:** `Result<string>` - Output file path or error
 
 #### scanAndGenerate
-
-Scan files using a glob pattern and generate builders for all found types.
 
 ```typescript
 async scanAndGenerate(pattern: string): Promise<Result<Map<string, string>>>
 ```
 
-**Example:**
+Scans files using glob pattern and generates builders.
 
-```typescript
-const result = await gen.scanAndGenerate('src/**/*.ts');
-```
+**Parameters:**
+
+- `pattern`: Glob pattern
+
+**Returns:** `Result<Map<string, string>>` - Map of `{filePath}:{typeName}` to
+generated code
 
 #### registerPlugin
-
-Register a plugin with the generator.
 
 ```typescript
 registerPlugin(plugin: Plugin): Result<void>
 ```
 
-#### clearCache
+Registers a plugin.
 
-Clear the internal cache.
+**Parameters:**
+
+- `plugin`: Plugin instance
+
+**Returns:** `Result<void>` - Success or error
+
+#### clearCache
 
 ```typescript
 clearCache(): void
 ```
 
-## Result Type
+Clears internal cache.
 
-All async operations return a `Result<T>` type for explicit error handling.
+---
+
+## Plugin System
+
+### createPlugin
 
 ```typescript
-type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
+function createPlugin(name: string, version: string): PluginBuilder;
 ```
 
-**Usage Pattern:**
+Creates a new plugin builder.
+
+**Parameters:**
+
+- `name`: Plugin name
+- `version`: Plugin version
+
+**Returns:** `PluginBuilder`
+
+### PluginBuilder
+
+#### setDescription
 
 ```typescript
-const result = await someOperation();
+setDescription(description: string): PluginBuilder
+```
 
-if (result.ok) {
-  // Success case
-  console.log(result.value);
-} else {
-  // Error case
-  console.error(result.error.message);
+Sets plugin description.
+
+#### requireImports
+
+```typescript
+requireImports(configurator: (manager: ImportManager) => ImportManager): PluginBuilder
+```
+
+Configures plugin imports.
+
+#### beforeParse
+
+```typescript
+beforeParse(hook: (context: ParseContext) => Result<ParseContext>): PluginBuilder
+```
+
+Hook executed before parsing.
+
+#### afterParse
+
+```typescript
+afterParse(hook: (context: ParseContext, type: Type) => Result<Type>): PluginBuilder
+```
+
+Hook executed after parsing.
+
+#### beforeResolve
+
+```typescript
+beforeResolve(hook: (context: ResolveContext) => Result<ResolveContext>): PluginBuilder
+```
+
+Hook executed before type resolution.
+
+#### afterResolve
+
+```typescript
+afterResolve(hook: (context: ResolveContext, typeInfo: TypeInfo) => Result<TypeInfo>): PluginBuilder
+```
+
+Hook executed after type resolution.
+
+#### beforeGenerate
+
+```typescript
+beforeGenerate(hook: (context: GenerateContext) => Result<GenerateContext>): PluginBuilder
+```
+
+Hook executed before code generation.
+
+#### afterGenerate
+
+```typescript
+afterGenerate(hook: (code: string, context: GenerateContext) => Result<string>): PluginBuilder
+```
+
+Hook executed after code generation.
+
+#### transformType
+
+```typescript
+transformType(hook: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>): PluginBuilder
+```
+
+Transforms type information.
+
+#### transformProperty
+
+```typescript
+transformProperty(hook: (property: PropertyInfo) => Result<PropertyInfo>): PluginBuilder
+```
+
+Transforms property information.
+
+#### transformPropertyMethods
+
+```typescript
+transformPropertyMethods(
+  configurator: (builder: PropertyMethodTransformBuilder) => PropertyMethodTransformBuilder
+): PluginBuilder
+```
+
+Configures property method transformations.
+
+#### addMethod
+
+```typescript
+addMethod(configurator: (builder: CustomMethodBuilder) => CustomMethodBuilder): PluginBuilder
+```
+
+Adds custom method to builders.
+
+#### transformValues
+
+```typescript
+transformValues(
+  configurator: (builder: ValueTransformBuilder) => ValueTransformBuilder
+): PluginBuilder
+```
+
+Configures value transformations.
+
+#### transformBuildMethod
+
+```typescript
+transformBuildMethod(
+  configurator: (builder: BuildMethodTransformBuilder) => BuildMethodTransformBuilder
+): PluginBuilder
+```
+
+Transforms build method.
+
+#### transformImports
+
+```typescript
+transformImports(
+  hook: (context: ImportTransformContext) => Result<ImportTransformContext>
+): PluginBuilder
+```
+
+Transforms import statements.
+
+#### build
+
+```typescript
+build(): Plugin
+```
+
+Builds the plugin.
+
+---
+
+## Type Matchers
+
+### primitive
+
+```typescript
+primitive(...names: string[]): TypeMatcher
+```
+
+Matches primitive types.
+
+**Parameters:**
+
+- `names`: Primitive type names ('string', 'number', 'boolean', etc.)
+
+### object
+
+```typescript
+object(name?: string): ObjectTypeMatcher
+```
+
+Matches object types.
+
+**Parameters:**
+
+- `name`: Object name (optional)
+
+### ObjectTypeMatcher Methods
+
+#### withGeneric
+
+```typescript
+withGeneric(name?: string): ObjectTypeMatcher
+```
+
+Matches objects with generic parameters.
+
+#### withProperty
+
+```typescript
+withProperty(name: string, type?: TypeMatcher): ObjectTypeMatcher
+```
+
+Matches objects with specific property.
+
+#### withProperties
+
+```typescript
+withProperties(...names: string[]): ObjectTypeMatcher
+```
+
+Matches objects with multiple properties.
+
+### array
+
+```typescript
+array(): ArrayTypeMatcher
+```
+
+Matches array types.
+
+### ArrayTypeMatcher Methods
+
+#### of
+
+```typescript
+of(matcher: TypeMatcher | ((m: TypeMatcherBuilder) => TypeMatcher)): ArrayTypeMatcher
+```
+
+Specifies array element type.
+
+### union
+
+```typescript
+union(): UnionTypeMatcher
+```
+
+Matches union types.
+
+### UnionTypeMatcher Methods
+
+#### containing
+
+```typescript
+containing(matcher: TypeMatcher | ((m: TypeMatcherBuilder) => TypeMatcher)): UnionTypeMatcher
+```
+
+Matches unions containing specific type.
+
+#### exact
+
+```typescript
+exact(...matchers: TypeMatcher[]): UnionTypeMatcher
+```
+
+Matches exact union types.
+
+### intersection
+
+```typescript
+intersection(): IntersectionTypeMatcher
+```
+
+Matches intersection types.
+
+### IntersectionTypeMatcher Methods
+
+#### including
+
+```typescript
+including(matcher: TypeMatcher | ((m: TypeMatcherBuilder) => TypeMatcher)): IntersectionTypeMatcher
+```
+
+Matches intersections including specific type.
+
+#### exact
+
+```typescript
+exact(...matchers: TypeMatcher[]): IntersectionTypeMatcher
+```
+
+Matches exact intersection types.
+
+### Other Matchers
+
+```typescript
+reference(name?: string): TypeMatcher
+generic(name?: string): TypeMatcher
+any(): TypeMatcher
+never(): TypeMatcher
+literal(value: string | number | boolean): TypeMatcher
+or(...matchers: TypeMatcher[]): TypeMatcher
+and(...matchers: TypeMatcher[]): TypeMatcher
+not(matcher: TypeMatcher): TypeMatcher
+```
+
+---
+
+## Transform Builders
+
+### PropertyMethodTransformBuilder
+
+#### when
+
+```typescript
+when(predicate: (context: PropertyMethodContext) => boolean): PropertyMethodTransformBuilder
+```
+
+Starts new transformation rule with condition.
+
+#### setParameter
+
+```typescript
+setParameter(type: string | ((original: string) => string)): PropertyMethodTransformBuilder
+```
+
+Sets parameter type transformation.
+
+#### setExtractor
+
+```typescript
+setExtractor(code: string): PropertyMethodTransformBuilder
+```
+
+Sets value extraction code.
+
+#### setValidator
+
+```typescript
+setValidator(code: string): PropertyMethodTransformBuilder
+```
+
+Sets validation code.
+
+#### done
+
+```typescript
+done(): PropertyMethodTransformBuilder
+```
+
+Completes current rule.
+
+#### build
+
+```typescript
+build(): (context: PropertyMethodContext) => PropertyMethodTransform
+```
+
+Builds transformation function.
+
+### CustomMethodBuilder
+
+#### name
+
+```typescript
+name(name: string): CustomMethodBuilder
+```
+
+Sets method name.
+
+#### param
+
+```typescript
+param(
+  name: string,
+  type: string,
+  options?: { optional?: boolean; defaultValue?: string }
+): CustomMethodBuilder
+```
+
+Adds method parameter.
+
+#### returns
+
+```typescript
+returns(type: string | ((context: BuilderContext) => string)): CustomMethodBuilder
+```
+
+Sets return type.
+
+#### implementation
+
+```typescript
+implementation(code: string | ((context: BuilderContext) => string)): CustomMethodBuilder
+```
+
+Sets method implementation.
+
+#### jsDoc
+
+```typescript
+jsDoc(doc: string): CustomMethodBuilder
+```
+
+Sets JSDoc comment.
+
+#### build
+
+```typescript
+build(): CustomMethodDefinition
+```
+
+Builds method definition.
+
+### ValueTransformBuilder
+
+#### when
+
+```typescript
+when(predicate: (context: ValueContext) => boolean): ValueTransformBuilder
+```
+
+Starts new transformation rule.
+
+#### transform
+
+```typescript
+transform(code: string | ((value: string) => string)): ValueTransformBuilder
+```
+
+Sets transformation code.
+
+#### withCondition
+
+```typescript
+withCondition(condition: string): ValueTransformBuilder
+```
+
+Sets transformation condition.
+
+#### done
+
+```typescript
+done(): ValueTransformBuilder
+```
+
+Completes current rule.
+
+#### build
+
+```typescript
+build(): (context: ValueContext) => ValueTransform | null
+```
+
+Builds transformation function.
+
+### BuildMethodTransformBuilder
+
+#### insertBefore
+
+```typescript
+insertBefore(marker: string | RegExp, code: string): BuildMethodTransformBuilder
+```
+
+Inserts code before marker.
+
+#### insertAfter
+
+```typescript
+insertAfter(marker: string | RegExp, code: string): BuildMethodTransformBuilder
+```
+
+Inserts code after marker.
+
+#### replace
+
+```typescript
+replace(marker: string | RegExp, replacement: string): BuildMethodTransformBuilder
+```
+
+Replaces marker with code.
+
+#### wrap
+
+```typescript
+wrap(before: string, after: string): BuildMethodTransformBuilder
+```
+
+Wraps build method with code.
+
+#### build
+
+```typescript
+build(): (context: BuildMethodContext) => string
+```
+
+Builds transformation function.
+
+---
+
+## Import Management
+
+### ImportManager
+
+#### addInternal
+
+```typescript
+addInternal(
+  path: string,
+  imports: string | string[],
+  options?: {
+    typeOnly?: boolean;
+    isDefault?: boolean;
+    defaultName?: string;
+  }
+): ImportManager
+```
+
+Adds internal import.
+
+#### addExternal
+
+```typescript
+addExternal(
+  packageName: string,
+  imports: string | string[],
+  options?: {
+    typeOnly?: boolean;
+    isDefault?: boolean;
+    defaultName?: string;
+  }
+): ImportManager
+```
+
+Adds external import.
+
+#### addInternalTypes
+
+```typescript
+addInternalTypes(path: string, types: string | string[]): ImportManager
+```
+
+Adds internal type imports.
+
+#### addExternalTypes
+
+```typescript
+addExternalTypes(packageName: string, types: string | string[]): ImportManager
+```
+
+Adds external type imports.
+
+#### addInternalDefault
+
+```typescript
+addInternalDefault(path: string, defaultName: string): ImportManager
+```
+
+Adds internal default import.
+
+#### addExternalDefault
+
+```typescript
+addExternalDefault(packageName: string, defaultName: string): ImportManager
+```
+
+Adds external default import.
+
+#### merge
+
+```typescript
+merge(other: ImportManager): ImportManager
+```
+
+Merges imports from another manager.
+
+#### deduplicate
+
+```typescript
+deduplicate(): ImportManager
+```
+
+Removes duplicate imports.
+
+#### clear
+
+```typescript
+clear(): ImportManager
+```
+
+Clears all imports.
+
+#### clone
+
+```typescript
+clone(): ImportManager
+```
+
+Creates copy of import manager.
+
+#### hasImport
+
+```typescript
+hasImport(predicate: (imp: Import) => boolean): boolean
+```
+
+Checks if import exists.
+
+#### removeImports
+
+```typescript
+removeImports(predicate: (imp: Import) => boolean): ImportManager
+```
+
+Removes matching imports.
+
+#### getImports
+
+```typescript
+getImports(): readonly Import[]
+```
+
+Returns all imports.
+
+#### getGroupedImports
+
+```typescript
+getGroupedImports(): {
+  internal: readonly InternalImport[];
+  external: readonly ExternalImport[];
 }
 ```
 
-## PluginManager
+Returns imports grouped by type.
 
-Manages plugin registration and execution.
+#### toImportStatements
+
+```typescript
+toImportStatements(): string[]
+```
+
+Converts to import statements.
+
+#### build
+
+```typescript
+build(): PluginImports
+```
+
+Builds plugin imports configuration.
+
+---
+
+## Plugin Manager
+
+### Constructor
+
+```typescript
+new PluginManager();
+```
 
 ### Methods
 
 #### register
 
-Register a new plugin.
-
 ```typescript
 register(plugin: Plugin): void
 ```
 
-#### unregister
+Registers a plugin. Throws error if validation fails or plugin name already
+registered.
 
-Remove a plugin by name.
+#### unregister
 
 ```typescript
 unregister(name: string): boolean
 ```
 
-#### executeHook
-
-Execute a specific plugin hook.
-
-```typescript
-async executeHook<K extends HookType>(
-  options: ExecuteHookOptions<K>
-): Promise<Result<GetHookReturnType<K>>>
-```
+Unregisters plugin by name. Returns true if removed, false if not found.
 
 #### getPlugins
 
-Get all registered plugins.
+```typescript
+getPlugins(): readonly Plugin[]
+```
+
+Returns all registered plugins.
+
+#### getPlugin
 
 ```typescript
-getPlugins(): ReadonlyArray<Plugin>
+getPlugin(name: string): Plugin | undefined
 ```
+
+Returns plugin by name or undefined.
+
+#### hasPlugin
+
+```typescript
+hasPlugin(name: string): boolean
+```
+
+Checks if plugin is registered.
+
+#### getPluginCount
+
+```typescript
+getPluginCount(): number
+```
+
+Returns number of registered plugins.
+
+#### getPluginsByHookType
+
+```typescript
+getPluginsByHookType(hookType: HookTypeValue): readonly Plugin[]
+```
+
+Returns plugins that implement specific hook.
+
+#### executeHook
+
+```typescript
+async executeHook<K extends HookTypeValue>(
+  options: ExecuteHookOptions<K>
+): Promise<Result<ReturnType<PluginHookMap[K]>>>
+```
+
+Executes hook across all registered plugins sequentially.
+
+#### executePluginHook
+
+```typescript
+async executePluginHook<K extends HookTypeValue>(
+  pluginName: string,
+  options: ExecuteHookOptions<K>
+): Promise<Result<ReturnType<PluginHookMap[K]>>>
+```
+
+Executes hook from specific plugin.
+
+#### getPropertyMethodTransform
+
+```typescript
+getPropertyMethodTransform(context: PropertyMethodContext): PropertyMethodTransform | null
+```
+
+Returns merged property method transformations from all plugins.
+
+#### getCustomMethods
+
+```typescript
+getCustomMethods(context: BuilderContext): readonly CustomMethod[]
+```
+
+Returns custom methods from all plugins.
+
+#### getValueTransforms
+
+```typescript
+getValueTransforms(context: ValueContext): readonly ValueTransform[]
+```
+
+Returns value transformations from all plugins.
 
 #### getRequiredImports
 
-Get imports required by all registered plugins.
-
 ```typescript
-getRequiredImports(): PluginImports
+getRequiredImports(): ImportManager
 ```
 
-## Plugin Interface
+Returns deduplicated imports from all plugins.
+
+#### generateImportStatements
+
+```typescript
+generateImportStatements(): string[]
+```
+
+Generates import statements from all plugins.
+
+#### clear
+
+```typescript
+clear(): void
+```
+
+Removes all registered plugins.
+
+---
+
+## Context Types
+
+### ParseContext
+
+```typescript
+interface ParseContext {
+  readonly sourceFile: string;
+  readonly typeName: string;
+}
+```
+
+### ResolveContext
+
+```typescript
+interface ResolveContext {
+  readonly type: Type;
+  readonly symbol?: Symbol | undefined;
+  readonly sourceFile?: string;
+  readonly typeName?: string;
+}
+```
+
+### GenerateContext
+
+```typescript
+interface GenerateContext {
+  readonly resolvedType: ResolvedType;
+  readonly options: GeneratorOptions;
+}
+```
+
+### PropertyMethodContext
+
+```typescript
+interface PropertyMethodContext {
+  readonly typeName: string;
+  readonly typeInfo: TypeInfo;
+  readonly builderName: string;
+  readonly property: PropertyInfo;
+  readonly propertyType: TypeInfo;
+  readonly originalTypeString: string;
+  readonly type: TypeMatcherInterface;
+
+  hasGeneric(name: string): boolean;
+  getGenericConstraint(name: string): string | undefined;
+  isOptional(): boolean;
+  isReadonly(): boolean;
+  getPropertyPath(): string[];
+  getMethodName(): string;
+}
+```
+
+### BuilderContext
+
+```typescript
+interface BuilderContext {
+  readonly typeName: string;
+  readonly typeInfo: TypeInfo;
+  readonly builderName: string;
+  readonly genericParams: string;
+  readonly genericConstraints: string;
+  readonly properties: readonly PropertyInfo[];
+
+  hasProperty(name: string): boolean;
+  getProperty(name: string): PropertyInfo | undefined;
+  getRequiredProperties(): readonly PropertyInfo[];
+  getOptionalProperties(): readonly PropertyInfo[];
+}
+```
+
+### ValueContext
+
+```typescript
+interface ValueContext {
+  readonly property: string;
+  readonly valueVariable: string;
+  readonly type: TypeInfo;
+  readonly isOptional: boolean;
+  readonly typeChecker: TypeMatcherInterface;
+}
+```
+
+### BuildMethodContext
+
+```typescript
+interface BuildMethodContext {
+  readonly typeName: string;
+  readonly typeInfo: TypeInfo;
+  readonly builderName: string;
+  readonly buildMethodCode: string;
+  readonly properties: readonly PropertyInfo[];
+  readonly options: GeneratorOptions;
+  readonly resolvedType: ResolvedType;
+  readonly genericParams: string;
+  readonly genericConstraints: string;
+}
+```
+
+### TypeMatcherInterface
+
+```typescript
+interface TypeMatcherInterface {
+  isPrimitive(...names: string[]): boolean;
+  isObject(name?: string): ObjectTypeMatcher;
+  isArray(): ArrayTypeMatcher;
+  isUnion(): UnionTypeMatcher;
+  isIntersection(): IntersectionTypeMatcher;
+  isReference(name?: string): boolean;
+  isGeneric(name?: string): boolean;
+  matches(matcher: TypeMatcher): boolean;
+  toString(): string;
+}
+```
+
+---
+
+## Core Types
+
+### TypeInfo
+
+```typescript
+interface TypeInfo {
+  kind: TypeKind;
+  name?: string;
+  properties?: PropertyInfo[];
+  elementType?: TypeInfo;
+  types?: TypeInfo[];
+  genericParams?: TypeInfo[];
+  value?: string | number | boolean;
+}
+```
+
+### PropertyInfo
+
+```typescript
+interface PropertyInfo {
+  name: string;
+  type: TypeInfo;
+  optional: boolean;
+  readonly: boolean;
+  jsDoc?: string;
+}
+```
+
+### TypeKind
+
+```typescript
+enum TypeKind {
+  Primitive = 'primitive',
+  Object = 'object',
+  Array = 'array',
+  Union = 'union',
+  Intersection = 'intersection',
+  Reference = 'reference',
+  Generic = 'generic',
+  Any = 'any',
+  Never = 'never',
+  Literal = 'literal',
+}
+```
+
+### Plugin
 
 ```typescript
 interface Plugin {
   readonly name: string;
   readonly version: string;
+  readonly description?: string;
   readonly imports?: PluginImports;
 
-  // Lifecycle hooks
   beforeParse?: (context: ParseContext) => Result<ParseContext>;
   afterParse?: (context: ParseContext, type: Type) => Result<Type>;
   beforeResolve?: (context: ResolveContext) => Result<ResolveContext>;
@@ -245,358 +1092,190 @@ interface Plugin {
   beforeGenerate?: (context: GenerateContext) => Result<GenerateContext>;
   afterGenerate?: (code: string, context: GenerateContext) => Result<string>;
 
-  // Transformation hooks
   transformType?: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>;
   transformProperty?: (property: PropertyInfo) => Result<PropertyInfo>;
   transformBuildMethod?: (context: BuildMethodContext) => Result<string>;
   transformPropertyMethod?: (
     context: PropertyMethodContext,
   ) => Result<PropertyMethodTransform>;
+  addCustomMethods?: (
+    context: BuilderContext,
+  ) => Result<readonly CustomMethod[]>;
   transformValue?: (context: ValueContext) => Result<ValueTransform | null>;
   transformImports?: (
     context: ImportTransformContext,
   ) => Result<ImportTransformContext>;
-
-  // Extension hooks
-  addCustomMethods?: (
-    context: BuilderContext,
-  ) => Result<readonly CustomMethod[]>;
 }
 ```
 
-### Plugin Context Types
-
-#### PropertyMethodContext
-
-Context provided to `transformPropertyMethod` hook.
+### PropertyMethodTransform
 
 ```typescript
-interface PropertyMethodContext {
-  readonly property: PropertyInfo;
-  readonly propertyType: TypeInfo;
-  readonly builderName: string;
-  readonly typeName: string;
-  readonly originalTypeString: string;
-
-  // Helper methods
-  isType(kind: TypeKind): boolean;
-  hasGenericConstraint(constraintName: string): boolean;
-  isArrayType(): boolean;
-  isUnionType(): boolean;
-  isPrimitiveType(name?: string): boolean;
+interface PropertyMethodTransform {
+  readonly parameterType?: string;
+  readonly extractValue?: string;
+  readonly validate?: string;
 }
 ```
 
-#### BuildMethodContext
-
-Context for `transformBuildMethod` hook.
+### CustomMethod
 
 ```typescript
-interface BuildMethodContext {
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly buildMethodCode: string;
-  readonly properties: readonly PropertyInfo[];
-  readonly genericParams: string;
-  readonly genericConstraints: string;
-  readonly options: GeneratorOptions;
-  readonly resolvedType: ResolvedType;
+interface CustomMethod {
+  readonly name: string;
+  readonly signature: string;
+  readonly implementation: string;
+  readonly jsDoc?: string;
 }
 ```
 
-#### BuilderContext
-
-Context for `addCustomMethods` hook.
+### ValueTransform
 
 ```typescript
-interface BuilderContext {
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly properties: readonly PropertyInfo[];
-  readonly genericParams: string;
-  readonly genericConstraints: string;
+interface ValueTransform {
+  readonly condition?: string;
+  readonly transform: string;
 }
 ```
 
-## Generated Builder API
-
-All generated builders extend `FluentBuilderBase` and implement this interface:
+### HookTypeValue
 
 ```typescript
-interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext> {
-  readonly [FLUENT_BUILDER_SYMBOL]: true;
-  build(context?: C): T;
-}
+type HookTypeValue =
+  | 'beforeParse'
+  | 'afterParse'
+  | 'beforeResolve'
+  | 'afterResolve'
+  | 'beforeGenerate'
+  | 'afterGenerate'
+  | 'transformType'
+  | 'transformProperty'
+  | 'transformBuildMethod'
+  | 'transformPropertyMethod'
+  | 'addCustomMethods'
+  | 'transformValue'
+  | 'transformImports';
 ```
 
-### Builder Methods
+---
 
-#### Property Methods
-
-For each property in the type, a `with{PropertyName}` method is generated:
+## Result Type
 
 ```typescript
-// For property: name: string
-withName(value: string): this
-
-// For property: age?: number
-withAge(value: number): this
-
-// For property: items: Item[]
-withItems(value: Item[] | FluentBuilder<Item>[]): this
+type Result<T> = { ok: true; value: T } | { ok: false; error: Error };
 ```
 
-#### Utility Methods
-
-All builders include these utility methods:
+### Helper Functions
 
 ```typescript
-// Conditional setting
-if<K extends keyof T>(
-  predicate: (builder: this) => boolean,
-  property: K,
-  value: T[K] | FluentBuilder<T[K]> | (() => T[K] | FluentBuilder<T[K]>)
-): this
-
-// Conditional with alternative
-ifElse<K extends keyof T>(
-  predicate: (builder: this) => boolean,
-  property: K,
-  trueValue: T[K] | FluentBuilder<T[K]> | (() => T[K] | FluentBuilder<T[K]>),
-  falseValue: T[K] | FluentBuilder<T[K]> | (() => T[K] | FluentBuilder<T[K]>)
-): this
-
-// Check if property is set
-has<K extends keyof T>(key: K): boolean
-
-// Peek at current value
-peek<K extends keyof T>(key: K): T[K] | undefined
-
-// Build the final object
-build(context?: BaseBuildContext): T
-```
-
-### Context Interface
-
-```typescript
-interface BaseBuildContext {
-  readonly parentId?: string;
-  readonly parameterName?: string;
-  readonly index?: number;
-  readonly [key: string]: unknown;
-}
-```
-
-## Type Information
-
-### TypeInfo
-
-Represents resolved type information.
-
-```typescript
-interface TypeInfo {
-  name: string;
-  kind: TypeKind;
-  isOptional: boolean;
-  isArray: boolean;
-  isUnion: boolean;
-  isGeneric: boolean;
-  genericParams?: TypeInfo[];
-  unionTypes?: TypeInfo[];
-  properties?: PropertyInfo[];
-  jsDoc?: string;
-}
-```
-
-### TypeKind
-
-Enumeration of supported type kinds.
-
-```typescript
-enum TypeKind {
-  String = 'string',
-  Number = 'number',
-  Boolean = 'boolean',
-  Date = 'date',
-  Array = 'array',
-  Object = 'object',
-  Union = 'union',
-  Intersection = 'intersection',
-  Generic = 'generic',
-  Literal = 'literal',
-  Unknown = 'unknown',
-}
-```
-
-### PropertyInfo
-
-Represents a property within a type.
-
-```typescript
-interface PropertyInfo {
-  name: string;
-  type: TypeInfo;
-  isOptional: boolean;
-  jsDoc?: string;
-}
-```
-
-## Utility Functions
-
-### Type Guards
-
-```typescript
-// Check if value is a fluent builder
-function isFluentBuilder<
-  T = unknown,
-  C extends BaseBuildContext = BaseBuildContext,
->(value: unknown): value is FluentBuilder<T, C>;
-
-// Check if value is an array of builders
-function isBuilderArray<
-  T = unknown,
-  C extends BaseBuildContext = BaseBuildContext,
->(value: unknown): value is Array<FluentBuilder<T, C>>;
-```
-
-### Result Helpers
-
-```typescript
-// Create success result
 function ok<T>(value: T): Result<T>;
+```
 
-// Create error result
+Creates success result.
+
+```typescript
 function err<T>(error: Error): Result<T>;
 ```
 
-### Context Helpers
+Creates error result.
+
+---
+
+## Utility Functions
+
+### isValidPlugin
 
 ```typescript
-// Create nested context
-function createNestedContext<C extends BaseBuildContext>(
-  parentContext: C,
-  parameterName: string,
-  index?: number,
-): C;
-
-// Resolve builders in value
-function resolveValue<T, C extends BaseBuildContext>(
-  value: unknown,
-  context?: C,
-): unknown;
+function isValidPlugin(obj: unknown): obj is Plugin;
 ```
 
-## Configuration
+Type guard for Plugin interface. Checks for required name and version
+properties.
 
-### Config File Interface
+### createPluginManager
 
 ```typescript
-interface Config {
-  types: Array<{
-    file: string;
-    types: string[];
-  }>;
-  output: {
-    dir: string;
-    mode: 'single' | 'batch';
-  };
-  generator?: {
-    useDefaults?: boolean;
-    addComments?: boolean;
-    maxDepth?: number;
-    contextType?: string;
-  };
-  tsConfigPath?: string;
-  plugins?: string[];
-}
+function createPluginManager(): PluginManager;
 ```
 
-## Error Types
+Creates new PluginManager instance.
 
-### Common Error Scenarios
-
-1. **File Not Found**: When the specified TypeScript file doesn't exist
-2. **Type Not Found**: When the specified type/interface doesn't exist in the
-   file
-3. **Invalid Type**: When the type cannot be converted to a builder (e.g.,
-   primitives, functions)
-4. **Circular Reference**: When types have circular dependencies exceeding max
-   depth
-5. **Plugin Error**: When a plugin hook fails or returns invalid data
-6. **Generation Error**: When code generation fails due to unsupported type
-   constructs
-
-### Error Handling Pattern
+### createImportManager
 
 ```typescript
-try {
-  const result = await gen.generateBuilder(file, type);
-
-  if (result.ok) {
-    // Handle success
-    processGeneratedCode(result.value);
-  } else {
-    // Handle specific error types
-    switch (result.error.message) {
-      case 'File not found':
-        console.error('Check file path');
-        break;
-      case 'Type not found':
-        console.error('Check type name and exports');
-        break;
-      default:
-        console.error('Generation failed:', result.error.message);
-    }
-  }
-} catch (error) {
-  // Handle unexpected errors
-  console.error('Unexpected error:', error);
-}
+function createImportManager(): ImportManager;
 ```
 
-## Examples
+Creates new ImportManager instance.
 
-### Basic Usage
+### createTypeMatcher
 
 ```typescript
-import { FluentGen } from 'fluent-gen-ts';
-
-const gen = new FluentGen({
-  useDefaults: true,
-  addComments: true,
-});
-
-const result = await gen.generateBuilder('./user.ts', 'User');
-if (result.ok) {
-  console.log(result.value);
-}
+function createTypeMatcher(): TypeMatcherBuilder;
 ```
 
-### With Plugins
+Creates new TypeMatcherBuilder instance.
+
+---
+
+## Context Enhancers
+
+### enhanceParseContext
 
 ```typescript
-import { FluentGen, PluginManager } from 'fluent-gen-ts';
-import validationPlugin from './plugins/validation.js';
-
-const pluginManager = new PluginManager();
-pluginManager.register(validationPlugin);
-
-const gen = new FluentGen({ pluginManager });
+function enhanceParseContext(context: ParseContext): ParseContext;
 ```
 
-### Batch Generation
+Enhances parse context with utility methods.
+
+### enhanceResolveContext
 
 ```typescript
-const fileTypeMap = new Map([
-  ['./src/user.ts', ['User', 'UserProfile']],
-  ['./src/product.ts', ['Product', 'Category']],
-]);
-
-const result = await gen.generateMultipleFromFiles(fileTypeMap);
-
-if (result.ok) {
-  for (const [fileName, code] of result.value) {
-    await writeFile(fileName, code);
-  }
-}
+function enhanceResolveContext(context: ResolveContext): ResolveContext;
 ```
+
+Enhances resolve context with utility methods.
+
+### enhanceGenerateContext
+
+```typescript
+function enhanceGenerateContext(context: GenerateContext): GenerateContext;
+```
+
+Enhances generate context with utility methods.
+
+### enhancePropertyMethodContext
+
+```typescript
+function enhancePropertyMethodContext(
+  context: PropertyMethodContext,
+): PropertyMethodContext;
+```
+
+Enhances property method context with type matcher interface and helper methods.
+
+### enhanceBuilderContext
+
+```typescript
+function enhanceBuilderContext(context: BuilderContext): BuilderContext;
+```
+
+Enhances builder context with property query methods.
+
+### enhanceValueContext
+
+```typescript
+function enhanceValueContext(context: ValueContext): ValueContext;
+```
+
+Enhances value context with type checker.
+
+### enhanceBuildMethodContext
+
+```typescript
+function enhanceBuildMethodContext(
+  context: BuildMethodContext,
+): BuildMethodContext;
+```
+
+Enhances build method context with utility methods.

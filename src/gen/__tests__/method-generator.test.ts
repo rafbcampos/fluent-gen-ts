@@ -1,8 +1,12 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { MethodGenerator, type MethodGeneratorConfig } from '../method-generator.js';
 import { TypeKind, type TypeInfo, type GenericParam } from '../../core/types.js';
-import { PluginManager } from '../../core/plugin.js';
-import type { PropertyMethodContext, CustomMethod, BuilderContext } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
+import type {
+  PropertyMethodContext,
+  CustomMethod,
+  BuilderContext,
+} from '../../core/plugin/index.js';
 import { ok } from '../../core/result.js';
 
 describe('MethodGenerator', () => {

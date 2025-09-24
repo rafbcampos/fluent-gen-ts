@@ -2,15 +2,18 @@ import chalk from 'chalk';
 import path from 'node:path';
 import type { FluentGen } from '../../gen/index.js';
 import { isOk } from '../../core/result.js';
-import type { Target } from '../config.js';
+import type { Target, GeneratorConfig } from '../config.js';
 import type { Task, TaskWithResult, GenerateTask, ScanTask } from '../types.js';
 import { FileService } from './file-service.js';
+import { NamingService } from './naming-service.js';
+import type { FileNamingConfig } from './naming-service.js';
 
 export interface TaskRunnerOptions {
   parallel?: boolean;
   dryRun?: boolean;
   generateCommonFile?: boolean;
   onProgress?: (message: string) => void;
+  generatorConfig?: GeneratorConfig;
 }
 
 export interface TaskRunResult {
@@ -33,26 +36,76 @@ export interface BatchTaskGroup {
 
 export class TaskRunner {
   private fileService = new FileService();
+  private namingService = new NamingService();
 
   async runTasks(
     tasks: Task[],
     generator: FluentGen,
     options: TaskRunnerOptions = {},
   ): Promise<TaskRunResult> {
-    const { parallel = false, dryRun = false, generateCommonFile = false, onProgress } = options;
+    const {
+      parallel = false,
+      dryRun = false,
+      generateCommonFile = false,
+      onProgress,
+      generatorConfig,
+    } = options;
 
     // Group tasks by output directory and determine which can be batched
-    const taskGroups = this.groupTasksByOutputDir(tasks);
+    const taskGroups = this.groupTasksByOutputDir(tasks, generatorConfig);
     const { batchGroups, individualTasks } = this.categorizeTaskGroups(
       taskGroups,
       generateCommonFile,
     );
 
     if (parallel) {
-      return this.runParallel(batchGroups, individualTasks, generator, dryRun, onProgress);
+      return this.runParallel(
+        batchGroups,
+        individualTasks,
+        generator,
+        dryRun,
+        onProgress,
+        generatorConfig,
+      );
     } else {
-      return this.runSequential(batchGroups, individualTasks, generator, dryRun, onProgress);
+      return this.runSequential(
+        batchGroups,
+        individualTasks,
+        generator,
+        dryRun,
+        onProgress,
+        generatorConfig,
+      );
     }
+  }
+
+  private formatTypeName(typeName: string, config?: GeneratorConfig): string {
+    // If user provided a custom transform function, use that
+    if (config?.naming?.transform) {
+      try {
+        // Safely evaluate the transform function
+        const transformFn = new Function(
+          'typeName',
+          `return (${config.naming.transform})(typeName)`,
+        );
+        return transformFn(typeName);
+      } catch (error) {
+        console.warn(
+          `Warning: Invalid naming transform function, falling back to default: ${error}`,
+        );
+      }
+    }
+
+    // Fall back to predefined naming conventions
+    const namingConfig: FileNamingConfig = {
+      convention: config?.naming?.convention ?? 'camelCase',
+      suffix: config?.naming?.suffix ?? '', // Don't add suffix here since outputFile template already has .builder.ts
+    };
+
+    // Use naming service to format just the type name part
+    const baseFileName = this.namingService.formatFileName(typeName, namingConfig);
+    // Remove any .ts extension and return just the formatted type name
+    return baseFileName.replace(/\.ts$/, '').replace(/\.builder$/, '');
   }
 
   private async runParallel(
@@ -61,13 +114,16 @@ export class TaskRunner {
     generator: FluentGen,
     dryRun: boolean,
     onProgress?: (message: string) => void,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskRunResult> {
     const totalOperations = batchGroups.length + individualTasks.length;
     onProgress?.(`Processing ${totalOperations} operations in parallel...`);
 
     const allPromises = [
-      ...batchGroups.map(group => this.executeBatchGroup(group, generator, dryRun)),
-      ...individualTasks.map(task => this.executeTask(task, generator, dryRun)),
+      ...batchGroups.map(group =>
+        this.executeBatchGroup(group, generator, dryRun, generatorConfig),
+      ),
+      ...individualTasks.map(task => this.executeTask(task, generator, dryRun, generatorConfig)),
     ];
 
     const results = await Promise.allSettled(allPromises);
@@ -105,6 +161,7 @@ export class TaskRunner {
     generator: FluentGen,
     dryRun: boolean,
     onProgress?: (message: string) => void,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskRunResult> {
     let successCount = 0;
     let failCount = 0;
@@ -116,7 +173,7 @@ export class TaskRunner {
         `Processing batch ${chalk.cyan(group.file)} - ${chalk.cyan(group.typeNames.join(', '))}...`,
       );
 
-      const batchResults = await this.executeBatchGroup(group, generator, dryRun);
+      const batchResults = await this.executeBatchGroup(group, generator, dryRun, generatorConfig);
       taskResults.push(...batchResults);
 
       batchResults.forEach(taskWithResult => {
@@ -141,7 +198,7 @@ export class TaskRunner {
         onProgress?.(`Scanning ${chalk.cyan(task.file)}...`);
       }
 
-      const taskWithResult = await this.executeTask(task, generator, dryRun);
+      const taskWithResult = await this.executeTask(task, generator, dryRun, generatorConfig);
       taskResults.push(taskWithResult);
 
       if ('ok' in taskWithResult.result && taskWithResult.result.ok) {
@@ -167,11 +224,12 @@ export class TaskRunner {
     task: Task,
     generator: FluentGen,
     dryRun: boolean,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskWithResult> {
     if (task.type === 'generate') {
-      return this.executeGenerateTask(task, generator, dryRun);
+      return this.executeGenerateTask(task, generator, dryRun, generatorConfig);
     } else {
-      return this.executeScanTask(task, generator, dryRun);
+      return this.executeScanTask(task, generator, dryRun, generatorConfig);
     }
   }
 
@@ -179,12 +237,13 @@ export class TaskRunner {
     task: GenerateTask,
     generator: FluentGen,
     dryRun: boolean,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskWithResult> {
     const result = await generator.generateBuilder(task.file, task.typeName);
 
     if (isOk(result) && !dryRun && task.outputFile) {
       const outputPath = this.fileService.resolveOutputPath(task.outputFile, {
-        type: task.typeName.toLowerCase(),
+        type: this.formatTypeName(task.typeName, generatorConfig),
         file: path.basename(task.file, '.ts'),
       });
       await this.fileService.writeOutput(outputPath, result.value);
@@ -197,6 +256,7 @@ export class TaskRunner {
     task: ScanTask,
     generator: FluentGen,
     dryRun: boolean,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskWithResult> {
     const result = await generator.scanAndGenerate(task.file);
 
@@ -207,7 +267,7 @@ export class TaskRunner {
           const [file, type] = keyParts as [string, string];
           const outputPath = this.fileService.resolveOutputPath(task.outputFile, {
             file: path.basename(file, '.ts'),
-            type: type.toLowerCase(),
+            type: this.formatTypeName(type, generatorConfig),
           });
           await this.fileService.writeOutput(outputPath, code);
         }
@@ -217,7 +277,7 @@ export class TaskRunner {
     return { ...task, result };
   }
 
-  private groupTasksByOutputDir(tasks: Task[]): TaskGroup[] {
+  private groupTasksByOutputDir(tasks: Task[], generatorConfig?: GeneratorConfig): TaskGroup[] {
     const groups = new Map<string, Task[]>();
 
     for (const task of tasks) {
@@ -230,7 +290,8 @@ export class TaskRunner {
 
       // Resolve output directory from the template
       const outputPath = this.fileService.resolveOutputPath(task.outputFile, {
-        type: task.type === 'generate' ? task.typeName.toLowerCase() : 'scan',
+        type:
+          task.type === 'generate' ? this.formatTypeName(task.typeName, generatorConfig) : 'scan',
         file: path.basename(task.file, '.ts'),
       });
       const outputDir = path.dirname(outputPath);
@@ -333,6 +394,7 @@ export class TaskRunner {
     group: BatchTaskGroup,
     generator: FluentGen,
     dryRun: boolean,
+    generatorConfig?: GeneratorConfig,
   ): Promise<TaskWithResult[]> {
     let result;
 
@@ -375,7 +437,7 @@ export class TaskRunner {
 
           if (task && task.outputFile) {
             const outputPath = this.fileService.resolveOutputPath(task.outputFile, {
-              type: task.typeName.toLowerCase(),
+              type: this.formatTypeName(task.typeName, generatorConfig),
               file: path.basename(task.file, '.ts'),
             });
             outputMap.set(outputPath, code);

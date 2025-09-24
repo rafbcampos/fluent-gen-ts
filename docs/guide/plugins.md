@@ -1,604 +1,642 @@
 # Plugin System
 
 The plugin system allows you to extend fluent-gen-ts with custom functionality,
-validation, transformations, and custom methods.
+validation, transformations, custom methods, and advanced naming strategies.
+Create powerful, reusable plugins that can transform how builders are generated.
 
-## Plugin Basics
+## Quick Start
 
-A plugin is a JavaScript/TypeScript module that exports an object implementing
-the `Plugin` interface:
+Create your first plugin in under a minute:
 
 ```typescript
-interface Plugin {
-  readonly name: string;
-  readonly version: string;
-  readonly imports?: PluginImports;
+// my-plugin.ts
+import { createPlugin } from 'fluent-gen-ts';
 
-  // Lifecycle hooks (all optional)
-  beforeParse?: (context: ParseContext) => Result<ParseContext>;
-  afterParse?: (context: ParseContext, type: Type) => Result<Type>;
-  beforeResolve?: (context: ResolveContext) => Result<ResolveContext>;
-  afterResolve?: (
-    context: ResolveContext,
-    typeInfo: TypeInfo,
-  ) => Result<TypeInfo>;
-  beforeGenerate?: (context: GenerateContext) => Result<GenerateContext>;
-  afterGenerate?: (code: string, context: GenerateContext) => Result<string>;
+const plugin = createPlugin('my-awesome-plugin', '1.0.0')
+  .setDescription('Adds custom validation and methods')
 
-  // Transformation hooks
-  transformType?: (type: Type, typeInfo: TypeInfo) => Result<TypeInfo>;
-  transformProperty?: (property: PropertyInfo) => Result<PropertyInfo>;
-  transformBuildMethod?: (context: BuildMethodContext) => Result<string>;
-  transformPropertyMethod?: (
-    context: PropertyMethodContext,
-  ) => Result<PropertyMethodTransform>;
-  transformValue?: (context: ValueContext) => Result<ValueTransform | null>;
-  transformImports?: (
-    context: ImportTransformContext,
-  ) => Result<ImportTransformContext>;
+  // Transform property methods
+  .transformPropertyMethods(builder =>
+    builder
+      .when(ctx => ctx.property.name === 'email')
+      .setParameter('string')
+      .setExtractor('String(value)')
+      .setValidator(
+        `
+      if (value && !value.includes('@')) {
+        throw new Error('Invalid email format');
+      }
+    `,
+      )
+      .done(),
+  )
 
-  // Extension hooks
-  addCustomMethods?: (
-    context: BuilderContext,
-  ) => Result<readonly CustomMethod[]>;
+  // Add custom methods
+  .addMethod(method =>
+    method
+      .name('withRandomId')
+      .param('prefix', 'string', { defaultValue: '"user"' })
+      .returns('this')
+      .implementation(
+        `
+      const id = \`\${prefix}-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
+      return this.withId(id);
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Generates and sets a random ID\\n * @param prefix - ID prefix (default: "user")\\n */',
+      ),
+  )
+
+  .build();
+
+export default plugin;
+```
+
+Add to your configuration:
+
+```json
+{
+  "plugins": ["./my-plugin.ts"],
+  "targets": [{ "file": "src/types.ts", "types": ["User"] }]
 }
 ```
 
-## Plugin Lifecycle
+## Fluent Plugin Builder API
 
-Plugins hook into various stages of the generation process:
+The fluent plugin builder provides a chainable, type-safe way to create plugins:
 
-```mermaid
-graph TD
-    A[Parse TS File] --> B[beforeParse]
-    B --> C[Parse Types]
-    C --> D[afterParse]
-    D --> E[beforeResolve]
-    E --> F[Resolve Types]
-    F --> G[afterResolve]
-    G --> H[transformType]
-    H --> I[transformProperty]
-    I --> J[beforeGenerate]
-    J --> K[Generate Builder]
-    K --> L[transformPropertyMethod]
-    L --> M[addCustomMethods]
-    M --> N[transformBuildMethod]
-    N --> O[afterGenerate]
-    O --> P[transformImports]
-    P --> Q[Write Output]
-```
-
-## Simple Plugin Example
-
-Here's a basic validation plugin:
+### Basic Plugin Structure
 
 ```typescript
-// validation-plugin.js
-import { ok } from 'fluent-gen-ts';
+import { createPlugin, primitive, object, union } from 'fluent-gen-ts';
 
-export default {
-  name: 'validation-plugin',
-  version: '1.0.0',
+const plugin = createPlugin('comprehensive-plugin', '1.0.0')
+  .setDescription('A comprehensive plugin example')
 
-  transformPropertyMethod(context) {
-    const { property } = context;
+  // Configure imports
+  .requireImports(imports =>
+    imports
+      .addInternalTypes('../types.js', ['CustomType', 'ValidationRule'])
+      .addExternal('lodash', ['isEmail', 'isEmpty'])
+      .addExternalDefault('moment', 'moment'),
+  )
 
-    // Add email validation
-    if (property.name === 'email') {
-      return ok({
-        validate: `
-    if (value && !value.includes('@')) {
-      throw new Error('Invalid email format');
-    }`,
-      });
+  // Transform property methods with powerful matching
+  .transformPropertyMethods(builder =>
+    builder
+      // Handle primitive types
+      .when(ctx => ctx.type.isPrimitive('string'))
+      .setParameter('string | CustomString')
+      .setExtractor('normalizeString(value)')
+      .setValidator('validateString(value)')
+      .done()
+
+      // Handle complex object types
+      .when(ctx => ctx.type.matches(object('Address')))
+      .setParameter('Address | FluentBuilder<Address>')
+      .setExtractor('resolveAddress(value)')
+      .done()
+
+      // Handle union types
+      .when(ctx => ctx.type.matches(union().containing(primitive('string'))))
+      .setParameter('string | number')
+      .setExtractor('String(value)')
+      .done(),
+  )
+
+  // Add multiple custom methods
+  .addMethod(method =>
+    method.name('withValidatedEmail').param('email', 'string').returns('this')
+      .implementation(`
+      if (!isEmail(email)) {
+        throw new Error('Invalid email format');
+      }
+      return this.withEmail(email);
+    `),
+  )
+
+  .addMethod(method =>
+    method.name('withTimestamps').returns('this').implementation(`
+      const now = new Date();
+      return this.withCreatedAt(now).withUpdatedAt(now);
+    `),
+  )
+
+  // Transform build method
+  .transformBuildMethod(transform =>
+    transform
+      .insertBefore(
+        'return this.buildWithDefaults',
+        `
+      // Auto-generate ID if not provided
+      if (!this.has('id')) {
+        this.set('id', generateId());
+      }
+
+      // Validate required fields
+      this.validateRequiredFields();
+    `,
+      )
+      .insertAfter(
+        'return this.buildWithDefaults',
+        `
+      // Post-build validation
+      this.validateBuiltObject(result);
+    `,
+      ),
+  )
+
+  .build();
+```
+
+### Type Matching System
+
+The plugin system provides powerful type matching capabilities:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  // Primitive type matching
+  .when(ctx => ctx.type.isPrimitive('string'))
+  .when(ctx => ctx.type.isPrimitive('number'))
+  .when(ctx => ctx.type.isPrimitive('boolean'))
+
+  // Object type matching
+  .when(ctx => ctx.type.matches(object('User')))
+  .when(ctx => ctx.type.matches(object().withProperty('email', primitive('string'))))
+
+  // Union type matching
+  .when(ctx => ctx.type.matches(union().containing(primitive('string'))))
+  .when(ctx => ctx.type.matches(union(['admin', 'user', 'guest'])))
+
+  // Array type matching
+  .when(ctx => ctx.type.matches(array(primitive('string'))))
+  .when(ctx => ctx.type.matches(array(object('Item'))))
+
+  // Generic type matching
+  .when(ctx => ctx.type.matches(generic('Promise', [primitive('string')])))
+  .when(ctx => ctx.type.matches(generic('Array', [object('User')])))
+
+  // Complex conditional matching
+  .when(ctx =>
+    ctx.property.name === 'email' &&
+    ctx.type.isPrimitive('string') &&
+    ctx.builderName === 'UserBuilder'
+  )
+
+  // Property name patterns
+  .when(ctx => ctx.property.name.endsWith('Id'))
+  .when(ctx => ctx.property.name.startsWith('is'))
+  .when(ctx => /^[A-Z]/.test(ctx.property.name))
+)
+```
+
+### Import Management
+
+Plugins can intelligently manage imports:
+
+```typescript
+.requireImports(imports => imports
+  // Internal type imports (relative paths)
+  .addInternalTypes('../types.js', ['CustomType', 'ValidationRule'])
+  .addInternalTypes('./utils.js', ['helper', 'validator'])
+
+  // External library imports
+  .addExternal('lodash', ['isEmail', 'isEmpty', 'isString'])
+  .addExternalDefault('moment', 'moment')
+  .addExternal('uuid', ['v4 as generateId'])
+
+  // External dependencies
+  .addExternalDefault('axios', 'axios')
+  .addExternal('zod', ['z'])
+)
+```
+
+### Auxiliary Data Storage
+
+Plugins can store and retrieve auxiliary data for advanced functionality:
+
+```typescript
+// Store templates and deferred functions
+.addMethod(method => method
+  .name('withTemplate')
+  .param('template', '(ctx: BaseBuildContext) => string')
+  .returns('this')
+  .implementation(`
+    // Store template function in auxiliary data
+    return this.pushAuxiliary('templates', template);
+  `)
+)
+
+// Process auxiliary data during build
+.transformBuildMethod(transform => transform
+  .insertBefore('return this.buildWithDefaults', `
+    // Process stored templates
+    const templates = this.getAuxiliaryArray('templates');
+    if (templates.length > 0 && context) {
+      for (const template of templates) {
+        try {
+          const result = template(context);
+          // Use template result
+          this.processTemplateResult(result);
+        } catch (error) {
+          console.warn('Template execution failed:', error);
+        }
+      }
     }
-
-    // Add age validation
-    if (property.name === 'age') {
-      return ok({
-        validate: `
-    if (value !== undefined && (value < 0 || value > 150)) {
-      throw new Error('Age must be between 0 and 150');
-    }`,
-      });
-    }
-
-    return ok({});
-  },
-};
-```
-
-Usage:
-
-```javascript
-// fluent.config.js
-export default {
-  plugins: ['./validation-plugin.js'],
-  // ... other config
-};
-```
-
-## Plugin Hook Reference
-
-### Lifecycle Hooks
-
-#### `beforeParse`
-
-Called before parsing the TypeScript file.
-
-```typescript
-beforeParse(context: ParseContext): Result<ParseContext>
-
-interface ParseContext {
-  readonly sourceFile: string;
-  readonly typeName: string;
-}
-```
-
-#### `afterParse`
-
-Called after parsing, receives the parsed Type.
-
-```typescript
-afterParse(context: ParseContext, type: Type): Result<Type>
-```
-
-#### `beforeResolve` / `afterResolve`
-
-Called before/after type resolution.
-
-```typescript
-beforeResolve(context: ResolveContext): Result<ResolveContext>
-afterResolve(context: ResolveContext, typeInfo: TypeInfo): Result<TypeInfo>
-
-interface ResolveContext {
-  readonly type: Type;
-  readonly symbol?: Symbol;
-  readonly sourceFile?: string;
-  readonly typeName?: string;
-}
-```
-
-#### `beforeGenerate` / `afterGenerate`
-
-Called before/after code generation.
-
-```typescript
-beforeGenerate(context: GenerateContext): Result<GenerateContext>
-afterGenerate(code: string, context: GenerateContext): Result<string>
-
-interface GenerateContext {
-  readonly resolvedType: ResolvedType;
-  readonly options: Record<string, unknown>;
-}
-```
-
-### Transformation Hooks
-
-#### `transformType`
-
-Transform the resolved type information.
-
-```typescript
-transformType(type: Type, typeInfo: TypeInfo): Result<TypeInfo>
-```
-
-#### `transformProperty`
-
-Transform individual property information.
-
-```typescript
-transformProperty(property: PropertyInfo): Result<PropertyInfo>
-
-interface PropertyInfo {
-  name: string;
-  type: TypeInfo;
-  isOptional: boolean;
-  jsDoc?: string;
-}
-```
-
-#### `transformPropertyMethod`
-
-Customize how property methods are generated.
-
-```typescript
-transformPropertyMethod(context: PropertyMethodContext): Result<PropertyMethodTransform>
-
-interface PropertyMethodContext {
-  readonly property: PropertyInfo;
-  readonly propertyType: TypeInfo;
-  readonly builderName: string;
-  readonly typeName: string;
-
-  // Helper methods
-  isType(kind: TypeKind): boolean;
-  isArrayType(): boolean;
-  isUnionType(): boolean;
-  isPrimitiveType(name?: string): boolean;
-}
-
-interface PropertyMethodTransform {
-  readonly parameterType?: string;
-  readonly extractValue?: string;
-  readonly validate?: string;
-}
-```
-
-#### `transformBuildMethod`
-
-Customize the build method implementation.
-
-```typescript
-transformBuildMethod(context: BuildMethodContext): Result<string>
-
-interface BuildMethodContext {
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly buildMethodCode: string;
-  readonly properties: readonly PropertyInfo[];
-  readonly genericParams: string;
-  readonly genericConstraints: string;
-}
-```
-
-#### `transformValue`
-
-Transform property values during build.
-
-```typescript
-transformValue(context: ValueContext): Result<ValueTransform | null>
-
-interface ValueContext {
-  readonly property: string;
-  readonly valueVariable: string;
-  readonly type: TypeInfo;
-  readonly isOptional: boolean;
-}
-
-interface ValueTransform {
-  readonly condition?: string;
-  readonly transform: string;
-}
-```
-
-#### `transformImports`
-
-Modify import statements in generated code.
-
-```typescript
-transformImports(context: ImportTransformContext): Result<ImportTransformContext>
-
-interface ImportTransformContext {
-  readonly imports: readonly string[];
-  readonly resolvedType: ResolvedType;
-  readonly isGeneratingMultiple: boolean;
-  readonly hasExistingCommon: boolean;
-}
-```
-
-### Extension Hooks
-
-#### `addCustomMethods`
-
-Add custom methods to generated builders.
-
-```typescript
-addCustomMethods(context: BuilderContext): Result<readonly CustomMethod[]>
-
-interface BuilderContext {
-  readonly typeName: string;
-  readonly builderName: string;
-  readonly properties: readonly PropertyInfo[];
-  readonly genericParams: string;
-  readonly genericConstraints: string;
-}
-
-interface CustomMethod {
-  readonly name: string;
-  readonly signature: string;
-  readonly implementation: string;
-  readonly jsDoc?: string;
-}
+  `)
+)
 ```
 
 ## Advanced Plugin Examples
 
-### Custom Methods Plugin
-
-Add domain-specific methods to builders:
+### Comprehensive Validation Plugin
 
 ```typescript
-// custom-methods-plugin.js
-import { ok } from 'fluent-gen-ts';
+import { createPlugin, primitive, object, array } from 'fluent-gen-ts';
 
-export default {
-  name: 'custom-methods-plugin',
-  version: '1.0.0',
+const validationPlugin = createPlugin('advanced-validation', '1.0.0')
+  .setDescription('Advanced validation with custom rules and error messages')
 
-  addCustomMethods(context) {
-    const methods = [];
+  .requireImports(imports =>
+    imports
+      .addExternalLibrary('validator', ['isEmail', 'isURL', 'isLength'])
+      .addInternalTypes('./validation-rules.js', ['ValidationRule']),
+  )
 
-    // Add pricing methods for Product builders
-    if (context.typeName === 'Product') {
-      methods.push({
-        name: 'withDiscountedPrice',
-        signature:
-          'withDiscountedPrice(originalPrice: number, discountPercent: number): this',
-        implementation: `
-  withDiscountedPrice(originalPrice: number, discountPercent: number): this {
-    const discountedPrice = originalPrice * (1 - discountPercent / 100);
-    return this.withPrice(discountedPrice);
-  }`,
-        jsDoc: `/**
-   * Sets the price with a discount applied
-   * @param originalPrice - The original price
-   * @param discountPercent - The discount percentage (0-100)
-   */`,
-      });
+  .transformPropertyMethods(builder =>
+    builder
+      // Email validation
+      .when(
+        ctx =>
+          ctx.property.name === 'email' || ctx.property.name.endsWith('Email'),
+      )
+      .setValidator(
+        `
+      if (value && !isEmail(value)) {
+        throw new ValidationError(\`Invalid email format for \${property.name}\`, {
+          field: '${ctx.property.name}',
+          value,
+          rule: 'email'
+        });
+      }
+    `,
+      )
+      .done()
 
-      methods.push({
-        name: 'withFormattedPrice',
-        signature:
-          'withFormattedPrice(price: number, currency: string = "USD"): this',
-        implementation: `
-  withFormattedPrice(price: number, currency: string = "USD"): this {
-    const formatted = new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency
-    }).format(price);
-    return this.withPrice(price).withDisplayPrice(formatted);
-  }`,
-        jsDoc: `/**
-   * Sets price and formatted display price
-   * @param price - The numeric price
-   * @param currency - Currency code (default: USD)
-   */`,
-      });
-    }
+      // URL validation
+      .when(ctx => ctx.property.name.endsWith('Url'))
+      .setValidator(
+        `
+      if (value && !isURL(value)) {
+        throw new ValidationError('Invalid URL format', {
+          field: '${ctx.property.name}',
+          value,
+          rule: 'url'
+        });
+      }
+    `,
+      )
+      .done()
 
-    // Add utility methods for User builders
-    if (context.typeName === 'User') {
-      methods.push({
-        name: 'withRandomId',
-        signature: 'withRandomId(prefix: string = "user"): this',
-        implementation: `
-  withRandomId(prefix: string = "user"): this {
-    const id = \`\${prefix}-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
-    return this.withId(id);
-  }`,
-        jsDoc: `/**
-   * Generates and sets a random ID
-   * @param prefix - ID prefix (default: "user")
-   */`,
-      });
+      // String length validation
+      .when(ctx => ctx.type.isPrimitive('string'))
+      .setValidator(
+        `
+      if (value && !isLength(value, { min: 1, max: 255 })) {
+        throw new ValidationError('String length must be between 1-255 characters', {
+          field: '${ctx.property.name}',
+          value,
+          rule: 'length'
+        });
+      }
+    `,
+      )
+      .done()
 
-      methods.push({
-        name: 'asAdmin',
-        signature: 'asAdmin(): this',
-        implementation: `
-  asAdmin(): this {
-    return this.withRole('admin').withIsActive(true);
-  }`,
-        jsDoc: `/**
-   * Configure as admin user
-   */`,
-      });
-    }
+      // Array validation
+      .when(ctx => ctx.type.isArray())
+      .setValidator(
+        `
+      if (value && !Array.isArray(value)) {
+        throw new ValidationError('Expected array value', {
+          field: '${ctx.property.name}',
+          value,
+          rule: 'array'
+        });
+      }
+      if (value && value.length === 0) {
+        console.warn(\`Empty array provided for \${property.name}\`);
+      }
+    `,
+      )
+      .done()
 
-    return ok(methods);
-  },
-};
+      // Numeric range validation
+      .when(
+        ctx =>
+          ctx.type.isPrimitive('number') &&
+          (ctx.property.name === 'age' || ctx.property.name === 'price'),
+      )
+      .setValidator(
+        `
+      const min = ${ctx.property.name === 'age' ? '0' : '0.01'};
+      const max = ${ctx.property.name === 'age' ? '150' : 'Infinity'};
+      if (value !== undefined && (value < min || value > max)) {
+        throw new ValidationError(\`\${property.name} must be between \${min} and \${max}\`, {
+          field: '${ctx.property.name}',
+          value,
+          rule: 'range',
+          min,
+          max
+        });
+      }
+    `,
+      )
+      .done(),
+  )
+
+  .addMethod(method =>
+    method
+      .name('validate')
+      .returns('ValidationResult')
+      .implementation(
+        `
+      const errors = [];
+      const warnings = [];
+
+      // Validate all current values
+      try {
+        const built = this.build();
+        // Additional cross-field validation
+        this.validateCrossFields(built, errors, warnings);
+      } catch (error) {
+        errors.push(error);
+      }
+
+      return {
+        isValid: errors.length === 0,
+        errors,
+        warnings
+      };
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Validates the current builder state\\n * @returns Validation result with errors and warnings\\n */',
+      ),
+  )
+
+  .addMethod(method =>
+    method
+      .name('validateAndBuild')
+      .returns('T')
+      .implementation(
+        `
+      const validation = this.validate();
+      if (!validation.isValid) {
+        throw new ValidationError('Validation failed', {
+          errors: validation.errors
+        });
+      }
+      return this.build();
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Validates and builds the object, throwing on validation failure\\n */',
+      ),
+  )
+
+  .build();
+
+export default validationPlugin;
 ```
 
-### Type Transformation Plugin
-
-Transform types during resolution:
+### Custom Naming Transform Plugin
 
 ```typescript
-// type-transform-plugin.js
-import { ok } from 'fluent-gen-ts';
+const namingPlugin = createPlugin('advanced-naming', '1.0.0')
+  .setDescription('Advanced naming transformations and conventions')
 
-export default {
-  name: 'type-transform-plugin',
-  version: '1.0.0',
+  .transformPropertyMethods(builder =>
+    builder
+      // Handle Asset suffix types
+      .when(ctx => ctx.typeName.endsWith('Asset'))
+      .setParameter(
+        `${ctx.typeName.replace(/Asset$/, '')} | FluentBuilder<${ctx.typeName.replace(/Asset$/, '')}>`,
+      )
+      .setExtractor('{ asset: value }')
+      .done()
 
-  transformProperty(property) {
-    // Convert Date strings to Date objects
-    if (
-      property.type.name === 'string' &&
-      (property.name.includes('Date') || property.name.includes('Time'))
-    ) {
-      return ok({
-        ...property,
-        type: {
-          ...property.type,
-          name: 'Date',
-        },
-      });
-    }
+      // Handle ID fields with custom naming
+      .when(ctx => ctx.property.name.endsWith('Id'))
+      .setParameter('string | number')
+      .setExtractor('String(value)')
+      .setValidator(
+        `
+      if (value && String(value).length < 1) {
+        throw new Error('ID cannot be empty');
+      }
+    `,
+      )
+      .done()
 
-    // Add validation constraints
-    if (property.name === 'email') {
-      return ok({
-        ...property,
-        jsDoc: `${property.jsDoc || ''}\n@pattern email format required`,
-      });
-    }
+      // Boolean fields with 'is' prefix
+      .when(
+        ctx =>
+          ctx.property.name.startsWith('is') && ctx.type.isPrimitive('boolean'),
+      )
+      .setParameter('boolean | (() => boolean)')
+      .setExtractor('typeof value === "function" ? value() : Boolean(value)')
+      .done(),
+  )
 
-    return ok(property);
-  },
+  .addMethod(method =>
+    method.name('withNormalizedName').param('name', 'string').returns('this')
+      .implementation(`
+      const normalized = name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+      return this.withName(normalized);
+    `),
+  )
 
-  transformValue(context) {
-    // Transform string dates to Date objects
-    if (context.type.name === 'Date' && context.property.includes('Date')) {
-      return ok({
-        condition: `typeof ${context.valueVariable} === 'string'`,
-        transform: `new Date(${context.valueVariable})`,
-      });
-    }
-
-    return ok(null);
-  },
-};
+  .build();
 ```
 
-### Import Transformation Plugin
-
-Modify imports in generated code:
+### Database Integration Plugin
 
 ```typescript
-// import-transform-plugin.js
-import { ok } from 'fluent-gen-ts';
+const dbPlugin = createPlugin('database-integration', '1.0.0')
+  .setDescription('Database integration with ORM support')
 
-export default {
-  name: 'import-transform-plugin',
-  version: '1.0.0',
+  .requireImports(imports =>
+    imports
+      .addExternalLibrary('prisma', ['PrismaClient'])
+      .addExternalLibrary('uuid', ['v4 as uuidv4']),
+  )
 
-  imports: {
-    runtime: ['dayjs'], // Add dayjs as runtime dependency
-    types: ['Moment'], // Add Moment as type import
-  },
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return this.buildWithDefaults',
+      `
+      // Auto-generate UUID for id field
+      if (!this.has('id')) {
+        this.set('id', uuidv4());
+      }
 
-  transformImports(context) {
-    const customImports = [
-      ...context.imports,
-      'import dayjs from "dayjs";',
-      'import type { Moment } from "moment";',
-    ];
+      // Auto-set timestamps
+      const now = new Date();
+      if (!this.has('createdAt')) {
+        this.set('createdAt', now);
+      }
+      this.set('updatedAt', now);
+    `,
+    ),
+  )
 
-    return ok({
-      ...context,
-      imports: customImports,
-    });
-  },
+  .addMethod(method =>
+    method
+      .name('save')
+      .param('prisma', 'PrismaClient')
+      .returns(`Promise<${method.typeName}>`)
+      .implementation(
+        `
+      const data = this.build();
+      const tableName = '${method.typeName.toLowerCase()}';
+      return prisma[tableName].create({ data });
+    `,
+      )
+      .jsDoc('/**\\n * Saves the built object to database via Prisma\\n */'),
+  )
 
-  addCustomMethods(context) {
-    if (context.properties.some(p => p.type.name === 'Date')) {
-      return ok([
-        {
-          name: 'withCurrentTimestamp',
-          signature: 'withCurrentTimestamp(): this',
-          implementation: `
-  withCurrentTimestamp(): this {
-    return this.withCreatedAt(dayjs().toDate());
-  }`,
-          jsDoc: `/**
-   * Sets createdAt to current timestamp using dayjs
-   */`,
-        },
-      ]);
-    }
+  .addMethod(method =>
+    method
+      .name('saveOrUpdate')
+      .param('prisma', 'PrismaClient')
+      .param('where', 'object')
+      .returns(`Promise<${method.typeName}>`).implementation(`
+      const data = this.build();
+      const tableName = '${method.typeName.toLowerCase()}';
+      return prisma[tableName].upsert({
+        where,
+        update: data,
+        create: data
+      });
+    `),
+  )
 
-    return ok([]);
-  },
-};
+  .build();
 ```
 
-### Build Method Transformation Plugin
-
-Customize the build method:
+### Testing Utilities Plugin
 
 ```typescript
-// build-transform-plugin.js
-import { ok } from 'fluent-gen-ts';
+const testingPlugin = createPlugin('testing-utilities', '1.0.0')
+  .setDescription('Enhanced testing utilities and factories')
 
-export default {
-  name: 'build-transform-plugin',
-  version: '1.0.0',
+  .requireImports(imports => imports.addExternalLibrary('faker', ['faker']))
 
-  transformBuildMethod(context) {
-    // Add automatic timestamp for entities with createdAt
-    if (context.properties.some(p => p.name === 'createdAt')) {
-      const customBuildMethod = `
-  build(context?: BaseBuildContext): ${context.typeName} {
-    // Auto-set createdAt if not provided
-    if (!this.has('createdAt')) {
-      this.set('createdAt', new Date());
-    }
+  .addMethod(method =>
+    method
+      .name('withFakeData')
+      .returns('this')
+      .implementation(
+        `
+      // Generate fake data based on property names and types
+      ${method.properties
+        .map(prop => {
+          if (prop.name === 'email')
+            return `this.withEmail(faker.internet.email());`;
+          if (prop.name === 'name')
+            return `this.withName(faker.person.fullName());`;
+          if (prop.name.includes('phone'))
+            return `this.withPhone(faker.phone.number());`;
+          if (prop.type.name === 'Date')
+            return `this.with${prop.name.charAt(0).toUpperCase() + prop.name.slice(1)}(faker.date.recent());`;
+          if (prop.type.name === 'number' && prop.name === 'age')
+            return `this.withAge(faker.number.int({ min: 18, max: 80 }));`;
+          return '';
+        })
+        .filter(Boolean)
+        .join('\\n      ')}
 
-    // Auto-set updatedAt
-    if (this.has('updatedAt') && !this.peek('updatedAt')) {
-      this.set('updatedAt', new Date());
-    }
+      return this;
+    `,
+      )
+      .jsDoc('/**\\n * Populates builder with realistic fake data\\n */'),
+  )
 
-    ${context.buildMethodCode.replace('build(context?: BaseBuildContext): ', '')}
-  }`;
+  .addMethod(method =>
+    method
+      .name('buildMany')
+      .param('count', 'number', { defaultValue: '5' })
+      .returns(`${method.typeName}[]`).implementation(`
+      return Array.from({ length: count }, () =>
+        this.withFakeData().build()
+      );
+    `),
+  )
 
-      return ok(customBuildMethod);
-    }
+  .addMethod(method =>
+    method.name('asTestDouble').returns('this').implementation(`
+      // Set test-specific values
+      return this
+        .withId('test-id')
+        .withCreatedAt(new Date('2024-01-01'))
+        .withUpdatedAt(new Date('2024-01-01'));
+    `),
+  )
 
-    return ok(context.buildMethodCode);
-  },
-};
+  .build();
 ```
 
-## Plugin Context Helpers
+## Configuration and Usage
 
-The `PropertyMethodContext` provides helpful methods:
+### File Naming Configuration
 
-```typescript
-// Example plugin using context helpers
-export default {
-  name: 'conditional-plugin',
-  version: '1.0.0',
+Configure flexible filename generation:
 
-  transformPropertyMethod(context) {
-    const { property } = context;
+```json
+{
+  "generator": {
+    "naming": {
+      // Predefined conventions
+      "convention": "camelCase",  // actionAsset.builder.ts
+      "suffix": "builder",
 
-    // Check type kinds
-    if (context.isType('string') && context.property.name.endsWith('Url')) {
-      return ok({
-        validate: `
-    if (value && !value.startsWith('http')) {
-      throw new Error('URL must start with http');
-    }`,
-      });
+      // OR custom transform function
+      "transform": "(typeName) => {
+        const name = typeName.replace(/Asset$/, '');
+        return name.charAt(0).toLowerCase() + name.slice(1);
+      }"
     }
-
-    // Handle arrays differently
-    if (context.isArrayType()) {
-      return ok({
-        validate: `
-    if (value && !Array.isArray(value)) {
-      throw new Error('${property.name} must be an array');
-    }`,
-      });
-    }
-
-    // Handle union types
-    if (context.isUnionType()) {
-      return ok({
-        validate: `
-    const validValues = ${JSON.stringify(context.propertyType.unionTypes)};
-    if (value && !validValues.includes(value)) {
-      throw new Error('Invalid value for ${property.name}');
-    }`,
-      });
-    }
-
-    return ok({});
-  },
-};
+  }
+}
 ```
 
-## Using Plugins
+### Plugin Configuration
 
-### In Configuration File
-
-```javascript
-// fluent.config.js
-export default {
-  plugins: [
-    './plugins/validation.js',
-    './plugins/custom-methods.js',
-    './node_modules/fluent-gen-plugin-timestamps/index.js',
+```json
+{
+  "plugins": [
+    "./plugins/validation.ts",
+    "./plugins/database.ts",
+    "./node_modules/@company/fluent-gen-plugins/dist/index.js"
   ],
-  // ... other config
-};
+  "targets": [
+    {
+      "file": "src/types.ts",
+      "types": ["User", "Product", "Order"],
+      "outputFile": "./src/builders/{type}.builder.ts"
+    }
+  ]
+}
 ```
 
-### Programmatically
+### Programmatic Usage
 
 ```typescript
 import { FluentGen, PluginManager } from 'fluent-gen-ts';
@@ -609,123 +647,134 @@ const pluginManager = new PluginManager();
 pluginManager.register(validationPlugin);
 pluginManager.register(customMethodsPlugin);
 
-const gen = new FluentGen({ pluginManager });
+const gen = new FluentGen({
+  pluginManager,
+  naming: {
+    transform: '(typeName) => typeName.replace(/DTO$/, "").toLowerCase()',
+  },
+});
+
+const result = await gen.generateBuilder('./types.ts', 'UserDTO');
 ```
 
-## Plugin Development Tips
+## Plugin Development Best Practices
 
-### Use Result Type
+### Error Handling
 
-Always return `Result<T>` instead of throwing:
+Always use Result types for proper error handling:
 
 ```typescript
-// ✅ Good
-transformProperty(property) {
-  if (property.name === 'invalid') {
-    return err(new Error('Invalid property name'));
-  }
-  return ok(property);
-}
-
-// ❌ Bad
-transformProperty(property) {
-  if (property.name === 'invalid') {
-    throw new Error('Invalid property name');
-  }
-  return property;
-}
+.transformPropertyMethods(builder => builder
+  .when(ctx => {
+    try {
+      return complexCondition(ctx);
+    } catch (error) {
+      // Handle condition evaluation errors gracefully
+      return false;
+    }
+  })
+  .setValidation(`
+    try {
+      validateValue(value);
+    } catch (error) {
+      throw new ValidationError(\`Validation failed for \${property.name}: \${error.message}\`);
+    }
+  `)
+  .done()
+)
 ```
 
-### Handle Edge Cases
+### TypeScript Integration
+
+Ensure full type safety in your plugins:
 
 ```typescript
-transformPropertyMethod(context) {
-  // Check if property exists
-  if (!context.property) {
-    return ok({});
-  }
+import type {
+  Plugin,
+  PropertyMethodContext,
+  CustomMethod,
+  BuildMethodTransform,
+} from 'fluent-gen-ts';
 
-  // Handle complex types gracefully
-  try {
-    const transform = generateTransform(context);
-    return ok(transform);
-  } catch (error) {
-    return err(new Error(`Transform failed: ${error.message}`));
-  }
-}
+const plugin = createPlugin('typed-plugin', '1.0.0')
+  .transformPropertyMethods(builder =>
+    builder
+      .when((ctx: PropertyMethodContext) => {
+        // Full type safety
+        return ctx.property.name === 'email' && ctx.type.isPrimitive('string');
+      })
+      .setValidator('/* validation code */')
+      .done(),
+  )
+  .build();
 ```
 
-### Test Your Plugins
+### Testing Plugins
 
-Create test files for your plugins:
+Create comprehensive tests for your plugins:
 
 ```typescript
-// test/validation-plugin.test.ts
+// test/plugin.test.ts
 import { describe, it, expect } from 'vitest';
-import validationPlugin from '../plugins/validation.js';
+import { TypeKind } from 'fluent-gen-ts';
+import myPlugin from '../plugins/my-plugin.js';
 
-describe('ValidationPlugin', () => {
-  it('should add email validation', () => {
+describe('MyPlugin', () => {
+  it('should transform email properties', () => {
+    // Create a mock context
     const context = {
-      property: { name: 'email', type: { name: 'string' } },
-      // ... other context
+      property: {
+        name: 'email',
+        type: { kind: TypeKind.Primitive, name: 'string' },
+        optional: false,
+        readonly: false,
+      },
+      propertyType: { kind: TypeKind.Primitive, name: 'string' },
+      typeName: 'User',
+      typeInfo: { kind: TypeKind.Object, name: 'User', properties: [] },
+      builderName: 'UserBuilder',
+      originalTypeString: 'string',
+      type: {
+        isPrimitive: name => name === 'string',
+        // ... other type matcher methods
+      },
     };
 
-    const result = validationPlugin.transformPropertyMethod(context);
+    const result = myPlugin.transformPropertyMethod?.(context);
 
-    expect(result.ok).toBe(true);
-    expect(result.value.validate).toContain('@');
+    if (result.ok) {
+      expect(result.value.validate).toContain('@');
+    }
   });
 });
 ```
 
-## Plugin Distribution
+### Plugin Distribution
 
-### NPM Package
-
-Create a package for reusable plugins:
+Package your plugins for reuse:
 
 ```json
 {
-  "name": "fluent-gen-plugin-validation",
+  "name": "@mycompany/fluent-gen-validation",
   "version": "1.0.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "peerDependencies": {
-    "fluent-gen-ts": "^0.0.1"
-  }
+    "fluent-gen-ts": ">=0.1.0"
+  },
+  "keywords": ["fluent-gen-ts", "plugin", "validation"],
+  "files": ["dist/"]
 }
-```
-
-### Plugin Template
-
-```typescript
-// src/index.ts
-import type { Plugin } from 'fluent-gen-ts';
-import { ok, err } from 'fluent-gen-ts';
-
-export interface PluginOptions {
-  // Plugin configuration options
-}
-
-export function createValidationPlugin(options: PluginOptions = {}): Plugin {
-  return {
-    name: 'validation-plugin',
-    version: '1.0.0',
-
-    transformPropertyMethod(context) {
-      // Implementation
-      return ok({});
-    },
-  };
-}
-
-export default createValidationPlugin();
 ```
 
 ## Next Steps
 
 - See [Advanced Usage](./advanced-usage.md) for complex scenarios
 - Check [Examples](/examples/) for real-world plugin usage
-- Browse the [API Reference](/api/reference) for detailed interfaces
-- Look at the [CLI Commands](./cli-commands.md) for plugin configuration
+- Browse the [Plugin API Reference](../api/reference.md#plugin-creation) for
+  detailed interfaces
+- Look at [CLI Commands](./cli-commands.md) for plugin configuration options
+
+The plugin system is designed to be both powerful and approachable. Start with
+simple transformations and gradually build up to complex, feature-rich plugins
+that can be shared across teams and projects.

@@ -25,9 +25,8 @@ export type {
 export { ok, err, isOk, isErr } from './core/result.js';
 export type { Result } from './core/result.js';
 
-// Plugin system
-export { PluginManager, HookType } from './core/plugin.js';
-export type { Plugin, ParseContext, ResolveContext, GenerateContext } from './core/plugin.js';
+// Plugin system - barrel export everything
+export * from './core/plugin/index.js';
 
 // Runtime utilities for generated builders
 export {

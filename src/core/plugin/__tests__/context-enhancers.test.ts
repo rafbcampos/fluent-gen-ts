@@ -1,0 +1,399 @@
+import { describe, test, expect } from 'vitest';
+import {
+  enhanceParseContext,
+  enhanceResolveContext,
+  enhanceGenerateContext,
+  enhancePropertyMethodContext,
+  enhanceBuilderContext,
+  enhanceValueContext,
+  enhanceBuildMethodContext,
+} from '../context-enhancers.js';
+import { TypeKind } from '../../types.js';
+import type { Type, Symbol } from 'ts-morph';
+
+describe('Context Enhancers', () => {
+  describe('enhanceParseContext', () => {
+    test('should create parse context with sourceFile and typeName', () => {
+      const context = enhanceParseContext('/test/file.ts', 'TestType');
+
+      expect(context).toEqual({
+        sourceFile: '/test/file.ts',
+        typeName: 'TestType',
+      });
+    });
+  });
+
+  describe('enhanceResolveContext', () => {
+    test('should create resolve context with type and symbol', () => {
+      const mockType = {} as Type;
+      const mockSymbol = {} as Symbol;
+
+      const context = enhanceResolveContext(mockType, mockSymbol, '/test/file.ts', 'TestType');
+
+      expect(context).toEqual({
+        type: mockType,
+        symbol: mockSymbol,
+        sourceFile: '/test/file.ts',
+        typeName: 'TestType',
+      });
+    });
+
+    test('should create resolve context without optional properties', () => {
+      const mockType = {} as Type;
+
+      const context = enhanceResolveContext(mockType);
+
+      expect(context).toEqual({
+        type: mockType,
+      });
+    });
+  });
+
+  describe('enhanceGenerateContext', () => {
+    test('should create generate context', () => {
+      const resolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'TestType',
+        typeInfo: { kind: TypeKind.Object as const, properties: [] as const },
+        imports: [],
+        dependencies: [],
+      };
+
+      const context = enhanceGenerateContext(resolvedType, {});
+
+      expect(context.resolvedType).toBe(resolvedType);
+      expect(context.options).toEqual({});
+    });
+  });
+
+  describe('enhancePropertyMethodContext', () => {
+    test('should create property method context with helper methods', () => {
+      const property = {
+        name: 'testProp',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+      const propertyType = { kind: TypeKind.Primitive as const, name: 'string' };
+      const typeInfo = { kind: TypeKind.Object as const, properties: [] as const };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        propertyType,
+        'TestBuilder',
+        'TestType',
+        typeInfo,
+        'string',
+      );
+
+      expect(context.property).toBe(property);
+      expect(context.propertyType).toBe(propertyType);
+      expect(context.builderName).toBe('TestBuilder');
+      expect(context.typeName).toBe('TestType');
+      expect(context.typeInfo).toBe(typeInfo);
+      expect(context.originalTypeString).toBe('string');
+
+      // Test helper methods
+      expect(context.hasGeneric('T')).toBe(false);
+      expect(context.getGenericConstraint('T')).toBeUndefined();
+      expect(context.isOptional()).toBe(false);
+      expect(context.isReadonly()).toBe(false);
+      expect(context.getPropertyPath()).toEqual(['testProp']);
+      expect(context.getMethodName()).toBe('withTestProp');
+    });
+
+    test('should handle generic parameters', () => {
+      const property = {
+        name: 'testProp',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+      const genericParams = [{ name: 'T', constraint: 'string' }];
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+        genericParams,
+      );
+
+      expect(context.hasGeneric('T')).toBe(true);
+      expect(context.hasGeneric('U')).toBe(false);
+      expect(context.getGenericConstraint('T')).toBe('string');
+      expect(context.getGenericConstraint('U')).toBeUndefined();
+    });
+
+    test('should handle kebab-case property names', () => {
+      const property = {
+        name: 'test-prop',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.getMethodName()).toBe('withTestProp');
+    });
+
+    test('should handle snake_case property names', () => {
+      const property = {
+        name: 'test_prop',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.getMethodName()).toBe('withTestProp');
+    });
+
+    test('should handle optional and readonly properties', () => {
+      const property = {
+        name: 'testProp',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: true,
+        readonly: true,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.isOptional()).toBe(true);
+      expect(context.isReadonly()).toBe(true);
+    });
+  });
+
+  describe('enhanceBuilderContext', () => {
+    test('should create builder context with helper methods', () => {
+      const properties = [
+        {
+          name: 'prop1',
+          type: { kind: TypeKind.Primitive as const, name: 'string' },
+          optional: false,
+          readonly: false,
+        },
+        {
+          name: 'prop2',
+          type: { kind: TypeKind.Primitive as const, name: 'number' },
+          optional: true,
+          readonly: false,
+        },
+      ];
+      const typeInfo = { kind: TypeKind.Object as const, properties };
+
+      const context = enhanceBuilderContext(
+        'TestType',
+        typeInfo,
+        'TestBuilder',
+        properties,
+        '<T>',
+        'T extends string',
+      );
+
+      expect(context.typeName).toBe('TestType');
+      expect(context.typeInfo).toBe(typeInfo);
+      expect(context.builderName).toBe('TestBuilder');
+      expect(context.properties).toBe(properties);
+      expect(context.genericParams).toBe('<T>');
+      expect(context.genericConstraints).toBe('T extends string');
+
+      // Test helper methods
+      expect(context.hasProperty('prop1')).toBe(true);
+      expect(context.hasProperty('nonexistent')).toBe(false);
+      expect(context.getProperty('prop1')).toBe(properties[0]);
+      expect(context.getProperty('nonexistent')).toBeUndefined();
+      expect(context.getRequiredProperties()).toEqual([properties[0]]);
+      expect(context.getOptionalProperties()).toEqual([properties[1]]);
+    });
+  });
+
+  describe('enhanceValueContext', () => {
+    test('should create value context with type checker', () => {
+      const type = { kind: TypeKind.Primitive as const, name: 'string' };
+      const context = enhanceValueContext('testProp', 'testValue', type, false);
+
+      expect(context.property).toBe('testProp');
+      expect(context.valueVariable).toBe('testValue');
+      expect(context.type).toBe(type);
+      expect(context.isOptional).toBe(false);
+      expect(context.typeChecker).toBeDefined();
+    });
+  });
+
+  describe('enhanceBuildMethodContext', () => {
+    test('should create build method context', () => {
+      const properties = [
+        {
+          name: 'prop1',
+          type: { kind: TypeKind.Primitive as const, name: 'string' },
+          optional: false,
+          readonly: false,
+        },
+      ];
+      const typeInfo = { kind: TypeKind.Object as const, properties };
+      const resolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'TestType',
+        typeInfo,
+        imports: [],
+        dependencies: [],
+      };
+
+      const context = enhanceBuildMethodContext(
+        'TestType',
+        typeInfo,
+        'TestBuilder',
+        'build() { return this.values; }',
+        properties,
+        {},
+        resolvedType,
+        '<T>',
+        'T extends string',
+      );
+
+      expect(context.typeName).toBe('TestType');
+      expect(context.typeInfo).toBe(typeInfo);
+      expect(context.builderName).toBe('TestBuilder');
+      expect(context.buildMethodCode).toBe('build() { return this.values; }');
+      expect(context.properties).toBe(properties);
+      expect(context.options).toEqual({});
+      expect(context.resolvedType).toBe(resolvedType);
+      expect(context.genericParams).toBe('<T>');
+      expect(context.genericConstraints).toBe('T extends string');
+    });
+  });
+
+  describe('TypeMatcherWrapper functionality', () => {
+    test('should handle primitive type checking', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.type.isPrimitive()).toBe(true);
+      expect(context.type.isPrimitive('string')).toBe(true);
+      expect(context.type.isPrimitive('number')).toBe(false);
+    });
+
+    test('should handle reference type checking', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Reference as const, name: 'MyType' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Reference as const, name: 'MyType' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'MyType',
+      );
+
+      expect(context.type.isReference()).toBe(true);
+      expect(context.type.isReference('MyType')).toBe(true);
+      expect(context.type.isReference('OtherType')).toBe(false);
+    });
+
+    test('should handle generic type checking', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Generic as const, name: 'T' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Generic as const, name: 'T' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'T',
+      );
+
+      expect(context.type.isGeneric()).toBe(true);
+      expect(context.type.isGeneric('T')).toBe(true);
+      expect(context.type.isGeneric('U')).toBe(false);
+    });
+
+    test('should handle toString method', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.type.toString()).toBe('string');
+    });
+
+    test('should return type kind when name not available', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Object as const, properties: [] as const },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'object',
+      );
+
+      expect(context.type.toString()).toBe(TypeKind.Object);
+    });
+  });
+});

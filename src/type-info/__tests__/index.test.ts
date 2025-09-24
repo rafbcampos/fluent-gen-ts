@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeEach, afterEach } from 'vitest';
 import { TypeExtractor } from '../index.js';
 import { TypeResolutionCache } from '../../core/cache.js';
-import { PluginManager } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
 import path from 'node:path';
 import { writeFile, unlink, mkdir } from 'node:fs/promises';
 

@@ -1,8 +1,8 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { TypeScriptParser } from '../parser.js';
 import { TypeResolutionCache } from '../../core/cache.js';
-import { PluginManager } from '../../core/plugin.js';
-import type { Plugin } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
+import type { Plugin } from '../../core/plugin/index.js';
 import { ok, err } from '../../core/result.js';
 
 describe('TypeScriptParser', () => {

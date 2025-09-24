@@ -26,6 +26,7 @@ export default defineConfig({
         '**/types.ts',
         '.prettierrc.js',
         'test-repo',
+        'scripts',
       ],
       thresholds: {
         global: {

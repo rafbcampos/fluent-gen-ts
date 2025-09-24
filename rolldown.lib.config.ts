@@ -48,19 +48,9 @@ const jsConfig = defineConfig({
 
 // Configuration for TypeScript declarations build
 const dtsConfig = defineConfig({
-  input: 'src/index.ts',
-  output: {
-    dir: 'dist',
-    format: 'esm',
-    entryFileNames: 'lib.d.ts',
-    chunkFileNames: '[name].d.ts',
-    sourcemap: true,
-  },
-  plugins: [
-    dts({
-      emitDtsOnly: true,
-    }),
-  ],
+  input: './src/index.ts',
+  plugins: [dts()],
+  output: [{ dir: 'dist', format: 'es' }],
   external: [
     'ts-morph',
     'commander',

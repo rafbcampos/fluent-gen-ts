@@ -2,16 +2,16 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { FluentGen } from '../index.js';
 import { TypeExtractor } from '../../type-info/index.js';
 import { BuilderGenerator } from '../generator.js';
-import { PluginManager } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
 import { ok, err } from '../../core/result.js';
 import type { ResolvedType } from '../../core/types.js';
 import { TypeKind } from '../../core/types.js';
-import type { Plugin } from '../../core/plugin.js';
+import type { Plugin } from '../../core/plugin/index.js';
 
 // Mock the dependencies
 vi.mock('../../type-info/index.js');
 vi.mock('../generator.js');
-vi.mock('../../core/plugin.js');
+vi.mock('../../core/plugin/index.js');
 vi.mock('node:fs/promises');
 vi.mock('node:path');
 vi.mock('glob');

@@ -6,8 +6,8 @@
 import path from 'node:path';
 import type { ResolvedType, TypeInfo, GenericParam } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
-import type { PluginManager, ImportTransformContext } from '../core/plugin.js';
-import { HookType } from '../core/plugin.js';
+import type { PluginManager, ImportTransformContext } from '../core/plugin/index.js';
+import { HookType } from '../core/plugin/index.js';
 import { ImportResolver } from '../core/import-resolver.js';
 import { isValidImportableTypeName } from './types.js';
 import type { Result } from '../core/result.js';
@@ -314,18 +314,9 @@ import {
       if (config.pluginManager) {
         const pluginImports = config.pluginManager.getRequiredImports();
 
-        // Add runtime imports
-        if (pluginImports.runtime && pluginImports.runtime.length > 0) {
-          imports.push(...pluginImports.runtime);
-        }
-
-        // Add type imports
-        if (pluginImports.types && pluginImports.types.length > 0) {
-          const typeOnlyImports = pluginImports.types.filter(
-            imp => !imports.some(existing => existing.includes(imp)),
-          );
-          imports.push(...typeOnlyImports);
-        }
+        // Add plugin import statements
+        const pluginImportStatements = pluginImports.toImportStatements();
+        imports.push(...pluginImportStatements);
       }
 
       // Deduplicate imports

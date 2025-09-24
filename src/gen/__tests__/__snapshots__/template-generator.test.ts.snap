@@ -143,6 +143,8 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
   /** Storage for mixed arrays (static values + builders) */
   protected mixedArrays = new Map<string, unknown[]>();
+  /** Storage for auxiliary data (templates, deferred functions, etc.) */
+  protected auxiliaryData = new Map<string, unknown>();
   /** Optional build context */
   protected context?: C;
 
@@ -337,6 +339,50 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
    */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
+  }
+
+  /**
+   * Set auxiliary data (for plugins and deferred operations)
+   * @param key - Unique key for the auxiliary data
+   * @param value - Value to store
+   */
+  protected setAuxiliary<TAux>(key: string, value: TAux): this {
+    this.auxiliaryData.set(key, value);
+    return this;
+  }
+
+  /**
+   * Get auxiliary data (for plugins and deferred operations)
+   * @param key - Unique key for the auxiliary data
+   * @returns The auxiliary data or undefined
+   */
+  protected getAuxiliary<TAux>(key: string): TAux | undefined {
+    return this.auxiliaryData.get(key) as TAux | undefined;
+  }
+
+  /**
+   * Push item to auxiliary array (creates array if doesn't exist)
+   * @param key - Unique key for the auxiliary array
+   * @param item - Item to push to the array
+   */
+  protected pushAuxiliary<TAux>(key: string, item: TAux): this {
+    const existing = this.auxiliaryData.get(key) as TAux[] | undefined;
+    if (existing && Array.isArray(existing)) {
+      existing.push(item);
+    } else {
+      this.auxiliaryData.set(key, [item]);
+    }
+    return this;
+  }
+
+  /**
+   * Get auxiliary array (returns empty array if doesn't exist)
+   * @param key - Unique key for the auxiliary array
+   * @returns The auxiliary array
+   */
+  protected getAuxiliaryArray<TAux>(key: string): TAux[] {
+    const existing = this.auxiliaryData.get(key) as TAux[] | undefined;
+    return existing && Array.isArray(existing) ? existing : [];
   }
 
   /**
@@ -501,6 +547,8 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
   protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
   /** Storage for mixed arrays (static values + builders) */
   protected mixedArrays = new Map<string, unknown[]>();
+  /** Storage for auxiliary data (templates, deferred functions, etc.) */
+  protected auxiliaryData = new Map<string, unknown>();
   /** Optional build context */
   protected context?: C;
 
@@ -695,6 +743,50 @@ abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContex
    */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     return this.values[key];
+  }
+
+  /**
+   * Set auxiliary data (for plugins and deferred operations)
+   * @param key - Unique key for the auxiliary data
+   * @param value - Value to store
+   */
+  protected setAuxiliary<TAux>(key: string, value: TAux): this {
+    this.auxiliaryData.set(key, value);
+    return this;
+  }
+
+  /**
+   * Get auxiliary data (for plugins and deferred operations)
+   * @param key - Unique key for the auxiliary data
+   * @returns The auxiliary data or undefined
+   */
+  protected getAuxiliary<TAux>(key: string): TAux | undefined {
+    return this.auxiliaryData.get(key) as TAux | undefined;
+  }
+
+  /**
+   * Push item to auxiliary array (creates array if doesn't exist)
+   * @param key - Unique key for the auxiliary array
+   * @param item - Item to push to the array
+   */
+  protected pushAuxiliary<TAux>(key: string, item: TAux): this {
+    const existing = this.auxiliaryData.get(key) as TAux[] | undefined;
+    if (existing && Array.isArray(existing)) {
+      existing.push(item);
+    } else {
+      this.auxiliaryData.set(key, [item]);
+    }
+    return this;
+  }
+
+  /**
+   * Get auxiliary array (returns empty array if doesn't exist)
+   * @param key - Unique key for the auxiliary array
+   * @returns The auxiliary array
+   */
+  protected getAuxiliaryArray<TAux>(key: string): TAux[] {
+    const existing = this.auxiliaryData.get(key) as TAux[] | undefined;
+    return existing && Array.isArray(existing) ? existing : [];
   }
 
   /**

@@ -49,6 +49,7 @@ export class BatchCommand {
         ...(options.parallel !== undefined && { parallel: options.parallel }),
         ...(options.dryRun !== undefined && { dryRun: options.dryRun }),
         generateCommonFile: config.generator?.generateCommonFile ?? true,
+        ...(config.generator && { generatorConfig: config.generator }),
         onProgress: message => {
           spinner.text = message;
         },

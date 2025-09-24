@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import path from 'node:path';
-import { PluginManager, type Plugin } from '../../core/plugin.js';
+import { PluginManager, type Plugin } from '../../core/plugin/index.js';
 
 export class PluginService {
   private pluginManager = new PluginManager();

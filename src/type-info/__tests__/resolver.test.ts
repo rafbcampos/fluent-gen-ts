@@ -2,7 +2,7 @@ import { test, expect, describe, beforeEach } from 'vitest';
 import { Project } from 'ts-morph';
 import { TypeResolver } from '../resolver.js';
 import { TypeResolutionCache } from '../../core/cache.js';
-import { PluginManager } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
 import { GenericContext } from '../generic-context.js';
 import { TypeKind } from '../../core/types.js';
 

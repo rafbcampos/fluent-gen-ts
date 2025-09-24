@@ -20,6 +20,14 @@ export const GeneratorConfigSchema = z.object({
   importPath: z.string().optional(),
   addComments: z.boolean().optional(),
   generateCommonFile: z.boolean().optional(),
+  naming: z
+    .object({
+      convention: z.enum(['camelCase', 'kebab-case', 'snake_case', 'PascalCase']).optional(),
+      suffix: z.string().optional(),
+      /** Custom transformation function as a string (e.g., "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()") */
+      transform: z.string().optional(),
+    })
+    .optional(),
 });
 
 export const TargetSchema = z.object({

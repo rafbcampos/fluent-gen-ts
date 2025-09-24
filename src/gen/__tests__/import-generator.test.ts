@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { ImportGenerator, type ImportGeneratorConfig } from '../import-generator.js';
-import { PluginManager } from '../../core/plugin.js';
+import { PluginManager } from '../../core/plugin/index.js';
 import {
   TypeKind,
   type ResolvedType,
@@ -390,8 +390,19 @@ describe('ImportGenerator', () => {
         name: 'test-plugin',
         version: '1.0.0',
         imports: {
-          runtime: ["import { helper } from 'helper-lib';"],
-          types: ["import type { HelperType } from 'helper-lib';"],
+          imports: [
+            {
+              kind: 'external',
+              package: 'helper-lib',
+              imports: ['helper'],
+            },
+            {
+              kind: 'external',
+              package: 'helper-lib',
+              imports: ['HelperType'],
+              isTypeOnly: true,
+            },
+          ],
         },
       });
 

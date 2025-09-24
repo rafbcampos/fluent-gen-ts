@@ -4,7 +4,8 @@ import { TypeExtractor } from '../type-info/index.js';
 import type { TypeExtractorOptions } from '../type-info/index.js';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
-import { PluginManager } from '../core/plugin.js';
+import { PluginManager } from '../core/plugin/index.js';
+import type { Plugin } from '../core/plugin/index.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -400,7 +401,7 @@ export class FluentGen {
     }
   }
 
-  registerPlugin(plugin: import('../core/plugin.js').Plugin): Result<void> {
+  registerPlugin(plugin: Plugin): Result<void> {
     try {
       this.pluginManager.register(plugin);
       return ok(undefined);
@@ -411,7 +412,8 @@ export class FluentGen {
 
   private getOutputPath(typeName: string): string {
     const outputDir = this.options.outputDir ?? './generated';
-    const fileName = this.options.fileName ?? `${typeName.toLowerCase()}.builder.ts`;
+    const fileName =
+      this.options.fileName ?? `${typeName.charAt(0).toLowerCase() + typeName.slice(1)}.builder.ts`;
 
     return path.join(outputDir, fileName);
   }

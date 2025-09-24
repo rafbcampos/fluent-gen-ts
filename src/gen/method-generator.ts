@@ -10,7 +10,8 @@ import type {
   PropertyMethodContext,
   CustomMethod,
   BuilderContext,
-} from '../core/plugin.js';
+} from '../core/plugin/index.js';
+import { enhancePropertyMethodContext, enhanceBuilderContext } from '../core/plugin/index.js';
 import { TypeStringGenerator } from './type-string-generator.js';
 import { isIndexSignature } from './types.js';
 import { collectAllProperties } from '../type-info/type-utils.js';
@@ -166,53 +167,16 @@ class MethodGeneratorUtils {
    */
   createPropertyMethodContext(params: WithMethodParams): PropertyMethodContext {
     const propertyType = params.property.type;
+    const originalTypeString = this.typeStringGenerator.getPropertyType(params.property);
 
-    return {
-      property: params.property,
-      propertyType: propertyType,
-      originalTypeString: this.typeStringGenerator.getPropertyType(params.property),
-      builderName: params.builderName,
-      typeName: params.typeName,
-      typeInfo: params.typeInfo,
-
-      // Helper methods
-      isType(kind: TypeKind): boolean {
-        return propertyType.kind === kind;
-      },
-
-      hasGenericConstraint(constraintName: string): boolean {
-        if (propertyType.kind === TypeKind.Generic && 'constraint' in propertyType) {
-          const constraint = propertyType.constraint;
-          if (
-            constraint &&
-            typeof constraint === 'object' &&
-            'name' in constraint &&
-            typeof constraint.name === 'string'
-          ) {
-            return constraint.name === constraintName;
-          }
-        }
-        return false;
-      },
-
-      isArrayType(): boolean {
-        return propertyType.kind === TypeKind.Array;
-      },
-
-      isUnionType(): boolean {
-        return propertyType.kind === TypeKind.Union;
-      },
-
-      isPrimitiveType(name?: string): boolean {
-        if (propertyType.kind !== TypeKind.Primitive) {
-          return false;
-        }
-        if (name && 'name' in propertyType && typeof propertyType.name === 'string') {
-          return propertyType.name === name;
-        }
-        return !name;
-      },
-    };
+    return enhancePropertyMethodContext(
+      params.property,
+      propertyType,
+      params.builderName,
+      params.typeName,
+      params.typeInfo,
+      originalTypeString,
+    );
   }
 
   /**
@@ -220,15 +184,16 @@ class MethodGeneratorUtils {
    */
   createBuilderContext(params: InterfaceMethodParams): BuilderContext {
     const { genericParams } = this.getGenericContext(params.typeInfo);
+    const properties = this.isObjectType(params.typeInfo) ? params.typeInfo.properties : [];
 
-    return {
-      typeName: params.typeName,
-      builderName: params.builderName,
-      typeInfo: params.typeInfo,
-      properties: this.isObjectType(params.typeInfo) ? params.typeInfo.properties : [],
+    return enhanceBuilderContext(
+      params.typeName,
+      params.typeInfo,
+      params.builderName,
+      properties,
       genericParams,
-      genericConstraints: params.genericConstraints,
-    };
+      params.genericConstraints,
+    );
   }
 
   /**
@@ -458,6 +423,12 @@ ${methods}
       );
     }
 
+    // Add custom method implementations from plugins
+    const customMethodImplementations = await this.generateCustomMethodImplementations(params);
+    if (customMethodImplementations.trim()) {
+      methods.push(customMethodImplementations);
+    }
+
     return methods.join('\n\n');
   }
 
@@ -653,6 +624,52 @@ ${methods}
       return validMethods.join('\n');
     } catch (error) {
       console.warn('Failed to generate custom method signatures:', error);
+      return '';
+    }
+  }
+
+  /**
+   * Generate custom method implementations from plugins
+   */
+  private async generateCustomMethodImplementations(params: ClassMethodsParams): Promise<string> {
+    // Skip if no plugin manager
+    if (!params.config.pluginManager) {
+      return '';
+    }
+
+    try {
+      const context = this.utils.createBuilderContext(params);
+      const customMethods = params.config.pluginManager.getCustomMethods(context);
+
+      if (!Array.isArray(customMethods) || customMethods.length === 0) {
+        return '';
+      }
+
+      const validMethods = customMethods
+        .filter((method): method is CustomMethod => {
+          // Validate method structure
+          return (
+            method &&
+            typeof method === 'object' &&
+            typeof method.name === 'string' &&
+            method.name.trim().length > 0 &&
+            typeof method.signature === 'string' &&
+            method.signature.trim().length > 0 &&
+            typeof method.implementation === 'string' &&
+            method.implementation.trim().length > 0
+          );
+        })
+        .map(method => {
+          const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
+          const implementation = method.implementation.trim();
+
+          // The implementation should already be the complete method definition
+          return `${jsDoc}${implementation}`;
+        });
+
+      return validMethods.join('\n\n');
+    } catch (error) {
+      console.warn('Failed to generate custom method implementations:', error);
       return '';
     }
   }

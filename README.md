@@ -20,12 +20,16 @@ provide full IntelliSense support and type safety at every step.
   fields
 - **🔄 Nested Builder Support** - Seamless composition of complex objects with
   deferred builds
-- **🧩 Extensible Plugin System** - Customize generation with powerful plugins
+- **🧩 Sophisticated Plugin System** - Fluent API for creating powerful,
+  type-safe plugins with advanced matching, custom methods, and auxiliary data
+  storage
+- **🎨 Flexible Naming Strategies** - Configurable filename generation with
+  predefined conventions or custom transform functions
 - **⚡ CLI & Programmatic API** - Use via command line or integrate into your
   build process
 - **📝 JSDoc Preservation** - Maintains your documentation and comments
-- **🎨 Flexible Generation Modes** - Single file or batch generation with shared
-  utilities
+- **🏗️ Advanced Build Transforms** - Insert custom logic before/after build with
+  plugin system
 - **📦 Monorepo Support** - Intelligent dependency resolution for pnpm, yarn,
   and npm workspaces
 
@@ -216,39 +220,133 @@ Create your own customizable utilities:
 npx fluent-gen-ts setup-common --output ./src/common.ts
 ```
 
-## 🧩 Plugin System
+## 🧩 Powerful Plugin System
 
-Extend functionality with powerful plugins:
+Extend fluent-gen-ts with a sophisticated plugin system featuring a fluent API,
+advanced type matching, custom naming strategies, and auxiliary data storage:
 
 ```typescript
-// validation-plugin.js
-export default {
-  name: 'validation-plugin',
-  version: '1.0.0',
+// my-plugin.ts
+import { createPlugin, primitive, object, union } from 'fluent-gen-ts';
 
-  transformPropertyMethod(context) {
-    if (context.property.name === 'email') {
-      return ok({
-        validate: `
-          if (value && !value.includes('@')) {
-            throw new Error('Invalid email format');
-          }`,
-      });
+const plugin = createPlugin('comprehensive-plugin', '1.0.0')
+  .setDescription('Advanced transformations and custom methods')
+
+  // Advanced type matching and transformations
+  .transformPropertyMethods(builder =>
+    builder
+      // Handle primitive string types with custom logic
+      .when(ctx => ctx.type.isPrimitive('string'))
+      .setParameter('string | TaggedTemplateValue<string>')
+      .setExtractor('String(value)')
+      .setValidator(
+        `
+      if (value && value.length === 0) {
+        throw new Error('String cannot be empty');
+      }
+    `,
+      )
+      .done()
+
+      // Handle object types (e.g., AssetWrapper)
+      .when(ctx => ctx.type.matches(object('AssetWrapper')))
+      .setParameter('Asset | FluentBuilder<Asset>')
+      .setExtractor('{ asset: value }')
+      .done()
+
+      // Handle union types containing strings
+      .when(ctx => ctx.type.matches(union().containing(primitive('string'))))
+      .setParameter('string | TaggedTemplateValue<string>')
+      .setExtractor('String(value)')
+      .done(),
+  )
+
+  // Add custom methods with auxiliary data storage
+  .addMethod(method =>
+    method
+      .name('withTemplate')
+      .param('template', '(ctx: BaseBuildContext) => string')
+      .returns('this')
+      .implementation(
+        `
+      // Store template function for later processing
+      return this.pushAuxiliary('templates', template);
+    `,
+      )
+      .jsDoc('/**\\n * Add a template function processed during build\\n */'),
+  )
+
+  .addMethod(method =>
+    method
+      .name('withRandomId')
+      .param('prefix', 'string', { defaultValue: '"item"' })
+      .returns('this').implementation(`
+      const id = \`\${prefix}-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
+      return this.withId(id);
+    `),
+  )
+
+  // Transform build method with template processing
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return this.buildWithDefaults',
+      `
+      // Process stored templates
+      const templates = this.getAuxiliaryArray('templates');
+      if (templates.length > 0 && context) {
+        for (const template of templates) {
+          try {
+            const result = template(context);
+            console.log('Template result:', result);
+          } catch (error) {
+            console.warn('Template execution failed:', error);
+          }
+        }
+      }
+    `,
+    ),
+  )
+
+  .build();
+
+export default plugin;
+```
+
+### Advanced Configuration
+
+```json
+{
+  "generator": {
+    "naming": {
+      // Predefined conventions: camelCase, kebab-case, snake_case, PascalCase
+      "convention": "camelCase",
+
+      // OR custom transform function for complete control
+      "transform": "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()"
     }
-    return ok({});
   },
-};
+  "plugins": ["./my-plugin.ts"],
+  "targets": [
+    {
+      "file": "src/types.ts",
+      "types": ["ActionAsset"],
+      "outputFile": "./src/builders/{type}.builder.ts"
+    }
+  ]
+}
 ```
 
-Add to your configuration:
+**Key Plugin Features:**
 
-```javascript
-// fluent.config.js
-export default {
-  plugins: ['./validation-plugin.js'],
-  // ... other config
-};
-```
+- 🎯 **Fluent Plugin Builder API** - Chainable, type-safe plugin creation
+- 🔍 **Advanced Type Matching** - Match primitives, objects, unions, arrays,
+  generics
+- 📦 **Auxiliary Data Storage** - Store templates, functions, and custom data
+- 🏗️ **Build Method Transformation** - Insert custom logic before/after build
+- 📝 **Custom Method Generation** - Add domain-specific methods to builders
+- 🔧 **Smart Import Management** - Automatic handling of internal/external
+  imports
+- 🎨 **Flexible Naming Strategies** - Custom filename transformations
 
 ## 🎯 Advanced TypeScript Support
 
@@ -323,6 +421,15 @@ export default {
     useDefaults: true, // Generate smart defaults
     addComments: true, // Include JSDoc comments
     maxDepth: 10, // Max recursion depth
+
+    // Advanced naming configuration
+    naming: {
+      convention: 'camelCase', // camelCase, kebab-case, snake_case, PascalCase
+      suffix: 'builder',
+
+      // OR custom transform function for complete control
+      transform: '(typeName) => typeName.replace(/DTO$/, "").toLowerCase()',
+    },
   },
 
   // TypeScript configuration
@@ -482,17 +589,12 @@ pnpm test:unit
 pnpm test:e2e
 ```
 
-## 📄 License
-
-MIT © [Rafael Campos](https://github.com/rafbcampos)
-
 ## 🙏 Acknowledgments
 
 - [ts-morph](https://github.com/dsherret/ts-morph) - TypeScript compiler API
   wrapper
 - [TypeScript](https://www.typescriptlang.org/) - The amazing type system that
   makes this possible
-- [Vitest](https://vitest.dev/) - Fast and reliable testing framework
 
 ---
 

@@ -1,7 +1,9 @@
 # Advanced Usage
 
 This guide covers advanced scenarios and patterns for using fluent-gen-ts
-effectively in complex projects.
+effectively in complex projects, including sophisticated plugin architectures,
+custom naming strategies, enterprise-scale configurations, and the powerful
+plugin system that enables extensive customization.
 
 ## Monorepo Configuration
 
@@ -343,14 +345,105 @@ const user = user()
   .build();
 ```
 
-### Custom Builder Extensions
+### Custom Builder Extensions with Plugins
 
-Extend generated builders with domain-specific functionality:
+The plugin system provides a more powerful way to extend builders than manual
+class extension:
 
 ```typescript
-// Extend the generated UserBuilder
+// Plugin-based builder extension
+import { createPlugin, primitive } from 'fluent-gen-ts';
+
+const userExtensionsPlugin = createPlugin('user-extensions', '1.0.0')
+  .setDescription('Add convenience methods for user management')
+
+  // Add role-based convenience methods
+  .addMethod(method =>
+    method
+      .name('asAdmin')
+      .returns('this')
+      .implementation(
+        `
+      return this
+        .withRole('admin')
+        .withIsActive(true)
+        .pushAuxiliary('permissions', 'read')
+        .pushAuxiliary('permissions', 'write')
+        .pushAuxiliary('permissions', 'admin');
+    `,
+      )
+      .jsDoc('/**\\n * Configure user as admin with full permissions\\n */'),
+  )
+
+  .addMethod(method =>
+    method
+      .name('asGuest')
+      .returns('this')
+      .implementation(
+        `
+      return this
+        .withRole('guest')
+        .withIsActive(false)
+        .pushAuxiliary('permissions', 'read');
+    `,
+      )
+      .jsDoc('/**\\n * Configure user as guest with limited permissions\\n */'),
+  )
+
+  .addMethod(method =>
+    method.name('withRandomCredentials').returns('this').implementation(`
+      return this
+        .withId(generateId())
+        .withUsername(generateUsername())
+        .withEmail(generateEmail());
+    `),
+  )
+
+  .addMethod(method =>
+    method.name('withTestData').returns('this').implementation(`
+      return this
+        .withId('test-user')
+        .withName('Test User')
+        .withEmail('test@example.com')
+        .withRole('user')
+        .withIsActive(true);
+    `),
+  )
+
+  // Transform build method to process stored permissions
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return this.buildWithDefaults',
+      `
+      // Process accumulated permissions
+      const permissions = this.getAuxiliaryArray('permissions');
+      if (permissions.length > 0) {
+        this.withPermissions(permissions);
+      }
+    `,
+    ),
+  )
+
+  .build();
+
+// Usage with plugin-enhanced builders
+const adminUser = user()
+  .withName('Admin User')
+  .asAdmin() // Added by plugin
+  .build();
+
+const testUser = user()
+  .withTestData() // Added by plugin
+  .build();
+```
+
+### Manual Builder Extension (Legacy Approach)
+
+For cases where plugins aren't suitable, you can still extend builders manually:
+
+```typescript
+// Manual extension (consider using plugins instead)
 class ExtendedUserBuilder extends UserBuilder {
-  // Add convenience methods
   asAdmin(): this {
     return this.withRole('admin')
       .withIsActive(true)
@@ -360,31 +453,7 @@ class ExtendedUserBuilder extends UserBuilder {
   asGuest(): this {
     return this.withRole('guest').withIsActive(false).withPermissions(['read']);
   }
-
-  withRandomCredentials(): this {
-    return this.withId(generateId())
-      .withUsername(generateUsername())
-      .withEmail(generateEmail());
-  }
-
-  withTestData(): this {
-    return this.withId('test-user')
-      .withName('Test User')
-      .withEmail('test@example.com')
-      .withRole('user')
-      .withIsActive(true);
-  }
 }
-
-// Factory function for extended builder
-export function extendedUser(initial?: Partial<User>): ExtendedUserBuilder {
-  return new ExtendedUserBuilder(initial);
-}
-
-// Usage
-const adminUser = extendedUser().withName('Admin User').asAdmin().build();
-
-const testUser = extendedUser().withTestData().build();
 ```
 
 ## Context and Relationships
@@ -409,26 +478,30 @@ interface OrderItem {
   price: number;
 }
 
-// Custom plugin to handle relationships
-const relationshipPlugin: Plugin = {
-  name: 'relationship-plugin',
-  version: '1.0.0',
+// Plugin to handle parent-child relationships using the fluent API
+const relationshipPlugin = createPlugin('relationship-plugin', '1.0.0')
+  .setDescription('Automatically handle parent-child relationships in builders')
 
-  transformValue(context) {
-    // Auto-set orderId from parent context
-    if (
-      context.property === 'orderId' &&
-      context.valueVariable === 'undefined'
-    ) {
-      return ok({
-        condition: 'context?.parentId',
-        transform: 'context.parentId',
-      });
-    }
+  // Transform property methods to auto-set parent relationships
+  .transformPropertyMethods(builder =>
+    builder
+      .when(ctx => ctx.propertyName === 'orderId')
+      .setExtractor('context?.parentId || value')
+      .setValidation(
+        `
+      if (!value && !context?.parentId) {
+        throw new Error('OrderItem must have an orderId or parent context');
+      }
+    `,
+      )
+      .done()
 
-    return ok(null);
-  },
-};
+      .when(ctx => ctx.propertyName === 'parentId')
+      .setExtractor('context?.parentId || value')
+      .done(),
+  )
+
+  .build();
 
 // Usage with automatic relationship handling
 const order = order()
@@ -455,38 +528,41 @@ interface Category {
   products: Product[];
 }
 
-// Plugin for hierarchical structure
-const hierarchyPlugin: Plugin = {
-  name: 'hierarchy-plugin',
-  version: '1.0.0',
+// Plugin for hierarchical structure using the fluent API
+const hierarchyPlugin = createPlugin('hierarchy-plugin', '1.0.0')
+  .setDescription(
+    'Add hierarchical category support with automatic parent relationships',
+  )
 
-  addCustomMethods(context) {
-    if (context.typeName === 'Category') {
-      return ok([
-        {
-          name: 'withSubcategory',
-          signature:
-            'withSubcategory(name: string, builderFn?: (builder: CategoryBuilder) => CategoryBuilder): this',
-          implementation: `
-  withSubcategory(name: string, builderFn?: (builder: CategoryBuilder) => CategoryBuilder): this {
-    const subcategory = category()
-      .withName(name)
-      .withParentId(this.peek('id') || '');
+  // Add custom method for subcategory management
+  .addMethod(method =>
+    method
+      .name('withSubcategory')
+      .parameter('name', 'string')
+      .parameter(
+        'builderFn',
+        '(builder: CategoryBuilder) => CategoryBuilder',
+        'undefined',
+      )
+      .returns('this')
+      .implementation(
+        `
+      const subcategory = category()
+        .withName(name)
+        .withParentId(this.peek('id') || '');
 
-    const finalCategory = builderFn ? builderFn(subcategory) : subcategory;
+      const finalCategory = builderFn ? builderFn(subcategory) : subcategory;
 
-    const currentChildren = this.peek('children') || [];
-    return this.withChildren([...currentChildren, finalCategory]);
-  }`,
-          jsDoc: `/**
-   * Add a subcategory with automatic parent relationship
-   */`,
-        },
-      ]);
-    }
-    return ok([]);
-  },
-};
+      const currentChildren = this.peek('children') || [];
+      return this.withChildren([...currentChildren, finalCategory]);
+    `,
+      )
+      .jsDoc(
+        '/**\\n * Add a subcategory with automatic parent relationship\\n */',
+      ),
+  )
+
+  .build();
 
 // Usage
 const electronics = category()
@@ -798,9 +874,118 @@ const userListResponse = ApiResponseFactory.paginated(
 );
 ```
 
+## Advanced Naming Strategies
+
+fluent-gen-ts provides sophisticated filename generation with both predefined
+conventions and custom transform functions.
+
+### Predefined Conventions
+
+Choose from built-in naming conventions:
+
+```javascript
+// fluent-gen.config.js
+export default {
+  generator: {
+    naming: {
+      // Available conventions
+      convention: 'camelCase', // actionAsset.builder.ts
+      // convention: 'kebab-case', // action-asset.builder.ts
+      // convention: 'snake_case', // action_asset.builder.ts
+      // convention: 'PascalCase', // ActionAsset.builder.ts
+
+      suffix: 'builder', // Optional custom suffix
+    },
+  },
+};
+```
+
+### Custom Transform Functions
+
+For complete control over filename generation, provide a JavaScript transform
+function:
+
+```javascript
+// fluent-gen.config.js
+export default {
+  generator: {
+    naming: {
+      // Custom transform function
+      transform: "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()",
+    },
+  },
+};
+```
+
+### Advanced Transform Examples
+
+```javascript
+// Strip common suffixes and convert to kebab-case
+transform: `(typeName) => {
+  return typeName
+    .replace(/(DTO|Model|Entity|Asset)$/, '')
+    .replace(/([A-Z])/g, '-$1')
+    .toLowerCase()
+    .replace(/^-/, '');
+}`;
+
+// Add prefix based on type name
+transform: `(typeName) => {
+  if (typeName.includes('User')) return 'user-' + typeName.toLowerCase();
+  if (typeName.includes('Order')) return 'order-' + typeName.toLowerCase();
+  return typeName.toLowerCase();
+}`;
+
+// Custom domain-specific naming
+transform: `(typeName) => {
+  const domainMap = {
+    'ActionAsset': 'action',
+    'TextAsset': 'text',
+    'ImageAsset': 'image',
+    'VideoAsset': 'video'
+  };
+  return domainMap[typeName] || typeName.toLowerCase();
+}`;
+```
+
+### Plugin-Based Naming
+
+Plugins can also influence naming through custom processing:
+
+```typescript
+const namingPlugin = createPlugin('custom-naming', '1.0.0')
+  .setDescription('Custom naming logic for specific types')
+
+  // Store naming preferences in auxiliary data
+  .addMethod(method =>
+    method
+      .name('withCustomFileName')
+      .parameter('fileName', 'string')
+      .returns('this').implementation(`
+      return this.setAuxiliary('customFileName', fileName);
+    `),
+  )
+
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return this.buildWithDefaults',
+      `
+      // Custom filename logic could be processed here
+      const customName = this.getAuxiliary('customFileName');
+      if (customName) {
+        console.log('Custom filename requested:', customName);
+      }
+    `,
+    ),
+  )
+
+  .build();
+```
+
 ## Next Steps
 
-- Explore [Plugin Development](./plugins.md) for extending functionality
+- Explore [Plugin Development](./plugins.md) for extending functionality with
+  the powerful plugin system
 - Check out [Examples](/examples/) for real-world usage patterns
 - Review the [API Reference](/api/reference) for detailed API information
 - See [CLI Commands](./cli-commands.md) for automation options

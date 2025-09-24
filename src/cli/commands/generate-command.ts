@@ -38,7 +38,7 @@ export class GenerateCommand {
       const outputDir = options.output ? path.dirname(options.output) : undefined;
       const fileName = options.output
         ? path.basename(options.output)
-        : `${typeName.toLowerCase()}.builder.ts`;
+        : `${typeName.charAt(0).toLowerCase() + typeName.slice(1)}.builder.ts`;
 
       const genOptions = this.generatorService.mergeGeneratorOptions(
         config,

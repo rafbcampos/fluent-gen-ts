@@ -5,7 +5,7 @@ import { ok, err } from '../core/result.js';
 import type { TypeInfo, PropertyInfo, GenericParam, IndexSignature } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
 import { TypeResolutionCache } from '../core/cache.js';
-import { PluginManager, HookType } from '../core/plugin.js';
+import { PluginManager, HookType } from '../core/plugin/index.js';
 import { UtilityTypeExpander } from './utility-type-expander.js';
 import { MappedTypeResolver } from './mapped-type-resolver.js';
 import { ConditionalTypeResolver } from './conditional-type-resolver.js';
