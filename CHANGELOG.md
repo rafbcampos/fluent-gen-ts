@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.5
+
+### Patch Changes
+
+- 4678d8d: Resolver and Import Generator refactor
+
 ## 0.1.4
 
 ### Patch Changes
