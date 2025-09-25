@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.5
+
+### Patch Changes
+
+- c2c7524: Resolver and Generate Import refactor
+
 ## 0.1.4
 
 ### Patch Changes
