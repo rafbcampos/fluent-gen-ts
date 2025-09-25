@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.3
+
+### Patch Changes
+
+- defb901: Support transient dependency discovery
+
 ## 0.1.2
 
 ### Patch Changes
