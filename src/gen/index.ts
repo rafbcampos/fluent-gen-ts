@@ -87,6 +87,7 @@ function extractGeneratorConfig({
   useDefaults,
   contextType,
   addComments,
+  tsConfigPath,
 }: FluentGenOptions): GeneratorConfig {
   const config: GeneratorConfig = {};
 
@@ -108,6 +109,10 @@ function extractGeneratorConfig({
 
   if (addComments !== undefined) {
     config.addComments = addComments;
+  }
+
+  if (tsConfigPath !== undefined) {
+    config.tsConfigPath = tsConfigPath;
   }
 
   return config;

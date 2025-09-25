@@ -4,7 +4,7 @@ import type { ResolvedType, TypeInfo, GeneratorOptions } from '../core/types.js'
 import { TypeKind } from '../core/types.js';
 import { PluginManager, HookType, type BuildMethodContext } from '../core/plugin/index.js';
 import { getCommonFileTemplate, getSingleFileUtilitiesTemplate } from './template-generator.js';
-import { ImportGenerator } from './import-generator.js';
+import { ImportGenerator } from './import-generator/index.js';
 import { TypeStringGenerator } from './type-string-generator.js';
 import { DefaultValueGenerator } from './default-value-generator.js';
 import { MethodGenerator } from './method-generator.js';
@@ -28,6 +28,7 @@ export interface GeneratorConfig extends GeneratorOptions {
   addComments?: boolean;
   generateCommonFile?: boolean;
   outputDir?: string;
+  tsConfigPath?: string;
   namingStrategy?: (typeName: string) => string;
 }
 
@@ -48,7 +49,7 @@ export class BuilderGenerator {
   constructor(config: GeneratorConfig = {}, pluginManager?: PluginManager) {
     this.config = config;
     this.pluginManager = pluginManager ?? new PluginManager();
-    this.importGenerator = new ImportGenerator();
+    this.importGenerator = new ImportGenerator(config.tsConfigPath);
     this.typeStringGenerator = new TypeStringGenerator();
     this.defaultValueGenerator = new DefaultValueGenerator();
     this.methodGenerator = new MethodGenerator();

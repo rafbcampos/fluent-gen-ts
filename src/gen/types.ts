@@ -70,6 +70,16 @@ export function isValidImportableTypeName(name: string | undefined): name is str
     return false;
   }
 
+  // TypeScript convention: type names should be capitalized
+  if (!/^[A-Z]/.test(name)) {
+    return false;
+  }
+
+  // Must be a valid JavaScript identifier (no special characters except $ and _)
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) {
+    return false;
+  }
+
   return true;
 }
 
