@@ -12,6 +12,7 @@ import { ImportResolver } from '../core/import-resolver.js';
 import { isValidImportableTypeName } from './types.js';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
+import { Project } from 'ts-morph';
 
 /**
  * Configuration for import generation
@@ -35,6 +36,7 @@ export interface ImportGeneratorConfig {
 export class ImportGenerator {
   private readonly importResolver = new ImportResolver();
   private currentOutputDir?: string;
+  private project?: Project;
 
   /**
    * Generates imports for Node.js built-in types
@@ -418,59 +420,109 @@ import {
         return err(new Error('Invalid resolved type or missing name'));
       }
 
-      const localImports: string[] = [resolvedType.name];
-      const externalTypes: Map<string, string> = new Map(); // type -> sourceFile
+      // Three categories of imports:
+      // 1. Local types - from the same file as the main type
+      // 2. Relative types - from other local files in the project
+      // 3. External types - from node_modules packages
+      const localTypes = new Set<string>([resolvedType.name]);
+      const relativeImports = new Map<string, Set<string>>(); // sourceFile -> types
+      const externalTypes = new Map<string, string>(); // type -> sourceFile
 
-      // Add nested type names
+      // Process nested types in the main type
       if (this.isObjectType(resolvedType.typeInfo)) {
         for (const prop of resolvedType.typeInfo.properties) {
-          this.collectTypesWithOrigin(
+          this.categorizeTypesFromTypeInfo(
             prop.type,
-            localImports,
-            externalTypes,
             resolvedType.sourceFile,
+            localTypes,
+            relativeImports,
+            externalTypes,
           );
         }
       }
 
-      // Add generic constraint types
+      // Process generic constraint types
       if (this.isObjectType(resolvedType.typeInfo) && resolvedType.typeInfo.genericParams) {
         for (const param of resolvedType.typeInfo.genericParams) {
-          this.collectGenericTypesWithOrigin(
+          this.categorizeTypesFromGenericParam(
             param,
-            localImports,
-            externalTypes,
             resolvedType.sourceFile,
+            localTypes,
+            relativeImports,
+            externalTypes,
           );
         }
       }
 
-      // Generate local type imports
-      const uniqueLocalImports = Array.from(new Set(localImports)).filter(
-        isValidImportableTypeName,
-      );
-      let result = '';
+      // Process transitive dependencies using ts-morph to discover imported types
+      const transitiveDependencies = this.discoverTransitiveDependencies(resolvedType);
 
-      if (uniqueLocalImports.length > 0) {
-        const importPath = this.resolveImportPath(resolvedType, this.currentOutputDir);
-        result = `import type { ${uniqueLocalImports.join(', ')} } from "${importPath}";`;
+      for (const dep of transitiveDependencies) {
+        this.categorizeTypeBySource(
+          dep.typeName,
+          dep.sourceFile,
+          resolvedType.sourceFile,
+          localTypes,
+          relativeImports,
+          externalTypes,
+        );
       }
 
-      // Generate external type imports as named imports
+      // Also process direct dependencies from TypeScript resolution
+      if (resolvedType.dependencies && resolvedType.dependencies.length > 0) {
+        for (const dependency of resolvedType.dependencies) {
+          if (dependency.name && isValidImportableTypeName(dependency.name)) {
+            this.categorizeTypeBySource(
+              dependency.name,
+              dependency.sourceFile,
+              resolvedType.sourceFile,
+              localTypes,
+              relativeImports,
+              externalTypes,
+            );
+          }
+        }
+      }
+
+      // Generate import statements
+      const importStatements: string[] = [];
+
+      // 1. Generate local imports (same file as main type)
+      if (localTypes.size > 0) {
+        const uniqueLocalTypes = Array.from(localTypes).filter(isValidImportableTypeName);
+        if (uniqueLocalTypes.length > 0) {
+          const importPath = this.resolveImportPath(resolvedType, this.currentOutputDir);
+          importStatements.push(
+            `import type { ${uniqueLocalTypes.join(', ')} } from "${importPath}";`,
+          );
+        }
+      }
+
+      // 2. Generate relative imports (other local files)
+      for (const [sourceFile, types] of relativeImports) {
+        const uniqueTypes = Array.from(types).filter(isValidImportableTypeName);
+        if (uniqueTypes.length > 0) {
+          const importPath = this.resolveImportPath(
+            { ...resolvedType, sourceFile },
+            this.currentOutputDir,
+          );
+          importStatements.push(`import type { ${uniqueTypes.join(', ')} } from "${importPath}";`);
+        }
+      }
+
+      // 3. Generate external imports (node_modules)
       if (externalTypes.size > 0) {
         const externalImportsResult = this.generateExternalTypeImports(externalTypes);
         if (externalImportsResult.ok && externalImportsResult.value) {
-          result = result
-            ? `${result}\n${externalImportsResult.value}`
-            : externalImportsResult.value;
+          importStatements.push(externalImportsResult.value);
         }
       }
 
-      if (!result) {
+      if (importStatements.length === 0) {
         return err(new Error('No valid importable types found'));
       }
 
-      return ok(result);
+      return ok(importStatements.join('\n'));
     } catch (error) {
       return err(new Error(`Failed to generate type imports: ${error}`));
     }
@@ -495,6 +547,296 @@ import {
     }
     if (param.default) {
       this.collectTypesWithOrigin(param.default, localImports, externalTypes, localSourceFile);
+    }
+  }
+
+  /**
+   * Categorizes types from TypeInfo into local, relative, and external imports
+   */
+  private categorizeTypesFromTypeInfo(
+    typeInfo: TypeInfo,
+    mainSourceFile: string,
+    localTypes: Set<string>,
+    relativeImports: Map<string, Set<string>>,
+    externalTypes: Map<string, string>,
+  ): void {
+    if (!typeInfo) return;
+
+    // Handle object types with names
+    if (this.isObjectType(typeInfo) && typeInfo.name && isValidImportableTypeName(typeInfo.name)) {
+      this.categorizeTypeBySource(
+        typeInfo.name,
+        typeInfo.sourceFile,
+        mainSourceFile,
+        localTypes,
+        relativeImports,
+        externalTypes,
+      );
+
+      // Recursively process properties
+      for (const prop of typeInfo.properties) {
+        this.categorizeTypesFromTypeInfo(
+          prop.type,
+          mainSourceFile,
+          localTypes,
+          relativeImports,
+          externalTypes,
+        );
+      }
+      return;
+    }
+
+    // Handle array types
+    if (typeInfo.kind === TypeKind.Array) {
+      this.categorizeTypesFromTypeInfo(
+        typeInfo.elementType,
+        mainSourceFile,
+        localTypes,
+        relativeImports,
+        externalTypes,
+      );
+      return;
+    }
+
+    // Handle union types
+    if (typeInfo.kind === TypeKind.Union) {
+      for (const unionType of typeInfo.unionTypes) {
+        this.categorizeTypesFromTypeInfo(
+          unionType,
+          mainSourceFile,
+          localTypes,
+          relativeImports,
+          externalTypes,
+        );
+      }
+      return;
+    }
+
+    // Handle intersection types
+    if (typeInfo.kind === TypeKind.Intersection) {
+      for (const intersectionType of typeInfo.intersectionTypes) {
+        this.categorizeTypesFromTypeInfo(
+          intersectionType,
+          mainSourceFile,
+          localTypes,
+          relativeImports,
+          externalTypes,
+        );
+      }
+      return;
+    }
+
+    // Handle generic types with type arguments
+    if ('typeArguments' in typeInfo && typeInfo.typeArguments) {
+      for (const arg of typeInfo.typeArguments) {
+        this.categorizeTypesFromTypeInfo(
+          arg,
+          mainSourceFile,
+          localTypes,
+          relativeImports,
+          externalTypes,
+        );
+      }
+    }
+  }
+
+  /**
+   * Categorizes types from generic parameters
+   */
+  private categorizeTypesFromGenericParam(
+    param: GenericParam,
+    mainSourceFile: string,
+    localTypes: Set<string>,
+    relativeImports: Map<string, Set<string>>,
+    externalTypes: Map<string, string>,
+  ): void {
+    if (!param) return;
+
+    if (param.constraint) {
+      this.categorizeTypesFromTypeInfo(
+        param.constraint,
+        mainSourceFile,
+        localTypes,
+        relativeImports,
+        externalTypes,
+      );
+    }
+
+    if (param.default) {
+      this.categorizeTypesFromTypeInfo(
+        param.default,
+        mainSourceFile,
+        localTypes,
+        relativeImports,
+        externalTypes,
+      );
+    }
+  }
+
+  /**
+   * Discovers transitive dependencies using ts-morph to analyze source files directly
+   * This helps find dependencies that TypeScript might have inlined during resolution
+   */
+  private discoverTransitiveDependencies(
+    resolvedType: ResolvedType,
+  ): Array<{ typeName: string; sourceFile: string }> {
+    try {
+      if (!this.project) {
+        this.project = new Project({
+          useInMemoryFileSystem: false,
+          skipFileDependencyResolution: true,
+        });
+      }
+
+      const dependencies: Array<{ typeName: string; sourceFile: string }> = [];
+      const visited = new Set<string>();
+
+      const analyzeFile = (filePath: string) => {
+        if (visited.has(filePath) || !filePath || this.looksLikePackagePath(filePath)) {
+          return;
+        }
+        visited.add(filePath);
+
+        try {
+          const sourceFile = this.project!.addSourceFileAtPath(filePath);
+
+          // Get all import declarations
+          const imports = sourceFile.getImportDeclarations();
+
+          for (const importDecl of imports) {
+            const moduleSpecifier = importDecl.getModuleSpecifierValue();
+
+            // Skip external packages for now - they're handled elsewhere
+            if (!moduleSpecifier.startsWith('.') && !moduleSpecifier.startsWith('/')) {
+              continue;
+            }
+
+            // Resolve the import path to absolute path
+            const resolvedPath = this.resolveRelativeImportPath(filePath, moduleSpecifier);
+            if (!resolvedPath) continue;
+
+            // Get imported type names
+            const namedImports = importDecl.getNamedImports();
+            for (const namedImport of namedImports) {
+              const importName = namedImport.getName();
+              if (isValidImportableTypeName(importName)) {
+                dependencies.push({
+                  typeName: importName,
+                  sourceFile: resolvedPath,
+                });
+
+                // Recursively analyze imported file
+                analyzeFile(resolvedPath);
+              }
+            }
+
+            // Handle type-only imports
+            if (importDecl.isTypeOnly()) {
+              const defaultImport = importDecl.getDefaultImport();
+              if (defaultImport && isValidImportableTypeName(defaultImport.getText())) {
+                dependencies.push({
+                  typeName: defaultImport.getText(),
+                  sourceFile: resolvedPath,
+                });
+              }
+            }
+          }
+        } catch {
+          // Silently ignore file analysis errors - the file may not exist or be accessible
+          // This is expected behavior when dealing with .js imports that reference .ts files
+        }
+      };
+
+      // Start analysis from the main source file
+      analyzeFile(resolvedType.sourceFile);
+
+      return dependencies;
+    } catch {
+      // Return empty array on analysis failure - this is a fallback mechanism
+      return [];
+    }
+  }
+
+  /**
+   * Resolves a relative import path to absolute path
+   */
+  private resolveRelativeImportPath(
+    sourceFilePath: string,
+    importSpecifier: string,
+  ): string | null {
+    try {
+      const sourceDir = path.dirname(sourceFilePath);
+
+      // Handle .js imports by converting to .ts
+      let actualImportSpecifier = importSpecifier;
+      if (importSpecifier.endsWith('.js')) {
+        actualImportSpecifier = importSpecifier.replace(/\.js$/, '.ts');
+      }
+
+      let resolvedPath = path.resolve(sourceDir, actualImportSpecifier);
+
+      // If the import specifier already has an extension, use it directly
+      if (
+        actualImportSpecifier.endsWith('.ts') ||
+        actualImportSpecifier.endsWith('.tsx') ||
+        actualImportSpecifier.endsWith('.d.ts')
+      ) {
+        return resolvedPath;
+      }
+
+      // Try common TypeScript file extensions
+      const extensions = ['.ts', '.tsx', '.d.ts'];
+      for (const ext of extensions) {
+        const pathWithExt = resolvedPath + ext;
+        return pathWithExt; // Return the first attempt for now
+      }
+
+      // Try index file
+      for (const ext of extensions) {
+        const indexPath = path.join(resolvedPath, `index${ext}`);
+        return indexPath; // Return the first attempt for now
+      }
+
+      return resolvedPath + '.ts'; // Default fallback
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Categorizes a single type by its source file into one of three categories
+   */
+  private categorizeTypeBySource(
+    typeName: string,
+    typeSourceFile: string | undefined,
+    mainSourceFile: string,
+    localTypes: Set<string>,
+    relativeImports: Map<string, Set<string>>,
+    externalTypes: Map<string, string>,
+  ): void {
+    if (!typeName || this.isGlobalType(typeName)) {
+      return;
+    }
+
+    if (!typeSourceFile) {
+      // If no source file, assume it's local to the main type
+      localTypes.add(typeName);
+      return;
+    }
+
+    // Determine import category
+    if (this.looksLikePackagePath(typeSourceFile)) {
+      // External package import
+      externalTypes.set(typeName, typeSourceFile);
+    } else if (typeSourceFile === mainSourceFile) {
+      // Local to the same file
+      localTypes.add(typeName);
+    } else {
+      // Relative import from another local file
+      if (!relativeImports.has(typeSourceFile)) {
+        relativeImports.set(typeSourceFile, new Set());
+      }
+      relativeImports.get(typeSourceFile)!.add(typeName);
     }
   }
 
