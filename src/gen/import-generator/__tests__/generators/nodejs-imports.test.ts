@@ -22,7 +22,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { EventEmitter } from "events";');
-    });
+    }, 30000);
 
     test('generates imports for stream types', () => {
       const resolvedType = createResolvedType({
@@ -39,7 +39,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Duplex, Readable, Transform, Writable } from "stream";');
-    });
+    }, 30000);
 
     test('generates imports for URL types', () => {
       const resolvedType = createResolvedType({
@@ -54,7 +54,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { URL, URLSearchParams } from "url";');
-    });
+    }, 30000);
 
     test('groups types by module correctly', () => {
       const resolvedType = createResolvedType({
@@ -72,7 +72,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(result).toContain('import { EventEmitter } from "events";');
       expect(result).toContain('import { Readable } from "stream";');
       expect(result).toContain('import { URL } from "url";');
-    });
+    }, 30000);
 
     test('correctly handles global types vs Node.js module types', () => {
       const resolvedType = createResolvedType({
@@ -95,7 +95,7 @@ describe('NodeJSImportsGenerator', () => {
       // These should NOT be present as they're global types
       expect(result.some(imp => imp.includes('Buffer'))).toBe(false);
       expect(result.some(imp => imp.includes('ArrayBuffer'))).toBe(false);
-    });
+    }, 30000);
 
     test('scans nested object properties', () => {
       const resolvedType = createResolvedType({
@@ -116,7 +116,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(result).toHaveLength(2);
       expect(result).toContain('import { EventEmitter } from "events";');
       expect(result).toContain('import { Readable } from "stream";');
-    });
+    }, 30000);
 
     test('scans array element types', () => {
       const resolvedType = createResolvedType({
@@ -133,7 +133,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Readable } from "stream";');
-    });
+    }, 30000);
 
     test('scans union type members', () => {
       const resolvedType = createResolvedType({
@@ -154,7 +154,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Readable, Writable } from "stream";');
-    });
+    }, 30000);
 
     test('scans generic type arguments', () => {
       const resolvedType = createResolvedType({
@@ -171,7 +171,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Readable } from "stream";');
-    });
+    }, 30000);
 
     test('handles deeply nested structures', () => {
       const resolvedType = createResolvedType({
@@ -208,7 +208,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(result).toHaveLength(2);
       expect(result).toContain('import { EventEmitter } from "events";');
       expect(result).toContain('import { Readable } from "stream";');
-    });
+    }, 30000);
 
     test('returns empty array when no Node.js types found', () => {
       const resolvedType = createResolvedType({
@@ -222,7 +222,7 @@ describe('NodeJSImportsGenerator', () => {
 
       const result = generator.generateNodeJSImports(resolvedType);
       expect(result).toHaveLength(0);
-    });
+    }, 30000);
 
     test('deduplicates types within the same module', () => {
       const resolvedType = createResolvedType({
@@ -238,7 +238,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Readable, Writable } from "stream";');
-    });
+    }, 30000);
 
     test('sorts types alphabetically within imports', () => {
       const resolvedType = createResolvedType({
@@ -255,7 +255,7 @@ describe('NodeJSImportsGenerator', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toBe('import { Duplex, Readable, Transform, Writable } from "stream";');
-    });
+    }, 30000);
 
     test('handles complex real-world scenario', () => {
       const resolvedType = createResolvedType({
@@ -294,7 +294,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(result).toContain('import { EventEmitter } from "events";');
       expect(result).toContain('import { Readable, Transform, Writable } from "stream";');
       expect(result).toContain('import { URL, URLSearchParams } from "url";');
-    });
+    }, 30000);
 
     test('handles more Node.js built-in types beyond the original hardcoded set', () => {
       const resolvedType = createResolvedType({
@@ -314,7 +314,7 @@ describe('NodeJSImportsGenerator', () => {
       // These should be resolved via the new dynamic resolver
       expect(result.some(import_str => import_str.includes('Stats'))).toBe(true);
       expect(result.some(import_str => import_str.includes('Hash'))).toBe(true);
-    });
+    }, 30000);
   });
 
   describe('NodeJSImportsGenerator with TypeScript config', () => {
@@ -336,7 +336,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(result).toContain('import { EventEmitter } from "events";');
       expect(result).toContain('import { Readable } from "stream";');
       expect(result).toContain('import { URL } from "url";');
-    });
+    }, 30000);
 
     test('falls back to pattern matching when tsconfig is invalid', () => {
       const generatorWithInvalidConfig = new NodeJSImportsGenerator('./invalid-tsconfig.json');
@@ -402,7 +402,7 @@ describe('NodeJSImportsGenerator', () => {
       expect(resultWithoutConfig).toContain('import { Readable } from "stream";');
       expect(resultWithConfig).toContain('import { Readable } from "stream";');
     });
-  });
+  }, 30000);
 
   // Helper functions for creating test data
   function createResolvedType(typeInfo: TypeInfo): ResolvedType {

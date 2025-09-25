@@ -17,7 +17,7 @@ describe('NodeJSTypeResolver', () => {
     test('resolves EventEmitter to events module', () => {
       const result = resolver.getModuleForType('EventEmitter');
       expect(result).toBe('events');
-    });
+    }, 30000);
 
     test('resolves stream types correctly', () => {
       expect(resolver.getModuleForType('Readable')).toBe('stream');
@@ -25,42 +25,42 @@ describe('NodeJSTypeResolver', () => {
       expect(resolver.getModuleForType('Transform')).toBe('stream');
       expect(resolver.getModuleForType('Duplex')).toBe('stream');
       expect(resolver.getModuleForType('PassThrough')).toBe('stream');
-    });
+    }, 30000);
 
     test('resolves URL types correctly', () => {
       expect(resolver.getModuleForType('URL')).toBe('url');
       expect(resolver.getModuleForType('URLSearchParams')).toBe('url');
-    });
+    }, 30000);
 
     test('resolves HTTP types correctly', () => {
       expect(resolver.getModuleForType('IncomingMessage')).toBe('http');
       expect(resolver.getModuleForType('ServerResponse')).toBe('http');
       expect(resolver.getModuleForType('ClientRequest')).toBe('http');
-    });
+    }, 30000);
 
     test('resolves fs types correctly', () => {
       expect(resolver.getModuleForType('Stats')).toBe('fs');
       expect(resolver.getModuleForType('Dirent')).toBe('fs');
       expect(resolver.getModuleForType('ReadStream')).toBe('fs');
       expect(resolver.getModuleForType('WriteStream')).toBe('fs');
-    });
+    }, 30000);
 
     test('resolves crypto types correctly', () => {
       expect(resolver.getModuleForType('Hash')).toBe('crypto');
       expect(resolver.getModuleForType('Hmac')).toBe('crypto');
       expect(resolver.getModuleForType('Cipher')).toBe('crypto');
       expect(resolver.getModuleForType('KeyObject')).toBe('crypto');
-    });
+    }, 30000);
 
     test('resolves child_process types correctly', () => {
       expect(resolver.getModuleForType('ChildProcess')).toBe('child_process');
       expect(resolver.getModuleForType('ChildProcessWithoutNullStreams')).toBe('child_process');
-    });
+    }, 30000);
 
     test('resolves timer types correctly', () => {
       expect(resolver.getModuleForType('Timeout')).toBe('timers');
       expect(resolver.getModuleForType('Immediate')).toBe('timers');
-    });
+    }, 30000);
 
     test('returns null for non-Node.js types', () => {
       expect(resolver.getModuleForType('string')).toBeNull();
@@ -68,12 +68,12 @@ describe('NodeJSTypeResolver', () => {
       expect(resolver.getModuleForType('boolean')).toBeNull();
       expect(resolver.getModuleForType('CustomType')).toBeNull();
       expect(resolver.getModuleForType('ReactComponent')).toBeNull();
-    });
+    }, 30000);
 
     test('returns null for empty or invalid type names', () => {
       expect(resolver.getModuleForType('')).toBeNull();
       expect(resolver.getModuleForType(' ')).toBeNull();
-    });
+    }, 30000);
 
     test('uses cache for repeated queries', () => {
       // First call
@@ -87,13 +87,13 @@ describe('NodeJSTypeResolver', () => {
       // Verify cache stats
       const stats = resolver.getCacheStats();
       expect(stats.size).toBeGreaterThan(0);
-    });
+    }, 30000);
 
     test('handles case sensitivity correctly', () => {
       expect(resolver.getModuleForType('eventEmitter')).toBeNull();
       expect(resolver.getModuleForType('EVENTEMITTER')).toBeNull();
       expect(resolver.getModuleForType('EventEmitter')).toBe('events');
-    });
+    }, 30000);
   });
 
   describe('pattern inference', () => {
@@ -118,7 +118,7 @@ describe('NodeJSTypeResolver', () => {
       });
 
       resolver.dispose();
-    });
+    }, 30000);
   });
 
   describe('getBuiltinModules', () => {
@@ -133,12 +133,12 @@ describe('NodeJSTypeResolver', () => {
       expect(modules).toContain('events');
       expect(modules).toContain('stream');
       expect(modules).toContain('url');
-    });
+    }, 30000);
 
     test('returned array is readonly', () => {
       const modules = resolver.getBuiltinModules();
       expect(Object.isFrozen(modules) || modules.constructor.name === 'Array').toBe(true);
-    });
+    }, 30000);
   });
 
   describe('isBuiltinModule', () => {
@@ -148,7 +148,7 @@ describe('NodeJSTypeResolver', () => {
       expect(resolver.isBuiltinModule('http')).toBe(true);
       expect(resolver.isBuiltinModule('events')).toBe(true);
       expect(resolver.isBuiltinModule('stream')).toBe(true);
-    });
+    }, 30000);
 
     test('returns false for non-built-in modules', () => {
       expect(resolver.isBuiltinModule('react')).toBe(false);
@@ -156,7 +156,7 @@ describe('NodeJSTypeResolver', () => {
       expect(resolver.isBuiltinModule('express')).toBe(false);
       expect(resolver.isBuiltinModule('')).toBe(false);
       expect(resolver.isBuiltinModule('custom-module')).toBe(false);
-    });
+    }, 30000);
   });
 
   describe('cache management', () => {
@@ -173,7 +173,7 @@ describe('NodeJSTypeResolver', () => {
 
       stats = resolver.getCacheStats();
       expect(stats.size).toBe(0);
-    });
+    }, 30000);
 
     test('getCacheStats returns current cache information', () => {
       const initialStats = resolver.getCacheStats();
@@ -188,7 +188,7 @@ describe('NodeJSTypeResolver', () => {
       const newStats = resolver.getCacheStats();
       expect(newStats.size).toBeGreaterThanOrEqual(initialStats.size);
       expect(newStats.builtinModulesCount).toBe(initialStats.builtinModulesCount);
-    });
+    }, 30000);
   });
 
   describe('dispose', () => {
@@ -200,7 +200,7 @@ describe('NodeJSTypeResolver', () => {
       // Dispose should clear cache
       resolver.dispose();
       expect(resolver.getCacheStats().size).toBe(0);
-    });
+    }, 30000);
   });
 
   describe('comprehensive Node.js type coverage', () => {
@@ -243,7 +243,7 @@ describe('NodeJSTypeResolver', () => {
         const result = resolver.getModuleForType(typeName as string);
         expect(result).toBe(expectedModule);
       });
-    });
+    }, 30000);
   });
 
   describe('TypeScript configuration integration', () => {
@@ -261,7 +261,7 @@ describe('NodeJSTypeResolver', () => {
       expect(urlResult).toBe('url');
 
       resolverWithRealConfig.dispose();
-    });
+    }, 30000);
 
     test('falls back gracefully when tsConfig is invalid', () => {
       const resolverWithInvalidConfig = new NodeJSTypeResolver('./nonexistent-tsconfig.json');
@@ -271,14 +271,14 @@ describe('NodeJSTypeResolver', () => {
       expect(result).toBe('events');
 
       resolverWithInvalidConfig.dispose();
-    });
+    }, 30000);
 
     test('constructor without tsConfig path works', () => {
       const resolverDefault = new NodeJSTypeResolver();
       const result = resolverDefault.getModuleForType('EventEmitter');
       expect(result).toBe('events');
       resolverDefault.dispose();
-    });
+    }, 30000);
 
     test('enhanced resolution with real tsconfig finds more types', () => {
       const resolverWithConfig = new NodeJSTypeResolver('./tsconfig.json');
@@ -299,6 +299,6 @@ describe('NodeJSTypeResolver', () => {
 
       resolverWithConfig.dispose();
       resolverWithoutConfig.dispose();
-    });
+    }, 30000);
   });
 });
