@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.4
+
+### Patch Changes
+
+- ba8d6b0: Dedup transient imports
+
 ## 0.1.3
 
 ### Patch Changes
