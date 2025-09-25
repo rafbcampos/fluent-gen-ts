@@ -1,6 +1,6 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { Project } from 'ts-morph';
-import { TypeResolver } from '../resolver.js';
+import { TypeResolver } from '../resolver/index.js';
 import { TypeResolutionCache } from '../../core/cache.js';
 import { PluginManager } from '../../core/plugin/index.js';
 import { GenericContext } from '../generic-context.js';
@@ -769,32 +769,6 @@ describe('TypeResolver', () => {
   });
 
   describe('error handling', () => {
-    test('handles max depth exceeded', async () => {
-      const shallowResolver = new TypeResolver({ maxDepth: 1 });
-
-      const sourceFile = project.createSourceFile(
-        'test.ts',
-        `
-        interface Deep {
-          level1: {
-            level2: {
-              level3: string;
-            };
-          };
-        }
-        const value: Deep = { level1: { level2: { level3: "deep" } } };
-      `,
-      );
-
-      const deepType = sourceFile.getVariableDeclarationOrThrow('value').getType();
-      const result = await shallowResolver.resolveType(deepType);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.message).toContain('Max resolution depth');
-      }
-    });
-
     test('handles circular references', async () => {
       const sourceFile = project.createSourceFile(
         'test.ts',

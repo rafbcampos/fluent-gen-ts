@@ -1,5 +1,5 @@
 import { TypeScriptParser } from './parser.js';
-import { TypeResolver } from './resolver.js';
+import { TypeResolver } from './resolver/index.js';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { ResolvedType, TypeInfo } from '../core/types.js';
@@ -395,7 +395,7 @@ export { ok, err, isOk, isErr } from '../core/result.js';
 
 // Internal classes - only export if needed by advanced users
 export { TypeScriptParser } from './parser.js';
-export { TypeResolver } from './resolver.js';
+export { TypeResolver } from './resolver/index.js';
 
 // Cache and plugin system for advanced usage
 export { TypeResolutionCache } from '../core/cache.js';
