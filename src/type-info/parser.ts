@@ -81,7 +81,7 @@ export class TypeScriptParser {
    * Uses robust package resolution that handles monorepo scenarios including
    * pnpm workspaces, yarn workspaces, and hoisted dependencies
    *
-   * @param packageNames Array of package names to load (e.g., ['@player-ui/types'])
+   * @param packageNames Array of package names to load (e.g., ['@my-org/pkg'])
    * @param projectRoot The root directory to search for node_modules
    */
   async loadExternalDependencies(

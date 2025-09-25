@@ -309,6 +309,11 @@ export class TypeExtractor {
             dependencies.push(depResult.value);
             const subResult = await collectDependencies(depResult.value.typeInfo);
             if (!subResult.ok) return subResult;
+          } else {
+            console.warn(
+              `Failed to extract ${info.name} from ${sourceFile}:`,
+              depResult.error.message,
+            );
           }
         }
       }
@@ -329,47 +334,41 @@ export class TypeExtractor {
     sourceFile: SourceFile,
     projectRoot: string,
   ): Promise<void> {
-    try {
-      const importDeclarations = sourceFile.getImportDeclarations();
-      const externalPackages = new Set<string>();
+    const importDeclarations = sourceFile.getImportDeclarations();
+    const externalPackages = new Set<string>();
 
-      for (const importDecl of importDeclarations) {
-        const moduleSpecifier = importDecl.getModuleSpecifierValue();
+    for (const importDecl of importDeclarations) {
+      const moduleSpecifier = importDecl.getModuleSpecifierValue();
 
-        // Check if it's an external package (not relative import)
-        if (!moduleSpecifier.startsWith('.') && !moduleSpecifier.startsWith('/')) {
-          // Extract package name
-          const packageName = moduleSpecifier.startsWith('@')
-            ? moduleSpecifier.split('/').slice(0, 2).join('/') // @scope/package
-            : moduleSpecifier.split('/')[0]; // package
+      // Check if it's an external package (not relative import)
+      if (!moduleSpecifier.startsWith('.') && !moduleSpecifier.startsWith('/')) {
+        // Extract package name
+        const packageName = moduleSpecifier.startsWith('@')
+          ? moduleSpecifier.split('/').slice(0, 2).join('/') // @scope/package
+          : moduleSpecifier.split('/')[0]; // package
 
-          if (packageName) externalPackages.add(packageName);
+        if (packageName) externalPackages.add(packageName);
+      }
+    }
+
+    if (externalPackages.size > 0) {
+      // Find project root by looking for package.json
+      let searchDir = projectRoot;
+      while (searchDir !== path.dirname(searchDir)) {
+        const packageJsonPath = path.join(searchDir, 'package.json');
+        if (
+          await access(packageJsonPath, constants.F_OK)
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          projectRoot = searchDir;
+          break;
         }
+        searchDir = path.dirname(searchDir);
       }
 
-      if (externalPackages.size > 0) {
-        console.log(`Detected external packages: ${Array.from(externalPackages).join(', ')}`);
-
-        // Find project root by looking for package.json
-        let searchDir = projectRoot;
-        while (searchDir !== path.dirname(searchDir)) {
-          const packageJsonPath = path.join(searchDir, 'package.json');
-          if (
-            await access(packageJsonPath, constants.F_OK)
-              .then(() => true)
-              .catch(() => false)
-          ) {
-            projectRoot = searchDir;
-            break;
-          }
-          searchDir = path.dirname(searchDir);
-        }
-
-        // Load the dependencies
-        await this.parser.loadExternalDependencies(Array.from(externalPackages), projectRoot);
-      }
-    } catch (error) {
-      console.warn(`Failed to load external dependencies: ${error}`);
+      // Load the dependencies
+      await this.parser.loadExternalDependencies(Array.from(externalPackages), projectRoot);
     }
   }
 

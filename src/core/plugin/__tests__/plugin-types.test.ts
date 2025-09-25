@@ -89,12 +89,12 @@ describe('Plugin Types', () => {
       test('should accept valid external import', () => {
         const externalImport: ExternalImport = {
           kind: 'external',
-          package: '@player-ui/types',
+          package: '@my-org/pkg',
           imports: ['Asset', 'Flow'],
         };
 
         expect(externalImport.kind).toBe('external');
-        expect(externalImport.package).toBe('@player-ui/types');
+        expect(externalImport.package).toBe('@my-org/pkg');
         expect(externalImport.imports).toEqual(['Asset', 'Flow']);
       });
 

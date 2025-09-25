@@ -742,5 +742,45 @@ import { UtilityFunction, TypeDefinition } from '@util/module';
         expect(result.value).toHaveLength(100);
       }
     });
+
+    test('protects against ReDoS attack on extractModulesFromNamedImports', () => {
+      // Create a potentially malicious input that would cause ReDoS with the old regex
+      const maliciousInput =
+        'import { ' + 'type '.repeat(1000) + ' '.repeat(1000) + '} from "malicious";';
+
+      const start = Date.now();
+      const result = (generator as any).extractModulesFromNamedImports(maliciousInput);
+      const end = Date.now();
+
+      // Should complete quickly (under 100ms) and not hang
+      expect(end - start).toBeLessThan(100);
+      // Should return empty set or contain 'malicious' module
+      expect(result instanceof Set).toBe(true);
+    });
+
+    test('handles long input strings safely', () => {
+      // Test input length validation
+      const veryLongInput = 'import { type A } from "module";'.repeat(1000);
+
+      const start = Date.now();
+      const result = (generator as any).extractModulesFromNamedImports(veryLongInput);
+      const end = Date.now();
+
+      // Should complete quickly even with long input
+      expect(end - start).toBeLessThan(1000);
+      expect(result instanceof Set).toBe(true);
+    });
+
+    test('correctly identifies mixed imports with types after regex fix', () => {
+      const mixedImports = `
+import { type TypeA, ComponentB } from '@mixed/module';
+import { UtilityFunction, TypeDefinition, type InterfaceC } from '@util/module';
+      `.trim();
+
+      const result = (generator as any).extractModulesFromNamedImports(mixedImports);
+
+      expect(result.has('@mixed/module')).toBe(true);
+      expect(result.has('@util/module')).toBe(true);
+    });
   });
 });

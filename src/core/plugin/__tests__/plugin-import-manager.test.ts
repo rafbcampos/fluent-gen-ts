@@ -119,12 +119,12 @@ describe('Plugin Import Manager', () => {
 
     test('should add external import with multiple named imports', () => {
       const manager = new ImportManager();
-      manager.addExternal('@player-ui/types', ['Asset', 'Flow', 'Node']);
+      manager.addExternal('@my-org/pkg', ['Asset', 'Flow', 'Node']);
 
       const imports = manager.getImports();
       expect(imports[0]).toEqual({
         kind: 'external',
-        package: '@player-ui/types',
+        package: '@my-org/pkg',
         imports: ['Asset', 'Flow', 'Node'],
       });
     });
@@ -577,7 +577,7 @@ describe('Plugin Import Manager', () => {
     test('should support complex fluent chains', () => {
       const manager = createImportManager()
         .addInternalTypes('../types.js', ['User', 'Product'])
-        .addExternalTypes('@player-ui/types', ['Asset', 'Flow'])
+        .addExternalTypes('@my-org/pkg', ['Asset', 'Flow'])
         .addInternalDefault('../utils.js', 'utils')
         .addExternalDefault('lodash', '_')
         .addInternal('../helpers.js', 'format', { typeOnly: false })
@@ -587,7 +587,7 @@ describe('Plugin Import Manager', () => {
 
       const statements = manager.toImportStatements();
       expect(statements).toContain("import type { User, Product } from '../types.js';");
-      expect(statements).toContain("import type { Asset, Flow } from '@player-ui/types';");
+      expect(statements).toContain("import type { Asset, Flow } from '@my-org/pkg';");
       expect(statements).toContain("import utils from '../utils.js';");
       expect(statements).toContain("import _ from 'lodash';");
       expect(statements).toContain("import { format } from '../helpers.js';");

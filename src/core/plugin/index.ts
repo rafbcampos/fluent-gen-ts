@@ -17,8 +17,8 @@
  *
  * const myPlugin = createPlugin('my-plugin', '1.0.0')
  *   .requireImports(imports => imports
- *     .addInternalTypes('../types.js', ['TaggedTemplateValue'])
- *     .addExternal('@player-ui/types', ['Asset'])
+ *     .addInternalTypes('../types.js', ['TypeA'])
+ *     .addExternal('@my-org/pkg', ['TypeB'])
  *   )
  *   .transformPropertyMethods(builder => builder
  *     .when(ctx => ctx.type.isPrimitive('string', 'number', 'boolean'))
