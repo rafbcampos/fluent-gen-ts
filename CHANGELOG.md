@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.7
+
+### Patch Changes
+
+- f986e84: New import data type
+
 ## 0.1.6
 
 ### Patch Changes
