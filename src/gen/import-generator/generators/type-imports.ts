@@ -11,11 +11,13 @@ import { resolveImportConflicts } from '../utils/deduplication.js';
 import { looksLikePackagePath } from '../utils/path-utils.js';
 import { DependencyResolver } from '../resolvers/dependency-resolver.js';
 import { PackageResolver } from '../resolvers/package-resolver.js';
+import { TypeDefinitionFinder } from '../resolvers/type-definition-finder.js';
 import { ok, err } from '../../../core/result.js';
 
 export class TypeImportsGenerator {
   private readonly dependencyResolver = new DependencyResolver();
   private readonly packageResolver = new PackageResolver();
+  private readonly typeDefinitionFinder = new TypeDefinitionFinder();
 
   generateTypeImports(resolvedType: ResolvedType, outputDir?: string): Result<string, Error> {
     try {
@@ -49,6 +51,7 @@ export class TypeImportsGenerator {
 
   dispose(): void {
     this.dependencyResolver.dispose();
+    this.typeDefinitionFinder.dispose();
   }
 
   private processMainType(resolvedType: ResolvedType, categories: TypeImportCategories): void {
@@ -113,12 +116,48 @@ export class TypeImportsGenerator {
 
     if (!typeInfo) return;
 
-    if (this.isObjectType(typeInfo) && typeInfo.name && validateTypeName(typeInfo.name)) {
-      this.categorizeTypeBySource(typeInfo.name, typeInfo.sourceFile, mainSourceFile, categories);
+    if (this.isObjectType(typeInfo)) {
+      // Process named objects
+      if (typeInfo.name && validateTypeName(typeInfo.name)) {
+        // If sourceFile is missing, try to find it
+        let sourceFile = typeInfo.sourceFile;
+        if (!sourceFile) {
+          const foundSource = this.typeDefinitionFinder.findTypeSourceFile(
+            typeInfo.name,
+            mainSourceFile,
+          );
+          sourceFile = foundSource ?? undefined;
+        }
+        this.categorizeTypeBySource(typeInfo.name, sourceFile, mainSourceFile, categories);
+      }
 
+      // Process all object properties, even for unnamed objects
       for (const prop of typeInfo.properties) {
+        // Pass along the sourceFile if we have one, so nested types can use it as a hint
+        let propTypeInfo = prop.type;
+        const hintSourceFile = typeInfo.sourceFile || mainSourceFile;
+
+        if (
+          this.isObjectType(propTypeInfo) &&
+          !propTypeInfo.sourceFile &&
+          propTypeInfo.name &&
+          validateTypeName(propTypeInfo.name)
+        ) {
+          // Try to find the nested type's actual source
+          const nestedSource = this.typeDefinitionFinder.findTypeSourceFile(
+            propTypeInfo.name,
+            hintSourceFile,
+          );
+          if (nestedSource) {
+            // Create a new object with the sourceFile instead of mutating
+            propTypeInfo = {
+              ...propTypeInfo,
+              sourceFile: nestedSource,
+            };
+          }
+        }
         this.categorizeTypesFromTypeInfo({
-          typeInfo: prop.type,
+          typeInfo: propTypeInfo,
           mainSourceFile,
           categories,
         });

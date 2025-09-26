@@ -14,20 +14,24 @@ export class BatchCommand {
   private taskRunner = new TaskRunner();
 
   async execute(options: BatchOptions = {}): Promise<void> {
-    const spinner = ora('Loading configuration...').start();
+    console.log(chalk.bold('\n━━━ Configuration Phase ━━━'));
+    const configPath = options.config || 'default search path';
+    console.log(chalk.gray(`Config: ${configPath}`));
+    console.log();
 
     try {
       const configResult = this.configLoader.load(options.config);
       if (!isOk(configResult)) {
-        spinner.fail(chalk.red('Failed to load configuration'));
+        console.error(chalk.red('✖ Failed to load configuration'));
         console.error(configResult.error);
         process.exit(1);
       }
 
       const config = configResult.value;
+      console.log(chalk.green('✔ Configuration loaded'));
 
       if (!config.targets || config.targets.length === 0) {
-        spinner.fail(chalk.red('No targets found in configuration'));
+        console.error(chalk.red('✖ No targets found in configuration'));
         process.exit(1);
       }
 
@@ -35,13 +39,18 @@ export class BatchCommand {
 
       let pluginManager = undefined;
       if (allPluginPaths.length > 0) {
-        spinner.text = 'Loading plugins...';
+        console.log(chalk.bold('\n━━━ Plugin Phase ━━━'));
         pluginManager = await this.pluginService.loadPlugins(allPluginPaths);
+        console.log(chalk.green(`✔ Loaded ${allPluginPaths.length} plugin(s)`));
       }
 
-      spinner.text = 'Processing targets...';
+      console.log(chalk.bold('\n━━━ Generation Phase ━━━'));
+      const targetCount = config.targets ? config.targets.length : 0;
+      console.log(chalk.gray(`Processing ${targetCount} target(s)...\n`));
 
       const generator = this.generatorService.createGenerator(config, pluginManager);
+
+      const spinner = ora();
 
       const tasks = this.taskRunner.createTasksFromTargets(config.targets);
 
@@ -51,17 +60,27 @@ export class BatchCommand {
         generateCommonFile: config.generator?.generateCommonFile ?? true,
         ...(config.generator && { generatorConfig: config.generator }),
         onProgress: message => {
-          spinner.text = message;
+          spinner.start(message);
         },
       });
 
-      spinner.succeed(
+      spinner.stop();
+
+      console.log(chalk.bold('\n━━━ Summary ━━━'));
+      console.log(
         chalk.green(
-          `✓ Batch generation complete: ${result.successCount} succeeded, ${result.failCount} failed`,
+          `✔ Batch generation complete: ${result.successCount} succeeded, ${result.failCount} failed`,
         ),
       );
+
+      if (result.errors.length > 0) {
+        console.log(chalk.bold('\nErrors:'));
+        result.errors.forEach(error => {
+          console.error(chalk.yellow(`  ⚠ ${error}`));
+        });
+      }
     } catch (error) {
-      spinner.fail(chalk.red('Unexpected error'));
+      console.error(chalk.red('✖ Unexpected error'));
       console.error(error);
       process.exit(1);
     }

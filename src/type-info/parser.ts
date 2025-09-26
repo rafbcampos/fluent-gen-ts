@@ -87,15 +87,14 @@ export class TypeScriptParser {
   async loadExternalDependencies(
     packageNames: string[],
     projectRoot: string,
-  ): Promise<Result<void>> {
+  ): Promise<Result<{ loadedPackages: string[]; failedPackages: string[]; warnings: string[] }>> {
     try {
       const packageManager = await this.packageResolver.detectPackageManager(projectRoot);
       const loadedPackages: string[] = [];
       const failedPackages: string[] = [];
+      const warnings: string[] = [];
 
       for (const packageName of packageNames) {
-        console.log(`Resolving package: ${packageName}`);
-
         const resolveResult = await this.packageResolver.resolvePackage({
           packageName,
           startPath: projectRoot,
@@ -104,28 +103,24 @@ export class TypeScriptParser {
         });
 
         if (!resolveResult.ok) {
-          console.warn(
+          failedPackages.push(packageName);
+          warnings.push(
             `Failed to resolve package '${packageName}': ${resolveResult.error.message}`,
           );
-          failedPackages.push(packageName);
           continue;
         }
 
         const resolvedPackage = resolveResult.value;
-        console.log(
-          `Package '${packageName}' resolved from ${resolvedPackage.resolvedFrom} at: ${resolvedPackage.path}`,
-        );
 
         let typesLoaded = false;
 
         // Load primary types entry if available
         if (resolvedPackage.typesPath) {
           try {
-            console.log(`Loading types from: ${resolvedPackage.typesPath}`);
             this.project.addSourceFileAtPath(resolvedPackage.typesPath);
             typesLoaded = true;
           } catch (error) {
-            console.warn(`Failed to load types from ${resolvedPackage.typesPath}: ${error}`);
+            warnings.push(`Failed to load types from ${resolvedPackage.typesPath}: ${error}`);
           }
         }
 
@@ -136,13 +131,12 @@ export class TypeScriptParser {
             try {
               this.project.addSourceFileAtPath(dtsFile);
               filesLoaded++;
-            } catch (error) {
-              console.warn(`Failed to load declaration file ${dtsFile}: ${error}`);
+            } catch {
+              warnings.push(`Failed to load declaration file ${dtsFile}`);
             }
           }
 
           if (filesLoaded > 0) {
-            console.log(`Loaded ${filesLoaded} declaration files for package '${packageName}'`);
             typesLoaded = true;
           }
         }
@@ -150,20 +144,12 @@ export class TypeScriptParser {
         if (typesLoaded) {
           loadedPackages.push(packageName);
         } else {
-          console.warn(`No TypeScript definitions found for package '${packageName}'`);
           failedPackages.push(packageName);
+          warnings.push(`No TypeScript definitions found for package '${packageName}'`);
         }
       }
 
-      // Log summary
-      if (loadedPackages.length > 0) {
-        console.log(`Successfully loaded external dependencies: ${loadedPackages.join(', ')}`);
-      }
-      if (failedPackages.length > 0) {
-        console.warn(`Failed to load external dependencies: ${failedPackages.join(', ')}`);
-      }
-
-      return ok(undefined);
+      return ok({ loadedPackages, failedPackages, warnings });
     } catch (error) {
       return err(new Error(`Failed to load external dependencies: ${error}`));
     }

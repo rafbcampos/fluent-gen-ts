@@ -20,6 +20,7 @@ export interface TaskRunResult {
   successCount: number;
   failCount: number;
   results: TaskWithResult[];
+  errors: string[];
 }
 
 export interface TaskGroup {
@@ -131,6 +132,7 @@ export class TaskRunner {
     let successCount = 0;
     let failCount = 0;
     const taskResults: TaskWithResult[] = [];
+    const errors: string[] = [];
 
     results.forEach(result => {
       if (result.status === 'fulfilled') {
@@ -146,13 +148,11 @@ export class TaskRunner {
         });
       } else {
         failCount++;
-        console.error(chalk.yellow(`  ⚠ Failed: ${result.reason}`));
-        // We can't easily create a proper TaskWithResult here without more context
-        // This will be handled by the sequential fallback behavior
+        errors.push(`Failed: ${result.reason}`);
       }
     });
 
-    return { successCount, failCount, results: taskResults };
+    return { successCount, failCount, results: taskResults, errors };
   }
 
   private async runSequential(
@@ -166,12 +166,15 @@ export class TaskRunner {
     let successCount = 0;
     let failCount = 0;
     const taskResults: TaskWithResult[] = [];
+    const errors: string[] = [];
 
     // Process batch groups first
     for (const group of batchGroups) {
-      onProgress?.(
-        `Processing batch ${chalk.cyan(group.file)} - ${chalk.cyan(group.typeNames.join(', '))}...`,
-      );
+      const displayMessage =
+        group.file === '__multi_file__'
+          ? `Generating ${chalk.cyan(group.typeNames.length)} type(s) in batch...`
+          : `Generating from ${chalk.cyan(group.file)} (${chalk.cyan(group.typeNames.length)} type(s))...`;
+      onProgress?.(displayMessage);
 
       const batchResults = await this.executeBatchGroup(group, generator, dryRun, generatorConfig);
       taskResults.push(...batchResults);
@@ -185,7 +188,7 @@ export class TaskRunner {
             'error' in taskWithResult.result
               ? taskWithResult.result.error
               : new Error('Unknown error');
-          console.error(chalk.yellow(`  ⚠ Failed to generate batch: ${error.message}`));
+          errors.push(`Failed to generate batch: ${error.message}`);
         }
       });
     }
@@ -193,7 +196,7 @@ export class TaskRunner {
     // Process individual tasks
     for (const task of individualTasks) {
       if (task.type === 'generate') {
-        onProgress?.(`Processing ${chalk.cyan(task.file)} - ${chalk.cyan(task.typeName)}...`);
+        onProgress?.(`Generating ${chalk.cyan(task.typeName)}...`);
       } else {
         onProgress?.(`Scanning ${chalk.cyan(task.file)}...`);
       }
@@ -213,11 +216,11 @@ export class TaskRunner {
           task.type === 'generate'
             ? `Failed to generate ${task.typeName}: ${error.message}`
             : `Failed to scan ${task.file}: ${error.message}`;
-        console.error(chalk.yellow(`  ⚠ ${errorMessage}`));
+        errors.push(errorMessage);
       }
     }
 
-    return { successCount, failCount, results: taskResults };
+    return { successCount, failCount, results: taskResults, errors };
   }
 
   private async executeTask(
@@ -425,6 +428,7 @@ export class TaskRunner {
     // Write files if not dry run
     if (!dryRun) {
       const outputMap = new Map<string, string>();
+      const builderFilePaths: string[] = [];
 
       for (const [fileName, code] of result.value) {
         if (fileName === 'common.ts') {
@@ -441,8 +445,26 @@ export class TaskRunner {
               file: path.basename(task.file, '.ts'),
             });
             outputMap.set(outputPath, code);
+
+            // Track builder files for barrel export (use relative path)
+            const fileName = path.basename(outputPath);
+            builderFilePaths.push(fileName);
           }
         }
+      }
+
+      // Generate barrel export index.ts
+      if (builderFilePaths.length > 0) {
+        const indexContent =
+          builderFilePaths
+            .map(fileName => {
+              const importPath = `./${fileName.replace('.ts', '.js')}`;
+              return `export * from '${importPath}';`;
+            })
+            .join('\n') + '\n';
+
+        const indexPath = path.join(group.outputDir, 'index.ts');
+        outputMap.set(indexPath, indexContent);
       }
 
       await this.fileService.writeOutputBatch(outputMap);

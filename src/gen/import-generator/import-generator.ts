@@ -30,11 +30,6 @@ export class ImportGenerator {
 
       const imports: string[] = [];
 
-      const commonImportsResult = this.addCommonImports(config, imports);
-      if (!commonImportsResult.ok) {
-        return commonImportsResult;
-      }
-
       this.addNodeJSImports(resolvedType, imports);
 
       const typeImportsResult = await this.addTypeImports(resolvedType, config, imports);
@@ -47,8 +42,14 @@ export class ImportGenerator {
         typeImportsResult.value,
         imports,
       );
+
       if (!moduleImportsResult.ok) {
         return moduleImportsResult;
+      }
+
+      const commonImportsResult = this.addCommonImports(config, imports);
+      if (!commonImportsResult.ok) {
+        return commonImportsResult;
       }
 
       const finalResult = await this.pluginIntegration.processPluginImports(

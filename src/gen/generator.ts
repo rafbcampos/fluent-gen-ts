@@ -55,11 +55,6 @@ export class BuilderGenerator {
     this.methodGenerator = new MethodGenerator();
   }
 
-  // Helper methods to get config values with defaults
-  private getOutputPath(): string {
-    return this.config.outputPath ?? DEFAULT_OUTPUT_PATH;
-  }
-
   private getContextType(): string {
     return this.config.contextType ?? DEFAULT_CONTEXT_TYPE;
   }

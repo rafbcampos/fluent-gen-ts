@@ -144,7 +144,7 @@ export class TypeExtractor {
 
     const sourceFile = sourceFileResult.value;
 
-    // Auto-detect and load external dependencies
+    // Auto-detect and load external dependencies (warnings collected but not shown here)
     await this.loadExternalDependencies(sourceFile, path.dirname(absolutePath));
 
     // Normal type resolution
@@ -309,11 +309,6 @@ export class TypeExtractor {
             dependencies.push(depResult.value);
             const subResult = await collectDependencies(depResult.value.typeInfo);
             if (!subResult.ok) return subResult;
-          } else {
-            console.warn(
-              `Failed to extract ${info.name} from ${sourceFile}:`,
-              depResult.error.message,
-            );
           }
         }
       }
@@ -333,7 +328,7 @@ export class TypeExtractor {
   private async loadExternalDependencies(
     sourceFile: SourceFile,
     projectRoot: string,
-  ): Promise<void> {
+  ): Promise<string[]> {
     const importDeclarations = sourceFile.getImportDeclarations();
     const externalPackages = new Set<string>();
 
@@ -368,8 +363,15 @@ export class TypeExtractor {
       }
 
       // Load the dependencies
-      await this.parser.loadExternalDependencies(Array.from(externalPackages), projectRoot);
+      const result = await this.parser.loadExternalDependencies(
+        Array.from(externalPackages),
+        projectRoot,
+      );
+      if (result.ok) {
+        return result.value.warnings;
+      }
     }
+    return [];
   }
 
   clearCache(): void {
