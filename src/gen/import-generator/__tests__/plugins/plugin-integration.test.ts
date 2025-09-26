@@ -5,11 +5,18 @@ import type { ResolvedType } from '../../../../core/types.js';
 import { TypeKind } from '../../../../core/types.js';
 import { isErr } from '../../../../core/result.js';
 import { HookType } from '../../../../core/plugin/index.js';
+import { ImportParser } from '../../../../core/plugin/import-transformer.js';
+import type { StructuredImport } from '../../../../core/plugin/plugin-types.js';
 
 // Mock deduplication
 vi.mock('../../utils/deduplication.js', () => ({
   deduplicateImports: vi.fn((imports: string[]) => [...new Set(imports)]),
 }));
+
+// Helper function to parse import strings to structured imports for tests
+function parseImportsForTest(importStrings: string[]): StructuredImport[] {
+  return ImportParser.parseImports(importStrings);
+}
 
 describe('PluginIntegration', () => {
   let integration: PluginIntegration;
@@ -75,7 +82,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: [...baseImports, ...pluginImports] },
+        value: {
+          imports: parseImportsForTest([...baseImports, ...pluginImports]),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -101,7 +114,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: baseImports },
+        value: {
+          imports: parseImportsForTest(baseImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -129,7 +148,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: transformedImports },
+        value: {
+          imports: parseImportsForTest(transformedImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -145,12 +170,13 @@ describe('PluginIntegration', () => {
 
       expect(mockPluginManager.executeHook).toHaveBeenCalledWith({
         hookType: HookType.TransformImports,
-        input: {
-          imports: baseImports,
+        input: expect.objectContaining({
+          imports: parseImportsForTest(baseImports),
           resolvedType: mockResolvedType,
           isGeneratingMultiple: true,
           hasExistingCommon: false,
-        },
+          utils: expect.any(Object),
+        }),
       });
     });
 
@@ -168,7 +194,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: transformedImports },
+        value: {
+          imports: parseImportsForTest(transformedImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -258,7 +290,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: baseImports },
+        value: {
+          imports: parseImportsForTest(baseImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const customConfig = {
@@ -271,12 +309,13 @@ describe('PluginIntegration', () => {
 
       expect(mockPluginManager.executeHook).toHaveBeenCalledWith({
         hookType: HookType.TransformImports,
-        input: {
-          imports: baseImports,
+        input: expect.objectContaining({
+          imports: parseImportsForTest(baseImports),
           resolvedType: mockResolvedType,
           isGeneratingMultiple: false,
           hasExistingCommon: true,
-        },
+          utils: expect.any(Object),
+        }),
       });
     });
 
@@ -304,7 +343,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: transformedImports },
+        value: {
+          imports: parseImportsForTest(transformedImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -332,7 +377,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: pluginImports },
+        value: {
+          imports: parseImportsForTest(pluginImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -356,7 +407,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: baseImports },
+        value: {
+          imports: parseImportsForTest(baseImports),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(
@@ -385,7 +442,13 @@ describe('PluginIntegration', () => {
 
       mockPluginManager.executeHook.mockResolvedValue({
         ok: true,
-        value: { imports: [...baseImports, ...pluginImports] },
+        value: {
+          imports: parseImportsForTest([...baseImports, ...pluginImports]),
+          resolvedType: mockResolvedType,
+          isGeneratingMultiple: true,
+          hasExistingCommon: false,
+          utils: expect.any(Object),
+        },
       });
 
       const result = await integration.processPluginImports(

@@ -66,6 +66,13 @@ export type {
   ValueTransform,
   ImportTransformContext,
 
+  // Structured Import Types
+  StructuredImport,
+  StructuredNamedImport,
+  CreateImportOptions,
+  RelativeToMonorepoMapping,
+  ImportTransformUtils,
+
   // Type Matcher Types
   TypeMatcher,
   TypeMatcherBuilder,
@@ -122,6 +129,8 @@ export {
   enhanceValueContext,
   enhanceBuildMethodContext,
 } from './context-enhancers.js';
+export { ImportParser, ImportSerializer, ImportTransformUtilsImpl } from './import-transformer.js';
+export { ImportParsingUtils } from '../utils/import-parser-utils.js';
 
 // Re-export Result type and functions for plugin authors
 export type { Result } from '../result.js';

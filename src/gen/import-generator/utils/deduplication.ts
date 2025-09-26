@@ -1,4 +1,5 @@
 import { validateTypeName } from './validation.js';
+import { ImportParsingUtils } from '../../../core/utils/import-parser-utils.js';
 
 export const deduplicateImports = (imports: string[]): string[] => {
   if (!Array.isArray(imports)) {
@@ -23,7 +24,7 @@ export const deduplicateImports = (imports: string[]): string[] => {
       continue;
     }
 
-    const importedNames = extractAllImportedNames(normalized);
+    const importedNames = ImportParsingUtils.extractAllImportedNames(normalized);
     let shouldSkip = false;
 
     for (const importName of importedNames) {
@@ -47,58 +48,8 @@ export const deduplicateImports = (imports: string[]): string[] => {
   return deduplicated;
 };
 
-const extractAllImportedNames = (importStatement: string): string[] => {
-  const names: string[] = [];
-
-  // Extract from type-only imports: import type { A, B } from "module"
-  const typeOnlyMatch = importStatement.match(/import\s+type\s+\{\s*([^}]+)\s*\}/);
-  if (typeOnlyMatch?.[1]) {
-    const typeList = typeOnlyMatch[1].split(',').map(t => t.trim());
-    names.push(...typeList);
-  }
-
-  // Extract from mixed imports: import [Default,] { a, type B, c } from "module"
-  const mixedMatch = importStatement.match(/import\s+(?:\w+\s*,\s*)?\{\s*([^}]+)\s*\}/);
-  if (mixedMatch?.[1]) {
-    const items = mixedMatch[1].split(',');
-    for (const item of items) {
-      const trimmed = item.trim();
-      const typeMatch = trimmed.match(/^type\s+(\w+)$/);
-      if (typeMatch?.[1]) {
-        names.push(typeMatch[1]);
-      } else if (/^\w+$/.test(trimmed)) {
-        names.push(trimmed);
-      }
-    }
-  }
-
-  return names;
-};
-
 export const extractImportedTypes = (importStatement: string): string[] => {
-  const types: string[] = [];
-
-  const typeOnlyMatch = importStatement.match(/import\s+type\s+\{\s*([^}]+)\s*\}/);
-  if (typeOnlyMatch?.[1]) {
-    const typeList = typeOnlyMatch[1].split(',').map(t => t.trim());
-    types.push(...typeList);
-  }
-
-  const mixedMatch = importStatement.match(/import\s+(?:\w+\s*,\s*)?\{\s*([^}]+)\s*\}/);
-  if (mixedMatch?.[1]) {
-    const items = mixedMatch[1].split(',');
-    for (const item of items) {
-      const trimmed = item.trim();
-      const typeMatch = trimmed.match(/^type\s+(\w+)$/);
-      if (typeMatch?.[1]) {
-        types.push(typeMatch[1]);
-      } else if (/^[A-Z]\w*$/.test(trimmed)) {
-        types.push(trimmed);
-      }
-    }
-  }
-
-  return types.filter(validateTypeName);
+  return ImportParsingUtils.extractImportedTypes(importStatement, validateTypeName);
 };
 
 export const extractModulesFromNamedImports = (importStatements: string): Set<string> => {

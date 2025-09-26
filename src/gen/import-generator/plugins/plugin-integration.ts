@@ -5,6 +5,11 @@ import type { Result } from '../../../core/result.js';
 import type { ImportGeneratorConfig } from '../types.js';
 import { deduplicateImports } from '../utils/deduplication.js';
 import { ok, err } from '../../../core/result.js';
+import {
+  ImportParser,
+  ImportSerializer,
+  ImportTransformUtilsImpl,
+} from '../../../core/plugin/import-transformer.js';
 
 export class PluginIntegration {
   async processPluginImports(
@@ -57,11 +62,15 @@ export class PluginIntegration {
         return ok(imports);
       }
 
+      // Parse string imports to structured imports
+      const structuredImports = ImportParser.parseImports(imports);
+
       const transformContext: ImportTransformContext = {
-        imports,
+        imports: structuredImports,
         resolvedType,
         isGeneratingMultiple: config.isGeneratingMultiple,
         hasExistingCommon: config.hasExistingCommon ?? false,
+        utils: new ImportTransformUtilsImpl(),
       };
 
       const transformResult = await config.pluginManager.executeHook({
@@ -73,7 +82,9 @@ export class PluginIntegration {
         return err(new Error(`Plugin transformation failed: ${transformResult.error}`));
       }
 
-      return ok([...transformResult.value.imports]);
+      // Extract the transformed imports from the result context
+      const transformedImports = ImportSerializer.serializeImports(transformResult.value.imports);
+      return ok(transformedImports);
     } catch (error) {
       return err(new Error(`Failed to apply plugin transformations: ${error}`));
     }

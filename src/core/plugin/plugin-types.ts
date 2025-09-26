@@ -186,13 +186,101 @@ export interface ValueTransform {
 }
 
 /**
- * Import transformation context
+ * Represents a structured import statement with parsed components
+ */
+export interface StructuredImport {
+  /** The module path or package name */
+  readonly source: string;
+  /** Named imports (e.g., { Foo, Bar }) */
+  readonly namedImports: readonly StructuredNamedImport[];
+  /** Default import name (e.g., React in 'import React from "react"') */
+  readonly defaultImport?: string;
+  /** Namespace import name (e.g., utils in 'import * as utils from "./utils"') */
+  readonly namespaceImport?: string;
+  /** Whether this is a type-only import */
+  readonly isTypeOnly: boolean;
+  /** Whether this is a side-effect import (e.g., 'import "./styles.css"') */
+  readonly isSideEffect: boolean;
+}
+
+/**
+ * Represents a named import with optional type-only flag
+ */
+export interface StructuredNamedImport {
+  /** The imported name */
+  readonly name: string;
+  /** The alias if using 'as' syntax */
+  readonly alias?: string;
+  /** Whether this specific import is type-only */
+  readonly isTypeOnly?: boolean;
+}
+
+/**
+ * Enhanced import transformation context with structured imports
  */
 export interface ImportTransformContext {
-  readonly imports: readonly string[];
+  /** Structured import objects for easy manipulation */
+  readonly imports: readonly StructuredImport[];
+  /** The resolved type being generated */
   readonly resolvedType: ResolvedType;
+  /** Whether generating multiple builders */
   readonly isGeneratingMultiple: boolean;
+  /** Whether common imports file exists */
   readonly hasExistingCommon: boolean;
+  /** Helper utilities for common transformations */
+  readonly utils: ImportTransformUtils;
+}
+
+/**
+ * Utility functions for import transformations
+ */
+export interface ImportTransformUtils {
+  /** Transform relative imports to monorepo package imports */
+  transformRelativeToMonorepo(
+    imports: readonly StructuredImport[],
+    mapping: RelativeToMonorepoMapping,
+  ): readonly StructuredImport[];
+  /** Create a new structured import */
+  createImport(source: string, options?: CreateImportOptions): StructuredImport;
+  /** Merge imports from the same source */
+  mergeImports(imports: readonly StructuredImport[]): readonly StructuredImport[];
+  /** Filter imports by source pattern */
+  filterImports(
+    imports: readonly StructuredImport[],
+    predicate: (imp: StructuredImport) => boolean,
+  ): readonly StructuredImport[];
+  /** Replace import sources */
+  replaceSource(
+    imports: readonly StructuredImport[],
+    from: string | RegExp,
+    to: string,
+  ): readonly StructuredImport[];
+}
+
+/**
+ * Options for creating structured imports
+ */
+export interface CreateImportOptions {
+  /** Named imports to include */
+  namedImports?: readonly (string | StructuredNamedImport)[];
+  /** Default import name */
+  defaultImport?: string;
+  /** Namespace import name */
+  namespaceImport?: string;
+  /** Whether this is a type-only import */
+  isTypeOnly?: boolean;
+  /** Whether this is a side-effect import */
+  isSideEffect?: boolean;
+}
+
+/**
+ * Configuration for transforming relative imports to monorepo imports
+ */
+export interface RelativeToMonorepoMapping {
+  /** Map of relative path patterns to package names */
+  readonly pathMappings: ReadonlyMap<string | RegExp, string>;
+  /** Base directory for resolving relative paths */
+  readonly baseDir?: string;
 }
 
 export const HookType = {
