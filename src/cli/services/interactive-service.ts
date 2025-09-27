@@ -3,6 +3,8 @@ import { FileService } from './file-service.js';
 import { DiscoveryService, type DiscoveredInterface } from './discovery-service.js';
 import { NamingService, type NamingConvention, type FileNamingConfig } from './naming-service.js';
 
+type SeparatorInstance = InstanceType<typeof inquirer.Separator>;
+
 export interface InputPatternsAnswers {
   patterns: string;
 }
@@ -39,6 +41,47 @@ export class InteractiveService {
   private discoveryService = new DiscoveryService();
   private namingService = new NamingService();
 
+  private parseCommaSeparatedInput(input: string): string[] {
+    return input
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+
+  private validatePaths(
+    paths: string[],
+    validateFn: (path: string) => boolean,
+    errorPrefix: string,
+  ): string | true {
+    for (const path of paths) {
+      if (!validateFn(path)) {
+        return `${errorPrefix}: ${path}`;
+      }
+    }
+    return paths.length > 0 || 'Please provide at least one path.';
+  }
+
+  private ensureStringArray(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string');
+    }
+    if (typeof value === 'string') {
+      return [value];
+    }
+    return [];
+  }
+
+  /**
+   * Prompts user for TypeScript file patterns to scan for interfaces.
+   * Validates patterns to ensure they contain .ts files or valid wildcards.
+   *
+   * @returns Promise resolving to user's input patterns
+   * @example
+   * ```typescript
+   * const { patterns } = await service.askInputPatterns();
+   * // patterns might be: "src/\**\/\*.ts,lib/\**\/\*.ts"
+   * ```
+   */
   async askInputPatterns(): Promise<InputPatternsAnswers> {
     return inquirer.prompt([
       {
@@ -60,6 +103,18 @@ export class InteractiveService {
     ]);
   }
 
+  /**
+   * Prompts user to select which interfaces to generate builders for.
+   * Groups interfaces by file for better organization and includes a "Select All" option.
+   *
+   * @param interfaces - Array of discovered interfaces to choose from
+   * @returns Promise resolving to selected interfaces
+   * @throws Error when no interfaces are provided
+   * @example
+   * ```typescript
+   * const { selectedInterfaces } = await service.askInterfaceSelection(interfaces);
+   * ```
+   */
   async askInterfaceSelection(
     interfaces: DiscoveredInterface[],
   ): Promise<InterfaceSelectionAnswers> {
@@ -67,10 +122,9 @@ export class InteractiveService {
       throw new Error('No interfaces found in the specified files.');
     }
 
-    // Group interfaces by file for better organization
     const groupedChoices = this.groupInterfacesByFile(interfaces);
 
-    const result = (await inquirer.prompt({
+    const result = await inquirer.prompt<InterfaceSelectionAnswers>({
       type: 'checkbox',
       name: 'selectedInterfaces',
       message: 'Select interfaces to generate builders for:',
@@ -79,21 +133,35 @@ export class InteractiveService {
         new inquirer.Separator(),
         ...groupedChoices,
       ],
-      validate: (input: readonly any[]) => {
-        const filtered = (input as any[]).filter(item => item !== '__SELECT_ALL__');
+      validate: input => {
+        const filtered = Array.isArray(input)
+          ? input.filter(item => item !== '__SELECT_ALL__')
+          : [];
         return filtered.length > 0 || 'Please select at least one interface.';
       },
-      filter: (input: readonly any[]) => {
-        if ((input as any[]).includes('__SELECT_ALL__')) {
+      filter: input => {
+        if (Array.isArray(input) && input.includes('__SELECT_ALL__')) {
           return interfaces;
         }
-        return (input as any[]).filter(item => item !== '__SELECT_ALL__');
+        return Array.isArray(input) ? input.filter(item => item !== '__SELECT_ALL__') : [];
       },
-    })) as InterfaceSelectionAnswers;
+    });
 
     return result;
   }
 
+  /**
+   * Prompts user for output configuration including directory, naming convention, and file suffix.
+   *
+   * @returns Promise resolving to output configuration
+   * @example
+   * ```typescript
+   * const { outputDir, namingConvention, suffix } = await service.askOutputConfig();
+   * // outputDir: "./src/builders/"
+   * // namingConvention: "kebab-case"
+   * // suffix: "builder"
+   * ```
+   */
   async askOutputConfig(): Promise<OutputConfigAnswers> {
     return inquirer.prompt([
       {
@@ -129,6 +197,19 @@ export class InteractiveService {
     ]);
   }
 
+  /**
+   * Prompts user for plugin configuration.
+   * Validates that plugin files exist before accepting them.
+   *
+   * @returns Promise resolving to plugin configuration
+   * @example
+   * ```typescript
+   * const config = await service.askPluginConfig();
+   * if (config.hasPlugins) {
+   *   console.log('Plugins:', config.plugins);
+   * }
+   * ```
+   */
   async askPluginConfig(): Promise<PluginConfigAnswers> {
     const result = await inquirer.prompt<{ hasPlugins: boolean }>([
       {
@@ -149,30 +230,20 @@ export class InteractiveService {
         name: 'plugins',
         message: 'Plugin file paths (comma-separated):',
         validate: (input: string) => {
-          const plugins = input
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean);
-
-          for (const plugin of plugins) {
-            if (!this.fileService.fileExists(plugin)) {
-              return `Plugin file not found: ${plugin}`;
-            }
-          }
-
-          return plugins.length > 0 || 'Please provide at least one plugin path.';
+          const plugins = this.parseCommaSeparatedInput(input);
+          return this.validatePaths(
+            plugins,
+            path => this.fileService.fileExists(path),
+            'Plugin file not found',
+          );
         },
-        filter: (input: string) =>
-          input
-            .split(',')
-            .map(p => p.trim())
-            .filter(Boolean),
+        filter: (input: string) => this.parseCommaSeparatedInput(input),
       },
     ]);
 
     return {
       hasPlugins: true,
-      plugins: pluginAnswers.plugins as unknown as string[],
+      plugins: this.ensureStringArray(pluginAnswers.plugins),
     };
   }
 
@@ -200,6 +271,19 @@ export class InteractiveService {
     return result.runBatch;
   }
 
+  /**
+   * Prompts user for monorepo configuration including dependency resolution strategy.
+   * Validates directory paths and provides various resolution strategies.
+   *
+   * @returns Promise resolving to monorepo configuration
+   * @example
+   * ```typescript
+   * const config = await service.askMonorepoConfig();
+   * if (config.enabled) {
+   *   console.log('Strategy:', config.dependencyResolutionStrategy);
+   * }
+   * ```
+   */
   async askMonorepoConfig(): Promise<MonorepoConfigAnswers> {
     const result = await inquirer.prompt<{ enabled: boolean }>([
       {
@@ -277,27 +361,17 @@ export class InteractiveService {
           name: 'customPaths',
           message: 'Custom dependency paths (comma-separated):',
           validate: (input: string) => {
-            const paths = input
-              .split(',')
-              .map(p => p.trim())
-              .filter(Boolean);
-
-            for (const path of paths) {
-              if (!this.fileService.directoryExists(path)) {
-                return `Directory does not exist: ${path}`;
-              }
-            }
-
-            return paths.length > 0 || 'Please provide at least one path.';
+            const paths = this.parseCommaSeparatedInput(input);
+            return this.validatePaths(
+              paths,
+              path => this.fileService.directoryExists(path),
+              'Directory does not exist',
+            );
           },
-          filter: (input: string) =>
-            input
-              .split(',')
-              .map(p => p.trim())
-              .filter(Boolean),
+          filter: (input: string) => this.parseCommaSeparatedInput(input),
         },
       ]);
-      customPaths = pathsAnswer.customPaths as unknown as string[];
+      customPaths = this.ensureStringArray(pathsAnswer.customPaths);
     }
 
     return {
@@ -308,11 +382,34 @@ export class InteractiveService {
     };
   }
 
+  /**
+   * Displays a preview of how files will be named based on the configuration.
+   *
+   * @param config - File naming configuration
+   * @example
+   * ```typescript
+   * service.showFileNamePreview({ namingConvention: 'kebab-case', suffix: 'builder' });
+   * // Outputs: 📝 user-profile.builder.ts
+   * ```
+   */
   showFileNamePreview(config: FileNamingConfig): void {
     const preview = this.namingService.getFileNamePreview(config);
     console.log(`\n📝 ${preview}`);
   }
 
+  /**
+   * Prompts user to select specific types from a list of available types.
+   *
+   * @param types - Array of available types to select from
+   * @returns Promise resolving to selected types
+   * @example
+   * ```typescript
+   * const selected = await service.selectTypes([
+   *   { file: 'user.ts', type: 'User' },
+   *   { file: 'user.ts', type: 'UserConfig' }
+   * ]);
+   * ```
+   */
   async selectTypes(types: TypeSelection[]): Promise<TypeSelection[]> {
     const result = await inquirer.prompt<{ selected: TypeSelection[] }>([
       {
@@ -328,17 +425,22 @@ export class InteractiveService {
     return result.selected;
   }
 
-  private groupInterfacesByFile(interfaces: DiscoveredInterface[]): any[] {
+  private groupInterfacesByFile(
+    interfaces: DiscoveredInterface[],
+  ): Array<SeparatorInstance | { name: string; value: DiscoveredInterface }> {
     const grouped = new Map<string, DiscoveredInterface[]>();
 
     for (const iface of interfaces) {
       if (!grouped.has(iface.file)) {
         grouped.set(iface.file, []);
       }
-      grouped.get(iface.file)!.push(iface);
+      const fileInterfaces = grouped.get(iface.file);
+      if (fileInterfaces) {
+        fileInterfaces.push(iface);
+      }
     }
 
-    const choices: any[] = [];
+    const choices: Array<SeparatorInstance | { name: string; value: DiscoveredInterface }> = [];
 
     for (const [file, fileInterfaces] of grouped) {
       choices.push(new inquirer.Separator(`📁 ${file}`));

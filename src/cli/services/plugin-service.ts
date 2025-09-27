@@ -1,25 +1,27 @@
 import chalk from 'chalk';
 import path from 'node:path';
-import { PluginManager, type Plugin } from '../../core/plugin/index.js';
+import { PluginManager, isValidPlugin } from '../../core/plugin/index.js';
 
+/**
+ * Service for managing plugin loading and validation
+ */
 export class PluginService {
   private pluginManager = new PluginManager();
 
-  isValidPlugin(obj: unknown): obj is Plugin {
-    if (typeof obj !== 'object' || obj === null) {
-      return false;
-    }
-
-    const plugin = obj as Record<string, unknown>;
-
-    return (
-      typeof plugin.name === 'string' &&
-      typeof plugin.version === 'string' &&
-      plugin.name.length > 0 &&
-      plugin.version.length > 0
-    );
-  }
-
+  /**
+   * Load plugins from the specified paths
+   *
+   * @param pluginPaths - Array of file paths to plugin modules
+   * @returns Promise resolving to the PluginManager with loaded plugins
+   *
+   * @example
+   * ```typescript
+   * const manager = await pluginService.loadPlugins([
+   *   './plugins/my-plugin.js',
+   *   './plugins/another-plugin.js'
+   * ]);
+   * ```
+   */
   async loadPlugins(pluginPaths?: string[]): Promise<PluginManager> {
     if (!pluginPaths || pluginPaths.length === 0) {
       return this.pluginManager;
@@ -43,9 +45,9 @@ export class PluginService {
     const absolutePath = path.resolve(pluginPath);
 
     const pluginModule = await import(absolutePath);
-    const pluginInstance = pluginModule.default || pluginModule;
+    const pluginInstance = pluginModule.default ?? pluginModule;
 
-    if (this.isValidPlugin(pluginInstance)) {
+    if (isValidPlugin(pluginInstance)) {
       this.pluginManager.register(pluginInstance);
       console.log(chalk.gray(`  ✓ Loaded plugin: ${pluginInstance.name}`));
     } else {
@@ -57,10 +59,31 @@ export class PluginService {
     }
   }
 
+  /**
+   * Merge plugin paths from command options and configuration
+   *
+   * @param optionPlugins - Plugin paths from command line options
+   * @param configPlugins - Plugin paths from configuration file
+   * @returns Merged array of plugin paths (options first, then config)
+   *
+   * @example
+   * ```typescript
+   * const paths = pluginService.mergePluginPaths(
+   *   ['./cli-plugin.js'],
+   *   ['./config-plugin.js']
+   * );
+   * // Returns: ['./cli-plugin.js', './config-plugin.js']
+   * ```
+   */
   mergePluginPaths(optionPlugins?: string[], configPlugins?: string[]): string[] {
     return [...(optionPlugins || []), ...(configPlugins || [])];
   }
 
+  /**
+   * Get the plugin manager instance
+   *
+   * @returns The PluginManager instance containing all loaded plugins
+   */
   getPluginManager(): PluginManager {
     return this.pluginManager;
   }

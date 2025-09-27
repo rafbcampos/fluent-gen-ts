@@ -13,18 +13,64 @@ interface PackageJson {
   description?: string;
 }
 
+/**
+ * Type guard to validate if an object conforms to PackageJson interface
+ * @param obj - The object to validate
+ * @returns True if obj is a valid PackageJson structure
+ */
 function isValidPackageJson(obj: unknown): obj is PackageJson {
-  return typeof obj === 'object' && obj !== null;
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+
+  const pkg = obj as Record<string, unknown>;
+
+  return (
+    (pkg.name === undefined || typeof pkg.name === 'string') &&
+    (pkg.version === undefined || typeof pkg.version === 'string') &&
+    (pkg.description === undefined || typeof pkg.description === 'string')
+  );
 }
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const packageJsonRaw = JSON.parse(
-  readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8'),
-);
+/**
+ * Safely loads and parses package.json file
+ * @returns Parsed PackageJson object or empty object if loading fails
+ */
+function loadPackageJson(): PackageJson {
+  try {
+    const packageJsonPath = path.resolve(__dirname, '../../package.json');
+    const packageJsonContent = readFileSync(packageJsonPath, 'utf-8');
+    const packageJsonRaw = JSON.parse(packageJsonContent);
 
-const packageJson: PackageJson = isValidPackageJson(packageJsonRaw) ? packageJsonRaw : {};
+    return isValidPackageJson(packageJsonRaw) ? packageJsonRaw : {};
+  } catch {
+    // Return default values if package.json cannot be read or parsed
+    return {};
+  }
+}
+
+const packageJson = loadPackageJson();
+
+/**
+ * Wraps command execution with consistent error handling
+ * @param commandFn - The command function to execute
+ * @returns A wrapped function that handles errors consistently
+ */
+function withErrorHandling<T extends readonly unknown[]>(
+  commandFn: (...args: T) => Promise<void>,
+): (...args: T) => Promise<void> {
+  return async (...args: T) => {
+    try {
+      await commandFn(...args);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error);
+      process.exit(1);
+    }
+  };
+}
 
 const program = new Command();
 const commands = new Commands();
@@ -47,14 +93,11 @@ program
   .option('-d, --defaults', 'Use default values for optional properties')
   .option('--dry-run', 'Preview what would be generated without writing files')
   .option('--no-comments', "Don't include JSDoc comments in generated code")
-  .action(async (file, type, options) => {
-    try {
+  .action(
+    withErrorHandling(async (file, type, options) => {
       await commands.generate(file, type, options);
-    } catch (error) {
-      console.error(chalk.red('Error:'), error);
-      process.exit(1);
-    }
-  });
+    }),
+  );
 
 program
   .command('batch')
@@ -63,14 +106,11 @@ program
   .option('-p, --plugins <paths...>', 'Path(s) to plugin files')
   .option('-d, --dry-run', 'Dry run without writing files')
   .option('--parallel', 'Generate builders in parallel')
-  .action(async options => {
-    try {
+  .action(
+    withErrorHandling(async options => {
       await commands.batch(options);
-    } catch (error) {
-      console.error(chalk.red('Error:'), error);
-      process.exit(1);
-    }
-  });
+    }),
+  );
 
 program
   .command('scan')
@@ -84,41 +124,32 @@ program
   .option('-i, --interactive', 'Interactive mode to select types')
   .option('--dry-run', 'Preview discovered types without generating')
   .option('--ignore-private', 'Ignore non-exported interfaces')
-  .action(async (pattern, options) => {
-    try {
+  .action(
+    withErrorHandling(async (pattern, options) => {
       await commands.scan(pattern, options);
-    } catch (error) {
-      console.error(chalk.red('Error:'), error);
-      process.exit(1);
-    }
-  });
+    }),
+  );
 
 program
   .command('init')
   .description('Initialize a configuration file')
   .option('--overwrite', 'Overwrite existing configuration')
-  .action(async options => {
-    try {
+  .action(
+    withErrorHandling(async options => {
       await commands.init(options);
-    } catch (error) {
-      console.error(chalk.red('Error:'), error);
-      process.exit(1);
-    }
-  });
+    }),
+  );
 
 program
   .command('setup-common')
   .description('Create a customizable common.ts utilities file')
   .option('-o, --output <path>', 'Output file path (default: ./common.ts)')
   .option('--overwrite', 'Overwrite existing file')
-  .action(async options => {
-    try {
+  .action(
+    withErrorHandling(async options => {
       await commands.setupCommon(options);
-    } catch (error) {
-      console.error(chalk.red('Error:'), error);
-      process.exit(1);
-    }
-  });
+    }),
+  );
 
 program.parse(process.argv);
 

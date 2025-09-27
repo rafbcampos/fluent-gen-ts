@@ -3,21 +3,65 @@ import ora from 'ora';
 import type { InitOptions } from '../types.js';
 import type { Config } from '../config.js';
 import { FileService } from '../services/file-service.js';
-import { InteractiveService } from '../services/interactive-service.js';
-import { DiscoveryService } from '../services/discovery-service.js';
+import {
+  InteractiveService,
+  type OutputConfigAnswers,
+  type MonorepoConfigAnswers,
+  type PluginConfigAnswers,
+} from '../services/interactive-service.js';
+import { DiscoveryService, type DiscoveredInterface } from '../services/discovery-service.js';
+import { CommandUtils } from '../shared/command-utils.js';
 
+interface BuildConfigParams {
+  patterns: string[];
+  selectedInterfaces: DiscoveredInterface[];
+  outputConfig: OutputConfigAnswers;
+  monorepoConfig: MonorepoConfigAnswers;
+  pluginConfig: PluginConfigAnswers;
+}
+
+/**
+ * Command for initializing fluent-gen configuration through an interactive setup process.
+ * Guides users through discovering TypeScript files, selecting interfaces, and configuring
+ * output settings, monorepo options, and plugins.
+ */
 export class InitCommand {
   private fileService = new FileService();
   private interactiveService = new InteractiveService();
   private discoveryService = new DiscoveryService();
 
+  /**
+   * Executes the interactive initialization process for fluent-gen configuration.
+   *
+   * This method:
+   * 1. Checks for existing configuration files
+   * 2. Runs a guided setup to collect user preferences
+   * 3. Previews and confirms the configuration
+   * 4. Writes the configuration file
+   * 5. Optionally runs batch generation immediately
+   *
+   * @param options - Configuration options for initialization
+   * @param options.overwrite - If true, allows overwriting existing config files
+   *
+   * @example
+   * ```typescript
+   * const initCommand = new InitCommand();
+   * await initCommand.execute({ overwrite: false });
+   * ```
+   */
   async execute(options: InitOptions = {}): Promise<void> {
     const existingConfig = this.fileService.findExistingConfig();
 
-    if (existingConfig && !options.overwrite) {
-      console.error(chalk.red(`\nConfiguration file ${existingConfig} already exists.`));
-      console.log(chalk.gray('Use --overwrite to replace it.'));
-      process.exit(1);
+    if (existingConfig) {
+      try {
+        CommandUtils.checkFileExistence({
+          filePath: existingConfig,
+          overwrite: options.overwrite ?? false,
+          existsMessage: `Configuration file ${existingConfig} already exists`,
+        });
+      } catch (error) {
+        CommandUtils.handleCommandError(error, 'Configuration file check failed');
+      }
     }
 
     console.log(chalk.blue('\n🚀 Welcome to fluent-gen configuration setup!\n'));
@@ -38,7 +82,7 @@ export class InitCommand {
       const configFile = this.fileService.getConfigFileName('json');
       this.fileService.writeConfigFile(configFile, config, 'json');
 
-      console.log(chalk.green(`\n✓ Configuration file created: ${configFile}`));
+      CommandUtils.logSuccess(`Configuration file created: ${configFile}`);
 
       // Ask if they want to run batch generation immediately
       const runBatch = await this.interactiveService.askRunBatch();
@@ -52,8 +96,7 @@ export class InitCommand {
         this.showNextSteps(config);
       }
     } catch (error) {
-      console.error(chalk.red('\n✗ Setup failed:'), error);
-      process.exit(1);
+      CommandUtils.handleCommandError(error, 'Setup failed');
     }
   }
 
@@ -107,31 +150,32 @@ export class InitCommand {
     console.log(chalk.cyan('\n🔌 Step 6: Configure plugins (optional)'));
     const pluginConfig = await this.interactiveService.askPluginConfig();
 
-    // Build configuration
-    return this.buildConfig(
+    return this.buildConfig({
       patterns,
-      interfaceSelection.selectedInterfaces,
+      selectedInterfaces: interfaceSelection.selectedInterfaces,
       outputConfig,
       monorepoConfig,
       pluginConfig,
-    );
+    });
   }
 
-  private buildConfig(
-    patterns: string[],
-    selectedInterfaces: any[],
-    outputConfig: any,
-    monorepoConfig: any,
-    pluginConfig: any,
-  ): Config {
-    // Group interfaces by file to create targets
+  private buildConfig({
+    patterns,
+    selectedInterfaces,
+    outputConfig,
+    monorepoConfig,
+    pluginConfig,
+  }: BuildConfigParams): Config {
     const fileMap = new Map<string, string[]>();
 
     for (const iface of selectedInterfaces) {
       if (!fileMap.has(iface.file)) {
         fileMap.set(iface.file, []);
       }
-      fileMap.get(iface.file)!.push(iface.name);
+      const interfaceNames = fileMap.get(iface.file);
+      if (interfaceNames) {
+        interfaceNames.push(iface.name);
+      }
     }
 
     // Create targets from selected interfaces

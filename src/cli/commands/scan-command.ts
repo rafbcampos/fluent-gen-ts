@@ -12,7 +12,14 @@ import { FileService } from '../services/file-service.js';
 import { InteractiveService } from '../services/interactive-service.js';
 import { TypeExtractor } from '../../type-info/index.js';
 import type { FluentGen } from '../../gen/index.js';
+import type { PluginManager } from '../../core/plugin/plugin-manager.js';
 
+/**
+ * Command for scanning files and generating builders for TypeScript types
+ *
+ * Handles file scanning with glob patterns, type extraction, plugin loading,
+ * and builder generation with support for interactive selection and various output options.
+ */
 export class ScanCommand {
   private configLoader = new ConfigLoader();
   private pluginService = new PluginService();
@@ -20,6 +27,23 @@ export class ScanCommand {
   private fileService = new FileService();
   private interactiveService = new InteractiveService();
 
+  /**
+   * Execute the scan command with the given pattern and options
+   *
+   * @param pattern - Glob pattern to match files (e.g., "src/*.ts")
+   * @param options - Scan options including exclusions, output settings, and mode
+   * @throws {Error} When configuration loading fails or other critical errors occur
+   *
+   * @example
+   * ```typescript
+   * const command = new ScanCommand();
+   * await command.execute("src/*.ts", {
+   *   exclude: ["*.test.ts"],
+   *   output: "./generated",
+   *   interactive: true
+   * });
+   * ```
+   */
   async execute(pattern: string, options: ScanOptions = {}): Promise<void> {
     const spinner = ora(`Scanning for files matching ${chalk.cyan(pattern)}...`).start();
 
@@ -34,34 +58,37 @@ export class ScanCommand {
 
       if (files.length === 0) {
         spinner.fail(chalk.yellow('No files found matching pattern'));
-        process.exit(0);
+        return;
       }
 
       spinner.succeed(chalk.green(`Found ${files.length} file(s)`));
 
       const configResult = this.configLoader.load(options.config);
       if (!isOk(configResult)) {
-        console.error(chalk.red('Failed to load configuration'));
-        process.exit(1);
+        spinner.fail(chalk.red('Failed to load configuration'));
+        throw new Error('Failed to load configuration');
       }
 
       const config = configResult.value;
 
       const allPluginPaths = this.pluginService.mergePluginPaths(options.plugins, config.plugins);
 
-      let pluginManager = undefined;
+      let pluginManager: PluginManager | undefined = undefined;
       if (allPluginPaths.length > 0) {
         spinner.text = 'Loading plugins...';
         pluginManager = await this.pluginService.loadPlugins(allPluginPaths);
       }
 
-      const generator = this.generatorService.createGenerator(config, pluginManager);
+      const generator = this.generatorService.createGenerator({
+        config,
+        ...(pluginManager && { pluginManager }),
+      });
 
       const allTypes = await this.scanForTypes(files, options.types);
 
       if (allTypes.length === 0) {
         console.log(chalk.yellow('No types found to generate'));
-        process.exit(0);
+        return;
       }
 
       if (options.dryRun) {
@@ -80,7 +107,26 @@ export class ScanCommand {
     } catch (error) {
       spinner.fail(chalk.red('Unexpected error'));
       console.error(error);
-      process.exit(1);
+      throw error;
+    }
+  }
+
+  private async handleGenerationOutput(
+    file: string,
+    type: string,
+    generatedCode: string,
+    options: ScanOptions,
+  ): Promise<string> {
+    if (options.output) {
+      const outputPath = this.fileService.resolveOutputPath(options.output, {
+        file: path.basename(file, '.ts'),
+        type: type.toLowerCase(),
+      });
+      await this.fileService.writeOutput(outputPath, generatedCode);
+      return outputPath;
+    } else {
+      console.log(generatedCode);
+      return type;
     }
   }
 
@@ -90,10 +136,10 @@ export class ScanCommand {
   ): Promise<Array<{ file: string; type: string }>> {
     const allTypes: Array<{ file: string; type: string }> = [];
     const filterList = typeFilter?.split(',').map(t => t.trim());
+    const extractor = new TypeExtractor();
 
     for (const file of files) {
       const scanSpinner = ora(`Scanning ${chalk.cyan(file)}...`).start();
-      const extractor = new TypeExtractor();
       const scanResult = await extractor.scanFile(file);
 
       if (isOk(scanResult) && scanResult.value.length > 0) {
@@ -125,17 +171,8 @@ export class ScanCommand {
       const result = await generator.generateBuilder(file, type);
 
       if (isOk(result)) {
-        if (options.output) {
-          const outputPath = this.fileService.resolveOutputPath(options.output, {
-            file: path.basename(file, '.ts'),
-            type: type.toLowerCase(),
-          });
-          await this.fileService.writeOutput(outputPath, result.value);
-          genSpinner.succeed(chalk.green(`✓ Generated ${outputPath}`));
-        } else {
-          genSpinner.succeed(chalk.green(`✓ Generated ${type}`));
-          console.log(result.value);
-        }
+        const output = await this.handleGenerationOutput(file, type, result.value, options);
+        genSpinner.succeed(chalk.green(`✓ Generated ${output}`));
       } else {
         genSpinner.fail(chalk.red(`✗ Failed to generate ${type}`));
       }
@@ -153,16 +190,8 @@ export class ScanCommand {
       const result = await generator.generateBuilder(file, type);
 
       if (isOk(result)) {
-        if (options.output) {
-          const outputPath = this.fileService.resolveOutputPath(options.output, {
-            file: path.basename(file, '.ts'),
-            type: type.toLowerCase(),
-          });
-          await this.fileService.writeOutput(outputPath, result.value);
-          console.log(chalk.green(`✓ Generated ${outputPath}`));
-        } else {
-          console.log(chalk.green(`✓ Generated ${type}`));
-        }
+        const output = await this.handleGenerationOutput(file, type, result.value, options);
+        console.log(chalk.green(`✓ Generated ${output}`));
       } else {
         console.log(chalk.red(`✗ Failed to generate ${type}`));
       }
