@@ -149,6 +149,19 @@ describe('Transform Builders', () => {
       });
     });
 
+    test('should handle function-based parameter transformations', () => {
+      const builder = new PropertyMethodTransformBuilder();
+
+      // This should work but currently uses placeholder
+      expect(() => {
+        builder
+          .when(() => true)
+          .setParameter((original: string) => `Tagged<${original}>`)
+          .done()
+          .build();
+      }).not.toThrow();
+    });
+
     test('should throw error when trying to set parameter without condition', () => {
       const builder = new PropertyMethodTransformBuilder();
 
@@ -434,6 +447,26 @@ describe('Transform Builders', () => {
       const mockContext = createMockBuildMethodContext({ buildMethodCode: originalCode });
 
       expect(transform(mockContext)).toBe(originalCode);
+    });
+
+    test('should handle complex function-based replacement without unsafe casting', () => {
+      const builder = new BuildMethodTransformBuilder();
+      const transform = builder
+        .replace(/return\s+\{.*\}/, (match: string, context: BuildMethodContext) => {
+          // This should not cause type errors
+          return `// Context: ${context.typeName}\n    ${match}`;
+        })
+        .build();
+
+      const originalCode = 'build() { return { ...this.values }; }';
+      const mockContext = createMockBuildMethodContext({
+        buildMethodCode: originalCode,
+        typeName: 'TestType',
+      });
+
+      const result = transform(mockContext);
+      expect(result).toContain('// Context: TestType');
+      expect(result).toContain('return { ...this.values };');
     });
   });
 

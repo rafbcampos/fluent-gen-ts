@@ -2,12 +2,34 @@ import type { Result } from '../result.js';
 import type { TypeInfo, PropertyInfo, ResolvedType, GeneratorOptions } from '../types.js';
 import type { Type, Symbol } from 'ts-morph';
 
+// ============================================================================
+// UTILITY TYPES
+// ============================================================================
+
 /**
- * Represents an internal project import
+ * Generic type for values that can be static or dynamically generated from context
+ *
+ * @example
+ * ```typescript
+ * // Static value
+ * const staticCode: StaticOrDynamic<string, BuilderContext> = "return {};";
+ *
+ * // Dynamic value based on context
+ * const dynamicCode: StaticOrDynamic<string, BuilderContext> =
+ *   (context) => `return new ${context.builderName}();`;
+ * ```
  */
-export interface InternalImport {
-  readonly kind: 'internal';
-  readonly path: string;
+export type StaticOrDynamic<TValue, TContext> = TValue | ((context: TContext) => TValue);
+
+// ============================================================================
+// IMPORT TYPES
+// ============================================================================
+
+/**
+ * Base import properties shared by all import types
+ * @internal
+ */
+interface BaseImportProperties {
   readonly imports: readonly string[];
   readonly isTypeOnly?: boolean;
   readonly isDefault?: boolean;
@@ -15,15 +37,19 @@ export interface InternalImport {
 }
 
 /**
+ * Represents an internal project import
+ */
+export interface InternalImport extends BaseImportProperties {
+  readonly kind: 'internal';
+  readonly path: string;
+}
+
+/**
  * Represents an external package import
  */
-export interface ExternalImport {
+export interface ExternalImport extends BaseImportProperties {
   readonly kind: 'external';
   readonly package: string;
-  readonly imports: readonly string[];
-  readonly isTypeOnly?: boolean;
-  readonly isDefault?: boolean;
-  readonly defaultName?: string;
 }
 
 /**
@@ -37,6 +63,10 @@ export type Import = InternalImport | ExternalImport;
 export interface PluginImports {
   readonly imports: readonly Import[];
 }
+
+// ============================================================================
+// CONTEXT TYPES
+// ============================================================================
 
 /**
  * Base context with common properties
@@ -74,7 +104,7 @@ export interface ParseContext {
  */
 export interface ResolveContext {
   readonly type: Type;
-  readonly symbol?: Symbol | undefined;
+  readonly symbol?: Symbol;
   readonly sourceFile?: string;
   readonly typeName?: string;
 }
@@ -97,18 +127,47 @@ export interface BuildMethodContext extends BuilderContextInfo, GenericsContextI
   readonly resolvedType: ResolvedType;
 }
 
+// ============================================================================
+// TYPE MATCHER INTERFACES
+// ============================================================================
+
 /**
- * Type matcher for fluent type checking
+ * Type matcher for fluent type checking and analysis
+ *
+ * Provides a fluent API for checking and analyzing TypeScript types in plugin contexts.
+ * This interface allows plugins to make decisions based on type characteristics.
+ *
+ * @example
+ * ```typescript
+ * // Check if type is a specific primitive
+ * if (context.type.isPrimitive('string', 'number')) {
+ *   // Handle string or number types
+ * }
+ *
+ * // Check complex object types
+ * if (context.type.isObject('User').withProperty('id', m => m.primitive('string'))) {
+ *   // Handle User objects with string id property
+ * }
+ * ```
  */
 export interface TypeMatcherInterface {
+  /** Check if type is one of the specified primitive types */
   isPrimitive(...names: string[]): boolean;
+  /** Get an object type matcher for fluent checking */
   isObject(name?: string): ObjectTypeMatcher;
+  /** Get an array type matcher for fluent checking */
   isArray(): ArrayTypeMatcher;
+  /** Get a union type matcher for fluent checking */
   isUnion(): UnionTypeMatcher;
+  /** Get an intersection type matcher for fluent checking */
   isIntersection(): IntersectionTypeMatcher;
+  /** Check if type is a reference to a named type */
   isReference(name?: string): boolean;
+  /** Check if type is or contains generics */
   isGeneric(name?: string): boolean;
+  /** Check if type matches a custom type matcher */
   matches(matcher: TypeMatcher): boolean;
+  /** Get string representation of the type */
   toString(): string;
 }
 
@@ -185,6 +244,10 @@ export interface ValueTransform {
   readonly transform: string;
 }
 
+// ============================================================================
+// STRUCTURED IMPORT TYPES
+// ============================================================================
+
 /**
  * Represents a structured import statement with parsed components
  */
@@ -249,11 +312,10 @@ export interface ImportTransformUtils {
     imports: readonly StructuredImport[],
     predicate: (imp: StructuredImport) => boolean,
   ): readonly StructuredImport[];
-  /** Replace import sources */
+  /** Replace import sources using pattern matching */
   replaceSource(
     imports: readonly StructuredImport[],
-    from: string | RegExp,
-    to: string,
+    options: { from: string | RegExp; to: string },
   ): readonly StructuredImport[];
 }
 
@@ -274,14 +336,30 @@ export interface CreateImportOptions {
 }
 
 /**
+ * Pattern matching rule for relative import transformation
+ */
+export interface PathMappingRule {
+  /** The pattern to match - can be exact string or regex pattern */
+  readonly pattern: string;
+  /** Whether the pattern should be treated as a regular expression */
+  readonly isRegex?: boolean;
+  /** The replacement package name */
+  readonly replacement: string;
+}
+
+/**
  * Configuration for transforming relative imports to monorepo imports
  */
 export interface RelativeToMonorepoMapping {
-  /** Map of relative path patterns to package names */
-  readonly pathMappings: ReadonlyMap<string | RegExp, string>;
+  /** Array of path mapping rules */
+  readonly pathMappings: readonly PathMappingRule[];
   /** Base directory for resolving relative paths */
   readonly baseDir?: string;
 }
+
+// ============================================================================
+// PLUGIN CONFIGURATION
+// ============================================================================
 
 export const HookType = {
   BeforeParse: 'beforeParse',
@@ -384,13 +462,50 @@ export interface TypeMatcherBuilder {
 }
 
 /**
- * Plugin interface with structured imports
+ * Plugin interface for extending code generation behavior
+ *
+ * Plugins provide hooks into various stages of the generation pipeline,
+ * allowing customization of parsing, type resolution, and code generation.
+ *
+ * @example
+ * ```typescript
+ * const myPlugin: Plugin = {
+ *   name: 'my-custom-plugin',
+ *   version: '1.0.0',
+ *   description: 'Adds custom validation methods',
+ *
+ *   // Transform property methods to add validation
+ *   transformPropertyMethod: (context) => {
+ *     if (context.type.isPrimitive('string')) {
+ *       return ok({
+ *         parameterType: 'string | ValidatedString',
+ *         validate: 'validateString(value)'
+ *       });
+ *     }
+ *     return ok({});
+ *   }
+ * };
+ * ```
  */
 export interface Plugin {
+  /** Unique identifier for the plugin */
   readonly name: string;
+  /** Semantic version of the plugin */
   readonly version: string;
+  /** Human-readable description of plugin functionality */
   readonly description?: string;
+  /** Import requirements for generated code */
   readonly imports?: PluginImports;
+
+  // Context customization (code generation only)
+  /**
+   * Custom context type name to use in generated builders (e.g., 'MyDomainContext')
+   * This is used during code generation to specify the context type in builder signatures.
+   *
+   * Note: Runtime context generator behavior should be provided by users via
+   * `__nestedContextGenerator__` in their context objects, not through plugins.
+   */
+  readonly contextTypeName?: string;
 
   // Lifecycle hooks
   beforeParse?: PluginHookMap['beforeParse'];
@@ -409,6 +524,10 @@ export interface Plugin {
   transformValue?: PluginHookMap['transformValue'];
   transformImports?: PluginHookMap['transformImports'];
 }
+
+// ============================================================================
+// TRANSFORMATION TYPES
+// ============================================================================
 
 /**
  * Property method transform rule
@@ -432,7 +551,7 @@ export interface ValueTransformRule {
 export interface BuildMethodTransformation {
   readonly type: 'insertBefore' | 'insertAfter' | 'replace' | 'wrap';
   readonly marker?: string | RegExp;
-  readonly code: string | ((context: BuildMethodContext) => string);
+  readonly code: StaticOrDynamic<string, BuildMethodContext>;
   readonly replacement?: string | ((match: string, context: BuildMethodContext) => string);
 }
 
@@ -452,7 +571,7 @@ export interface MethodParameter {
 export interface CustomMethodDefinition {
   readonly name: string;
   readonly parameters: readonly MethodParameter[];
-  readonly returnType: string | ((context: BuilderContext) => string);
-  readonly implementation: string | ((context: BuilderContext) => string);
+  readonly returnType: StaticOrDynamic<string, BuilderContext>;
+  readonly implementation: StaticOrDynamic<string, BuilderContext>;
   readonly jsDoc?: string;
 }

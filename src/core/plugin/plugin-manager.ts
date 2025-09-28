@@ -13,6 +13,7 @@ import type {
   PluginImports,
   Import,
 } from './plugin-types.js';
+import { HookType } from './plugin-types.js';
 import { ImportManager } from './plugin-import-manager.js';
 
 /**
@@ -64,7 +65,21 @@ export class PluginManager {
   }
 
   /**
-   * Execute a hook across all registered plugins
+   * Execute a hook across all registered plugins in registration order
+   *
+   * @param options - Configuration for hook execution
+   * @param options.hookType - The type of hook to execute
+   * @param options.input - Input data to pass to the hook
+   * @param options.additionalArgs - Additional arguments to pass to the hook
+   * @returns Promise resolving to the final transformed result or error
+   *
+   * @example
+   * ```typescript
+   * const result = await manager.executeHook({
+   *   hookType: HookType.BeforeParse,
+   *   input: { sourceFile: 'file.ts', typeName: 'User' }
+   * });
+   * ```
    */
   async executeHook<K extends HookTypeValue>(
     options: ExecuteHookOptions<K>,
@@ -75,32 +90,19 @@ export class PluginManager {
     for (const plugin of this.plugins.values()) {
       const hook = plugin[hookType];
       if (typeof hook === 'function') {
-        try {
-          let result: Result<unknown>;
-          if (additionalArgs.length > 0) {
-            result = await (
-              hook as (...args: unknown[]) => Promise<Result<unknown>> | Result<unknown>
-            )(currentInput, ...additionalArgs);
-          } else {
-            result = await (hook as (input: unknown) => Promise<Result<unknown>> | Result<unknown>)(
-              currentInput,
-            );
-          }
+        const result = await this.invokeHook(
+          hook,
+          currentInput,
+          additionalArgs,
+          plugin.name,
+          hookType,
+        );
 
-          if (!this.isValidResult(result)) {
-            return err(new Error(`Plugin ${plugin.name} hook ${hookType} returned invalid result`));
-          }
-
-          if (!result.ok) {
-            return err(
-              new Error(`Plugin ${plugin.name} hook ${hookType} failed: ${result.error.message}`),
-            );
-          }
-
-          currentInput = result.value as Parameters<PluginHookMap[K]>[0];
-        } catch (error) {
-          return err(new Error(`Plugin ${plugin.name} hook ${hookType} threw error: ${error}`));
+        if (!result.ok) {
+          return result as Result<never>;
         }
+
+        currentInput = result.value as Parameters<PluginHookMap[K]>[0];
       }
     }
 
@@ -108,7 +110,20 @@ export class PluginManager {
   }
 
   /**
-   * Get property method transformation for a specific property
+   * Get property method transformation for a specific property by merging
+   * transformations from all plugins that provide them
+   *
+   * @param context - Context information about the property method
+   * @returns Merged transformation object or null if no plugins provide transformations
+   *
+   * @example
+   * ```typescript
+   * const transform = manager.getPropertyMethodTransform(context);
+   * if (transform) {
+   *   console.log(transform.parameterType); // 'string'
+   *   console.log(transform.extractValue); // 'String(value)'
+   * }
+   * ```
    */
   getPropertyMethodTransform(context: PropertyMethodContext): PropertyMethodTransform | null {
     const results = this.collectPluginResults<PropertyMethodTransform>({
@@ -123,7 +138,19 @@ export class PluginManager {
   }
 
   /**
-   * Get all custom methods from plugins
+   * Get all custom methods from plugins that provide them
+   *
+   * @param context - Builder context information
+   * @returns Array of custom method definitions from all plugins
+   *
+   * @example
+   * ```typescript
+   * const methods = manager.getCustomMethods(context);
+   * methods.forEach(method => {
+   *   console.log(method.name); // 'withEmail'
+   *   console.log(method.signature); // '(email: string): this'
+   * });
+   * ```
    */
   getCustomMethods(context: BuilderContext): readonly CustomMethod[] {
     return this.collectPluginResults<CustomMethod>({
@@ -134,18 +161,39 @@ export class PluginManager {
   }
 
   /**
-   * Get value transformations for a property
+   * Get value transformations for a property from all plugins
+   *
+   * @param context - Value context information
+   * @returns Array of value transformations (null values are filtered out)
+   *
+   * @example
+   * ```typescript
+   * const transforms = manager.getValueTransforms(context);
+   * transforms.forEach(transform => {
+   *   if (transform.condition) {
+   *     console.log(`If ${transform.condition}, apply: ${transform.transform}`);
+   *   }
+   * });
+   * ```
    */
   getValueTransforms(context: ValueContext): readonly ValueTransform[] {
-    return this.collectPluginResults<ValueTransform>({
+    return this.collectPluginResults<ValueTransform, ValueContext>({
       hookMethod: 'transformValue',
       context,
       mergeStrategy: 'collect',
-    }).filter((transform): transform is ValueTransform => transform !== null);
+    });
   }
 
   /**
-   * Get all required imports from registered plugins
+   * Get all required imports from registered plugins and deduplicate them
+   *
+   * @returns ImportManager instance with all plugin imports
+   *
+   * @example
+   * ```typescript
+   * const importManager = manager.getRequiredImports();
+   * const statements = importManager.toImportStatements();
+   * ```
    */
   getRequiredImports(): ImportManager {
     const importManager = new ImportManager();
@@ -162,7 +210,15 @@ export class PluginManager {
   }
 
   /**
-   * Generate import statements for plugin requirements
+   * Generate import statements for all plugin requirements
+   *
+   * @returns Array of import statement strings
+   *
+   * @example
+   * ```typescript
+   * const statements = manager.generateImportStatements();
+   * // ['import { User } from "../types.js"', 'import { merge } from "lodash"']
+   * ```
    */
   generateImportStatements(): string[] {
     const importManager = this.getRequiredImports();
@@ -198,7 +254,15 @@ export class PluginManager {
   }
 
   /**
-   * Get plugins by hook type
+   * Get all plugins that implement a specific hook type
+   *
+   * @param hookType - The hook type to filter by
+   * @returns Array of plugins that implement the specified hook
+   *
+   * @example
+   * ```typescript
+   * const parsePlugins = manager.getPluginsByHookType(HookType.BeforeParse);
+   * ```
    */
   getPluginsByHookType(hookType: HookTypeValue): readonly Plugin[] {
     return Array.from(this.plugins.values()).filter(
@@ -208,6 +272,18 @@ export class PluginManager {
 
   /**
    * Execute a specific hook from a specific plugin
+   *
+   * @param pluginName - Name of the plugin to execute hook from
+   * @param options - Configuration for hook execution
+   * @returns Promise resolving to the hook result or error
+   *
+   * @example
+   * ```typescript
+   * const result = await manager.executePluginHook('my-plugin', {
+   *   hookType: HookType.TransformType,
+   *   input: typeInfo
+   * });
+   * ```
    */
   async executePluginHook<K extends HookTypeValue>(
     pluginName: string,
@@ -223,41 +299,30 @@ export class PluginManager {
       return err(new Error(`Plugin ${pluginName} does not have hook ${options.hookType}`));
     }
 
-    try {
-      let result: Result<unknown>;
-      if (options.additionalArgs && options.additionalArgs.length > 0) {
-        result = await (hook as (...args: unknown[]) => Promise<Result<unknown>> | Result<unknown>)(
-          options.input,
-          ...options.additionalArgs,
-        );
-      } else {
-        result = await (hook as (input: unknown) => Promise<Result<unknown>> | Result<unknown>)(
-          options.input,
-        );
-      }
-
-      if (!this.isValidResult(result)) {
-        return err(
-          new Error(`Plugin ${pluginName} hook ${options.hookType} returned invalid result`),
-        );
-      }
-
-      return result as Result<ReturnType<PluginHookMap[K]> extends Result<infer R> ? R : never>;
-    } catch (error) {
-      return err(new Error(`Plugin ${pluginName} hook ${options.hookType} threw error: ${error}`));
-    }
+    return this.invokeHook(
+      hook,
+      options.input,
+      options.additionalArgs ?? [],
+      pluginName,
+      options.hookType,
+    ) as Promise<Result<ReturnType<PluginHookMap[K]> extends Result<infer R> ? R : never>>;
   }
 
   /**
-   * Collect results from plugins for a specific hook method
+   * Collect results from all plugins for a specific hook method with error tolerance
+   *
+   * @param hookMethod - The hook method name to invoke
+   * @param context - Context data to pass to the hook
+   * @param mergeStrategy - How to handle results: 'collect' arrays or 'merge' objects
+   * @returns Array of results from all plugins that successfully executed the hook
    */
-  private collectPluginResults<T>({
+  private collectPluginResults<T, C = unknown>({
     hookMethod,
     context,
     mergeStrategy,
   }: {
     hookMethod: keyof Plugin;
-    context: unknown;
+    context: C;
     mergeStrategy: 'collect' | 'merge';
   }): T[] {
     const results: T[] = [];
@@ -266,7 +331,7 @@ export class PluginManager {
       const hook = plugin[hookMethod];
       if (typeof hook === 'function') {
         try {
-          const result = (hook as (context: unknown) => Result<unknown>)(context);
+          const result = (hook as (context: C) => Result<T | readonly T[]>)(context);
           if (
             this.isValidResult(result) &&
             result.ok &&
@@ -274,13 +339,12 @@ export class PluginManager {
             result.value !== undefined
           ) {
             if (mergeStrategy === 'collect' && Array.isArray(result.value)) {
-              results.push(...(result.value as T[]));
+              results.push(...result.value);
             } else {
               results.push(result.value as T);
             }
           }
         } catch (error) {
-          // Log error but continue with other plugins
           console.warn(`Plugin ${plugin.name} hook ${String(hookMethod)} failed:`, error);
         }
       }
@@ -290,27 +354,103 @@ export class PluginManager {
   }
 
   /**
-   * Add an import to the import manager
+   * Add an import to the import manager with appropriate options
+   *
+   * @param manager - ImportManager instance to add to
+   * @param imp - Import configuration to add
    */
   private addImportToManager(manager: ImportManager, imp: Import): void {
+    const options = this.buildImportOptions(imp);
+
     if (imp.kind === 'internal') {
-      manager.addInternal(imp.path, [...imp.imports], {
-        ...(imp.isTypeOnly !== undefined ? { typeOnly: imp.isTypeOnly } : {}),
-        ...(imp.isDefault !== undefined ? { isDefault: imp.isDefault } : {}),
-        ...(imp.defaultName !== undefined ? { defaultName: imp.defaultName } : {}),
-      });
+      manager.addInternal(imp.path, [...imp.imports], options);
     } else {
-      manager.addExternal(imp.package, [...imp.imports], {
-        ...(imp.isTypeOnly !== undefined ? { typeOnly: imp.isTypeOnly } : {}),
-        ...(imp.isDefault !== undefined ? { isDefault: imp.isDefault } : {}),
-        ...(imp.defaultName !== undefined ? { defaultName: imp.defaultName } : {}),
-      });
+      manager.addExternal(imp.package, [...imp.imports], options);
     }
   }
 
   /**
-   * Validate that a value is a valid Result
+   * Build import options object from import configuration
+   *
+   * @param imp - Import configuration
+   * @returns Options object for ImportManager
    */
+  private buildImportOptions(imp: Import): {
+    typeOnly?: boolean;
+    isDefault?: boolean;
+    defaultName?: string;
+  } {
+    const options: {
+      typeOnly?: boolean;
+      isDefault?: boolean;
+      defaultName?: string;
+    } = {};
+
+    if (imp.isTypeOnly !== undefined) {
+      options.typeOnly = imp.isTypeOnly;
+    }
+    if (imp.isDefault !== undefined) {
+      options.isDefault = imp.isDefault;
+    }
+    if (imp.defaultName !== undefined) {
+      options.defaultName = imp.defaultName;
+    }
+
+    return options;
+  }
+
+  /**
+   * Validate that a value is a valid Result object with proper structure
+   *
+   * @param value - Value to validate
+   * @returns Type guard indicating if value is a valid Result
+   */
+  /**
+   * Invoke a plugin hook function with proper error handling and validation
+   *
+   * @param hook - The hook function to invoke
+   * @param input - Input data to pass to the hook
+   * @param additionalArgs - Additional arguments to pass to the hook
+   * @param pluginName - Name of the plugin (for error messages)
+   * @param hookType - Type of hook being invoked (for error messages)
+   * @returns Promise resolving to hook result or error
+   */
+  private async invokeHook<T>(
+    hook: Function,
+    input: T,
+    additionalArgs: readonly unknown[],
+    pluginName: string,
+    hookType: string,
+  ): Promise<Result<T>> {
+    try {
+      let result: Result<unknown>;
+      if (additionalArgs.length > 0) {
+        result = await (hook as (...args: unknown[]) => Promise<Result<unknown>> | Result<unknown>)(
+          input,
+          ...additionalArgs,
+        );
+      } else {
+        result = await (hook as (input: unknown) => Promise<Result<unknown>> | Result<unknown>)(
+          input,
+        );
+      }
+
+      if (!this.isValidResult(result)) {
+        return err(new Error(`Plugin ${pluginName} hook ${hookType} returned invalid result`));
+      }
+
+      if (!result.ok) {
+        return err(
+          new Error(`Plugin ${pluginName} hook ${hookType} failed: ${result.error.message}`),
+        );
+      }
+
+      return result as Result<T>;
+    } catch (error) {
+      return err(new Error(`Plugin ${pluginName} hook ${hookType} threw error: ${error}`));
+    }
+  }
+
   private isValidResult(value: unknown): value is Result<unknown> {
     return (
       typeof value === 'object' &&
@@ -322,7 +462,10 @@ export class PluginManager {
   }
 
   /**
-   * Validate plugin structure
+   * Validate plugin structure and all required properties
+   *
+   * @param plugin - Plugin object to validate
+   * @returns Result indicating validation success or specific error
    */
   private validatePlugin(plugin: unknown): Result<Plugin> {
     if (typeof plugin !== 'object' || plugin === null) {
@@ -345,24 +488,7 @@ export class PluginManager {
       return err(new Error("Plugin 'description' must be a string if provided"));
     }
 
-    // Validate hook methods are functions if present
-    const hookMethods = [
-      'beforeParse',
-      'afterParse',
-      'beforeResolve',
-      'afterResolve',
-      'beforeGenerate',
-      'afterGenerate',
-      'transformType',
-      'transformProperty',
-      'transformBuildMethod',
-      'transformPropertyMethod',
-      'addCustomMethods',
-      'transformValue',
-      'transformImports',
-    ];
-
-    for (const method of hookMethods) {
+    for (const method of Object.values(HookType)) {
       if (method in pluginObj && typeof pluginObj[method] !== 'function') {
         return err(new Error(`Plugin hook '${method}' must be a function if provided`));
       }
@@ -380,7 +506,10 @@ export class PluginManager {
   }
 
   /**
-   * Validate plugin imports structure
+   * Validate plugin imports structure and format
+   *
+   * @param imports - Imports object to validate
+   * @returns Result indicating validation success or specific error
    */
   private validatePluginImports(imports: unknown): Result<PluginImports> {
     if (typeof imports !== 'object' || imports === null) {
@@ -406,7 +535,11 @@ export class PluginManager {
   }
 
   /**
-   * Validate a single import
+   * Validate a single import configuration object
+   *
+   * @param imp - Import object to validate
+   * @param index - Index of import in array (for error messages)
+   * @returns Result indicating validation success or specific error
    */
   private validateImport(imp: unknown, index: number): Result<Import> {
     if (typeof imp !== 'object' || imp === null) {

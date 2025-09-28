@@ -349,7 +349,7 @@ describe('ImportTransformUtilsImpl', () => {
         },
         {
           source: './module.js',
-          namedImports: [{ name: 'A' }], // Duplicate
+          namedImports: [{ name: 'A' }],
           isTypeOnly: false,
           isSideEffect: false,
         },
@@ -360,6 +360,74 @@ describe('ImportTransformUtilsImpl', () => {
       expect(result).toHaveLength(1);
       expect(result[0]?.namedImports).toHaveLength(1);
       expect(result[0]?.namedImports[0]?.name).toBe('A');
+    });
+
+    test('merges default imports correctly', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './module.js',
+          namedImports: [{ name: 'A' }],
+          defaultImport: 'Default',
+          isTypeOnly: false,
+          isSideEffect: false,
+        },
+        {
+          source: './module.js',
+          namedImports: [{ name: 'B' }],
+          isTypeOnly: false,
+          isSideEffect: false,
+        },
+      ];
+
+      const result = utils.mergeImports(imports);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.defaultImport).toBe('Default');
+      expect(result[0]?.namedImports).toHaveLength(2);
+    });
+
+    test('preserves isSideEffect when merging', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './module.js',
+          namedImports: [],
+          isTypeOnly: false,
+          isSideEffect: true,
+        },
+        {
+          source: './module.js',
+          namedImports: [{ name: 'A' }],
+          isTypeOnly: false,
+          isSideEffect: false,
+        },
+      ];
+
+      const result = utils.mergeImports(imports);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.isSideEffect).toBe(true);
+    });
+
+    test('handles type-only merging correctly', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './module.js',
+          namedImports: [{ name: 'A' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+        {
+          source: './module.js',
+          namedImports: [{ name: 'B' }],
+          isTypeOnly: false,
+          isSideEffect: false,
+        },
+      ];
+
+      const result = utils.mergeImports(imports);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.isTypeOnly).toBe(false);
     });
   });
 
@@ -381,14 +449,81 @@ describe('ImportTransformUtilsImpl', () => {
       ];
 
       const mapping: RelativeToMonorepoMapping = {
-        pathMappings: new Map([['../../../types/', '@my-org/types/']]),
+        pathMappings: [
+          {
+            pattern: '../../../types/',
+            replacement: '@my-org/types/',
+          },
+        ],
       };
 
       const result = utils.transformRelativeToMonorepo(imports, mapping);
 
       expect(result).toHaveLength(2);
       expect(result[0]?.source).toBe('@my-org/types/User.js');
-      expect(result[1]?.source).toBe('@external/package'); // Unchanged
+      expect(result[1]?.source).toBe('@external/package');
+    });
+
+    test('does not match similar but different paths', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './my-types/User.js',
+          namedImports: [{ name: 'User' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+        {
+          source: './types/User.js',
+          namedImports: [{ name: 'User' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+      ];
+
+      const mapping: RelativeToMonorepoMapping = {
+        pathMappings: [
+          {
+            pattern: './types/',
+            replacement: '@my-org/types/',
+          },
+        ],
+      };
+
+      const result = utils.transformRelativeToMonorepo(imports, mapping);
+
+      expect(result[0]?.source).toBe('./my-types/User.js');
+      expect(result[1]?.source).toBe('@my-org/types/User.js');
+    });
+
+    test('only matches pattern at start of path, not in middle', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './components/types/User.js',
+          namedImports: [{ name: 'User' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+        {
+          source: './types/User.js',
+          namedImports: [{ name: 'User' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+      ];
+
+      const mapping: RelativeToMonorepoMapping = {
+        pathMappings: [
+          {
+            pattern: './types/',
+            replacement: '@my-org/types/',
+          },
+        ],
+      };
+
+      const result = utils.transformRelativeToMonorepo(imports, mapping);
+
+      expect(result[0]?.source).toBe('./components/types/User.js');
+      expect(result[1]?.source).toBe('@my-org/types/User.js');
     });
 
     test('handles RegExp patterns', () => {
@@ -402,12 +537,46 @@ describe('ImportTransformUtilsImpl', () => {
       ];
 
       const mapping: RelativeToMonorepoMapping = {
-        pathMappings: new Map([[/\.\.\/types\.js$/, '@my-org/types']]),
+        pathMappings: [
+          {
+            pattern: '\\.\\./types\\.js$',
+            isRegex: true,
+            replacement: '@my-org/types',
+          },
+        ],
       };
 
       const result = utils.transformRelativeToMonorepo(imports, mapping);
 
       expect(result[0]?.source).toBe('@my-org/types');
+    });
+
+    test('uses first matching pattern when multiple patterns match', () => {
+      const imports: StructuredImport[] = [
+        {
+          source: './types/User.js',
+          namedImports: [{ name: 'User' }],
+          isTypeOnly: true,
+          isSideEffect: false,
+        },
+      ];
+
+      const mapping: RelativeToMonorepoMapping = {
+        pathMappings: [
+          {
+            pattern: './types/',
+            replacement: '@my-org/types/',
+          },
+          {
+            pattern: './types/User.js',
+            replacement: '@my-org/users/User.js',
+          },
+        ],
+      };
+
+      const result = utils.transformRelativeToMonorepo(imports, mapping);
+
+      expect(result[0]?.source).toBe('@my-org/types/User.js');
     });
   });
 
@@ -422,7 +591,10 @@ describe('ImportTransformUtilsImpl', () => {
         },
       ];
 
-      const result = utils.replaceSource(imports, './old-module.js', './new-module.js');
+      const result = utils.replaceSource(imports, {
+        from: './old-module.js',
+        to: './new-module.js',
+      });
 
       expect(result[0]?.source).toBe('./new-module.js');
     });
@@ -437,7 +609,7 @@ describe('ImportTransformUtilsImpl', () => {
         },
       ];
 
-      const result = utils.replaceSource(imports, /old/, 'new');
+      const result = utils.replaceSource(imports, { from: /old/, to: 'new' });
 
       expect(result[0]?.source).toBe('./new-module.js');
     });

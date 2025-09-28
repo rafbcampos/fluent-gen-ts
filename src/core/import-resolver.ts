@@ -2,33 +2,78 @@ import path from 'node:path';
 import type { Result } from './result.js';
 import { ok, err } from './result.js';
 
+/**
+ * Information about a resolved import path.
+ *
+ * @property isRelative - Whether the import is a relative path (e.g., './utils')
+ * @property isNodeModule - Whether the import is a node_modules package
+ * @property moduleName - Valid JavaScript identifier extracted from the import
+ * @property originalPath - The original import path as provided
+ * @property packageName - Full package name for node modules (e.g., '@babel/core')
+ * @property scopedPackage - Scope portion for scoped packages (e.g., '@babel')
+ * @property subPath - Subpath within a package (e.g., 'get' from 'lodash/get')
+ */
 export interface ImportInfo {
   readonly isRelative: boolean;
   readonly isNodeModule: boolean;
   readonly moduleName: string;
+  readonly originalPath: string;
   readonly packageName?: string | undefined;
   readonly scopedPackage?: string | undefined;
   readonly subPath?: string | undefined;
 }
 
+/**
+ * Options for resolving an import path.
+ *
+ * @property importPath - The import path to resolve
+ */
 export interface ImportResolutionOptions {
   readonly importPath: string;
 }
 
+/**
+ * Options for formatting an import path for code generation.
+ *
+ * @property info - Import information from resolve()
+ * @property sourceFilePath - Path to the file containing the import
+ */
 export interface FormatImportPathOptions {
   readonly info: ImportInfo;
   readonly sourceFilePath: string;
 }
 
-/**
- * Validation result for import paths
- */
 interface ImportPathValidation {
   readonly isValid: boolean;
   readonly errorMessage?: string;
 }
 
+/**
+ * Resolves and analyzes import paths for TypeScript/JavaScript modules.
+ *
+ * Handles:
+ * - Relative imports (./file, ../dir/file)
+ * - Node modules (lodash, @babel/core)
+ * - Scoped packages with subpaths (@types/node/fs)
+ * - Absolute paths and Windows paths
+ */
 export class ImportResolver {
+  /**
+   * Resolves an import path into structured information.
+   *
+   * @param options - Resolution options
+   * @returns Result containing ImportInfo on success, Error on failure
+   *
+   * @example
+   * ```ts
+   * const resolver = new ImportResolver();
+   * const result = resolver.resolve({ importPath: '@babel/core' });
+   * if (isOk(result)) {
+   *   console.log(result.value.packageName); // '@babel/core'
+   *   console.log(result.value.moduleName);  // 'core'
+   * }
+   * ```
+   */
   resolve({ importPath }: ImportResolutionOptions): Result<ImportInfo> {
     try {
       const validation = this.validateImportPath(importPath);
@@ -48,16 +93,12 @@ export class ImportResolver {
         return this.resolveNodeModule(importPath);
       }
 
-      // Handle absolute paths and other cases
       return this.resolveAbsoluteOrOtherPath(importPath);
     } catch (error) {
       return err(new Error(`Failed to resolve import: ${error}`));
     }
   }
 
-  /**
-   * Validates an import path for basic correctness
-   */
   private validateImportPath(importPath: string): ImportPathValidation {
     if (typeof importPath !== 'string') {
       return { isValid: false, errorMessage: 'Import path must be a string' };
@@ -67,7 +108,6 @@ export class ImportResolver {
       return { isValid: false, errorMessage: 'Import path cannot be empty' };
     }
 
-    // Check for incomplete scoped packages
     if (importPath === '@' || (importPath.startsWith('@') && !importPath.includes('/'))) {
       return {
         isValid: false,
@@ -78,9 +118,6 @@ export class ImportResolver {
     return { isValid: true };
   }
 
-  /**
-   * Checks if a path is a relative import
-   */
   private isRelativePath(importPath: string): boolean {
     return (
       importPath.startsWith('./') ||
@@ -90,40 +127,29 @@ export class ImportResolver {
     );
   }
 
-  /**
-   * Checks if a path looks like a Windows absolute path
-   */
   private isWindowsPath(importPath: string): boolean {
     return /^[A-Za-z]:[/\\]/.test(importPath);
   }
 
-  /**
-   * Resolves a relative import path
-   */
   private resolveRelativeImport(importPath: string): Result<ImportInfo> {
     return ok({
       isRelative: true,
       isNodeModule: false,
       moduleName: this.extractModuleName(importPath),
+      originalPath: importPath,
     });
   }
 
-  /**
-   * Resolves absolute paths and other non-standard imports
-   */
   private resolveAbsoluteOrOtherPath(importPath: string): Result<ImportInfo> {
     return ok({
       isRelative: false,
       isNodeModule: false,
       moduleName: this.extractModuleName(importPath),
+      originalPath: importPath,
     });
   }
 
-  /**
-   * Resolves a node module import path
-   */
   private resolveNodeModule(importPath: string): Result<ImportInfo> {
-    // Clean up trailing slashes for consistent processing
     const cleanedPath = importPath.replace(/\/$/, '');
     const parts = cleanedPath.split('/');
 
@@ -160,6 +186,7 @@ export class ImportResolver {
       isRelative: false,
       isNodeModule: true,
       moduleName,
+      originalPath: importPath,
       packageName,
       scopedPackage,
       subPath,
@@ -168,10 +195,6 @@ export class ImportResolver {
     return ok(result);
   }
 
-  /**
-   * Extracts a module name from node module information
-   * Uses a consistent strategy for all packages regardless of scope
-   */
   private extractNodeModuleName({
     packageName,
     subPath,
@@ -207,8 +230,26 @@ export class ImportResolver {
   }
 
   /**
-   * Formats an import path for code generation
-   * Uses consistent formatting for all package types
+   * Formats an import path for code generation.
+   *
+   * For node modules, returns the package name with subpath.
+   * For relative imports, converts to absolute path and replaces .ts/.tsx with .js.
+   *
+   * @param options - Formatting options
+   * @returns Formatted import path suitable for code generation
+   *
+   * @example
+   * ```ts
+   * const resolver = new ImportResolver();
+   * const result = resolver.resolve({ importPath: './utils.ts' });
+   * if (isOk(result)) {
+   *   const formatted = resolver.formatImportPath({
+   *     info: result.value,
+   *     sourceFilePath: '/src/components/Button.ts'
+   *   });
+   *   console.log(formatted); // '/src/components/utils.js'
+   * }
+   * ```
    */
   formatImportPath({ info, sourceFilePath }: FormatImportPathOptions): string {
     if (info.isNodeModule) {
@@ -222,9 +263,6 @@ export class ImportResolver {
     return info.moduleName;
   }
 
-  /**
-   * Formats node module imports
-   */
   private formatNodeModuleImport(info: ImportInfo): string {
     if (!info.packageName) {
       return info.moduleName;
@@ -233,9 +271,6 @@ export class ImportResolver {
     return info.packageName + (info.subPath ? `/${info.subPath}` : '');
   }
 
-  /**
-   * Formats relative imports
-   */
   private formatRelativeImport({
     info,
     sourceFilePath,
@@ -243,7 +278,7 @@ export class ImportResolver {
     info: ImportInfo;
     sourceFilePath: string;
   }): string {
-    const resolvedPath = path.resolve(path.dirname(sourceFilePath), info.moduleName);
+    const resolvedPath = path.resolve(path.dirname(sourceFilePath), info.originalPath);
     const ext = path.extname(resolvedPath);
 
     if (ext === '.ts' || ext === '.tsx') {

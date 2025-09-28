@@ -1010,6 +1010,90 @@ interface BuildMethodContext {
 }
 ```
 
+### BaseBuildContext
+
+Base context interface for builder operations. Provides information about the
+builder's position in the object hierarchy.
+
+```typescript
+interface BaseBuildContext {
+  /** Parent builder identifier */
+  readonly parentId?: string;
+  /** Name of the parameter being built */
+  readonly parameterName?: string;
+  /** Index in array if building array elements */
+  readonly index?: number;
+  /** Optional custom context generator for nested builders */
+  readonly __nestedContextGenerator__?: NestedContextGenerator<BaseBuildContext>;
+  /** Additional context properties */
+  readonly [key: string]: unknown;
+}
+```
+
+**Usage:**
+
+```typescript
+// Extend to create custom context types
+interface MyDomainContext extends BaseBuildContext {
+  tenantId?: string;
+  nodeId?: string;
+}
+```
+
+See
+[Custom Nested Context Generation](../guide/advanced-usage.md#custom-nested-context-generation)
+for advanced usage.
+
+### NestedContextParams
+
+Parameters passed to nested context generators.
+
+```typescript
+interface NestedContextParams<C extends BaseBuildContext> {
+  /** Context from parent builder */
+  readonly parentContext: C;
+  /** Name of the parameter being built */
+  readonly parameterName: string;
+  /** Index in array if building array elements */
+  readonly index?: number;
+}
+```
+
+**Important**: Due to the deferred pattern, child builders are NOT executed when
+this is called. The parent can only use information from its own state and
+parent context.
+
+### NestedContextGenerator
+
+Function type for generating nested context. Allows customization of how context
+is passed from parent to child builders.
+
+```typescript
+type NestedContextGenerator<C extends BaseBuildContext> = (
+  params: NestedContextParams<C>,
+) => C;
+```
+
+**Example:**
+
+```typescript
+const generator: NestedContextGenerator<MyContext> = ({
+  parentContext,
+  parameterName,
+  index,
+}) => ({
+  ...parentContext,
+  parameterName,
+  ...(index !== undefined ? { index } : {}),
+  nodeId: `${parentContext.nodeId || 'root'}-${parameterName}`,
+  __nestedContextGenerator__: generator, // Pass it down!
+});
+```
+
+See
+[Custom Nested Context Generation](../guide/advanced-usage.md#custom-nested-context-generation)
+for detailed examples.
+
 ### TypeMatcherInterface
 
 ```typescript

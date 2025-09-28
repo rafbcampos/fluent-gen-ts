@@ -699,5 +699,136 @@ describe('Type Matchers', () => {
 
       expect(matcher.match(objectWithProperty)).toBe(true);
     });
+
+    test('should handle intersection types with both "types" and "intersectionTypes" properties', () => {
+      const matcher = intersection().including(object('A'));
+
+      // Test with "intersectionTypes" property (current standard)
+      const intersectionWithIntersectionTypes: TypeInfo = {
+        kind: TypeKind.Intersection,
+        intersectionTypes: [
+          { kind: TypeKind.Object, name: 'A', properties: [] },
+          { kind: TypeKind.Object, name: 'B', properties: [] },
+        ],
+      };
+
+      // Test with "types" property (alternative format)
+      const intersectionWithTypes: TypeInfo = {
+        kind: TypeKind.Intersection,
+        types: [
+          { kind: TypeKind.Object, name: 'A', properties: [] },
+          { kind: TypeKind.Object, name: 'B', properties: [] },
+        ],
+      } as any;
+
+      expect(matcher.match(intersectionWithIntersectionTypes)).toBe(true);
+      expect(matcher.match(intersectionWithTypes)).toBe(true);
+    });
+
+    test('should handle literal types with both "value" and "literal" properties', () => {
+      const matcher = literal('test');
+
+      // Test with "literal" property (current standard)
+      const literalWithLiteralProp: TypeInfo = {
+        kind: TypeKind.Literal,
+        literal: 'test',
+      };
+
+      // Test with "value" property (alternative format)
+      const literalWithValueProp: TypeInfo = {
+        kind: TypeKind.Literal,
+        value: 'test',
+      } as any;
+
+      expect(matcher.match(literalWithLiteralProp)).toBe(true);
+      expect(matcher.match(literalWithValueProp)).toBe(true);
+    });
+
+    test('should handle literal types without literal value properties', () => {
+      const matcher = literal('test');
+
+      // Test with literal type that has no value/literal property
+      const literalWithoutValue: TypeInfo = {
+        kind: TypeKind.Literal,
+      } as any;
+
+      expect(matcher.match(literalWithoutValue)).toBe(false);
+    });
+
+    test('should handle array types without element type', () => {
+      const arrayMatcher = array().of(primitive('string'));
+
+      // Array without elementType property should not match specific element constraint
+      const arrayWithoutElementType: TypeInfo = {
+        kind: TypeKind.Array,
+      } as any;
+
+      expect(arrayMatcher.match(arrayWithoutElementType)).toBe(false);
+
+      // But unconstrained array should match
+      const unconstrainedArrayMatcher = array();
+      expect(unconstrainedArrayMatcher.match(arrayWithoutElementType)).toBe(true);
+    });
+
+    test('should handle reference and generic types without name property', () => {
+      const referenceMatcher = reference('TestType');
+      const genericMatcher = generic('T');
+
+      const referenceWithoutName: TypeInfo = { kind: TypeKind.Reference } as any;
+      const genericWithoutName: TypeInfo = { kind: TypeKind.Generic } as any;
+
+      expect(referenceMatcher.match(referenceWithoutName)).toBe(false);
+      expect(genericMatcher.match(genericWithoutName)).toBe(false);
+
+      // But matchers without name constraints should match
+      expect(reference().match(referenceWithoutName)).toBe(true);
+      expect(generic().match(genericWithoutName)).toBe(true);
+    });
+
+    test('should handle object types without name when name matcher is specified', () => {
+      const matcher = object('User');
+
+      const objectWithoutName: TypeInfo = {
+        kind: TypeKind.Object,
+        properties: [],
+      };
+
+      expect(matcher.match(objectWithoutName)).toBe(false);
+    });
+
+    test('should handle object types without properties when property constraints exist', () => {
+      const matcher = object().withProperty('email');
+
+      const objectWithoutProperties: TypeInfo = {
+        kind: TypeKind.Object,
+      } as any;
+
+      // Should not match since required properties don't exist
+      expect(matcher.match(objectWithoutProperties)).toBe(false);
+
+      // But object matcher without property constraints should match
+      const unconstrainedMatcher = object();
+      expect(unconstrainedMatcher.match(objectWithoutProperties)).toBe(true);
+    });
+
+    test('should handle union types without unionTypes property', () => {
+      const matcher = union().containing(primitive('string'));
+
+      const unionWithoutTypes: TypeInfo = {
+        kind: TypeKind.Union,
+      } as any;
+
+      expect(matcher.match(unionWithoutTypes)).toBe(false);
+    });
+
+    test('should handle intersection types without intersection type properties', () => {
+      const matcher = intersection().including(object('A'));
+
+      const intersectionWithoutTypes: TypeInfo = {
+        kind: TypeKind.Intersection,
+      } as any;
+
+      expect(matcher.match(intersectionWithoutTypes)).toBe(false);
+    });
   });
 });

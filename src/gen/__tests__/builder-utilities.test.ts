@@ -9,6 +9,7 @@ import {
   createInspectMethod,
   type FluentBuilder,
   type BaseBuildContext,
+  type NestedContextGenerator,
 } from '../builder-utilities.js';
 
 describe('builder-utilities', () => {
@@ -116,18 +117,17 @@ describe('builder-utilities', () => {
   describe('createNestedContext', () => {
     test('creates context with parameter name', () => {
       const parentContext: BaseBuildContext = { parentId: 'parent-123' };
-      const result = createNestedContext(parentContext, 'testParam');
+      const result = createNestedContext({ parentContext, parameterName: 'testParam' });
 
       expect(result).toEqual({
         parentId: 'parent-123',
         parameterName: 'testParam',
-        index: undefined,
       });
     });
 
     test('creates context with parameter name and index', () => {
       const parentContext: BaseBuildContext = { parentId: 'parent-123' };
-      const result = createNestedContext(parentContext, 'arrayParam', 5);
+      const result = createNestedContext({ parentContext, parameterName: 'arrayParam', index: 5 });
 
       expect(result).toEqual({
         parentId: 'parent-123',
@@ -142,7 +142,7 @@ describe('builder-utilities', () => {
         customProp: 'custom-value',
         anotherProp: 42,
       };
-      const result = createNestedContext(parentContext, 'testParam', 1);
+      const result = createNestedContext({ parentContext, parameterName: 'testParam', index: 1 });
 
       expect(result).toEqual({
         parentId: 'parent-123',
@@ -155,11 +155,194 @@ describe('builder-utilities', () => {
 
     test('handles empty parent context', () => {
       const parentContext: BaseBuildContext = {};
-      const result = createNestedContext(parentContext, 'testParam');
+      const result = createNestedContext({ parentContext, parameterName: 'testParam' });
 
       expect(result).toEqual({
         parameterName: 'testParam',
-        index: undefined,
+      });
+    });
+
+    describe('custom context generator', () => {
+      interface CustomContext extends BaseBuildContext {
+        nodeId?: string;
+      }
+
+      test('uses custom generator when provided', () => {
+        const generator: NestedContextGenerator<CustomContext> = ({
+          parentContext,
+          parameterName,
+          index,
+        }) => {
+          let nodeId = parentContext.nodeId || 'root';
+          nodeId += `-${parameterName}`;
+          if (index !== undefined) nodeId += `-${index}`;
+          return {
+            ...parentContext,
+            parameterName,
+            ...(index !== undefined ? { index } : {}),
+            nodeId,
+            __nestedContextGenerator__: generator,
+          };
+        };
+
+        const parentContext: CustomContext = {
+          nodeId: 'root',
+          __nestedContextGenerator__: generator,
+        };
+
+        const result = createNestedContext({ parentContext, parameterName: 'child' });
+
+        expect(result).toEqual({
+          nodeId: 'root-child',
+          parameterName: 'child',
+          __nestedContextGenerator__: generator,
+        });
+      });
+
+      test('uses custom generator with array index', () => {
+        const generator: NestedContextGenerator<CustomContext> = ({
+          parentContext,
+          parameterName,
+          index,
+        }) => {
+          let nodeId = parentContext.nodeId || 'root';
+          nodeId += `-${parameterName}`;
+          if (index !== undefined) nodeId += `-${index}`;
+          return {
+            ...parentContext,
+            parameterName,
+            ...(index !== undefined ? { index } : {}),
+            nodeId,
+            __nestedContextGenerator__: generator,
+          };
+        };
+
+        const parentContext: CustomContext = {
+          nodeId: 'root',
+          __nestedContextGenerator__: generator,
+        };
+
+        const result = createNestedContext({ parentContext, parameterName: 'items', index: 2 });
+
+        expect(result).toEqual({
+          nodeId: 'root-items-2',
+          parameterName: 'items',
+          index: 2,
+          __nestedContextGenerator__: generator,
+        });
+      });
+
+      test('generator propagates through nested builders', () => {
+        const generator: NestedContextGenerator<CustomContext> = ({
+          parentContext,
+          parameterName,
+          index,
+        }) => {
+          let nodeId = parentContext.nodeId || 'root';
+          nodeId += `-${parameterName}`;
+          if (index !== undefined) nodeId += `-${index}`;
+          return {
+            ...parentContext,
+            parameterName,
+            ...(index !== undefined ? { index } : {}),
+            nodeId,
+            __nestedContextGenerator__: generator,
+          };
+        };
+
+        interface TestType {
+          id: string;
+          nested?: {
+            value: string;
+          };
+        }
+
+        class TestBuilder extends FluentBuilderBase<TestType, CustomContext> {
+          build(context?: CustomContext): TestType {
+            return this.buildWithDefaults({ id: context?.nodeId || 'default' }, context);
+          }
+          withNested(
+            value: { value: string } | FluentBuilder<{ value: string }, CustomContext>,
+          ): this {
+            return this.set('nested', value);
+          }
+        }
+
+        class NestedBuilder extends FluentBuilderBase<{ value: string }, CustomContext> {
+          build(context?: CustomContext): { value: string } {
+            return this.buildWithDefaults({ value: context?.nodeId || 'default' }, context);
+          }
+        }
+
+        const rootContext: CustomContext = {
+          nodeId: 'root',
+          __nestedContextGenerator__: generator,
+        };
+
+        const builder = new TestBuilder();
+        builder.withNested(new NestedBuilder());
+
+        const result = builder.build(rootContext);
+
+        expect(result.id).toBe('root');
+        expect(result.nested?.value).toBe('root-nested');
+      });
+
+      test('falls back to default when no generator provided', () => {
+        const parentContext: CustomContext = {
+          nodeId: 'root',
+        };
+
+        const result = createNestedContext({ parentContext, parameterName: 'child' });
+
+        expect(result).toEqual({
+          nodeId: 'root',
+          parameterName: 'child',
+        });
+      });
+
+      test('parent can add custom data to context', () => {
+        interface CustomContext extends BaseBuildContext {
+          nodeId?: string;
+          tenantId?: string;
+          depth?: number;
+        }
+
+        const generator: NestedContextGenerator<CustomContext> = ({
+          parentContext,
+          parameterName,
+          index,
+        }) => {
+          let nodeId = parentContext.nodeId || 'root';
+          nodeId += `-${parameterName}`;
+          if (index !== undefined) nodeId += `-${index}`;
+          return {
+            ...parentContext,
+            parameterName,
+            ...(index !== undefined ? { index } : {}),
+            nodeId,
+            tenantId: parentContext.tenantId || 'default-tenant',
+            depth: (parentContext.depth || 0) + 1,
+            __nestedContextGenerator__: generator,
+          };
+        };
+
+        const parentContext: CustomContext = {
+          nodeId: 'root',
+          tenantId: 'tenant-123',
+          depth: 0,
+          __nestedContextGenerator__: generator,
+        };
+
+        const result = createNestedContext({ parentContext, parameterName: 'level1' });
+
+        expect(result).toEqual({
+          nodeId: 'root-level1',
+          parameterName: 'level1',
+          tenantId: 'tenant-123',
+          depth: 1,
+          __nestedContextGenerator__: generator,
+        });
       });
     });
   });
@@ -170,6 +353,12 @@ describe('builder-utilities', () => {
       constructor(private testValue: string) {}
       build(_context?: BaseBuildContext) {
         return { value: this.testValue };
+      }
+      peek(_key: 'value'): string | undefined {
+        return this.testValue;
+      }
+      has(_key: 'value'): boolean {
+        return true;
       }
     }
 
@@ -228,6 +417,12 @@ describe('builder-utilities', () => {
           contextsReceived.push(context);
           return { value: 'test' };
         }
+        peek(_key: 'value'): string | undefined {
+          return 'test';
+        }
+        has(_key: 'value'): boolean {
+          return true;
+        }
       }
 
       const builder = new ContextAwareBuilder();
@@ -251,6 +446,12 @@ describe('builder-utilities', () => {
         build(context?: BaseBuildContext) {
           contextsReceived.push(context);
           return { value: 'test' };
+        }
+        peek(_key: 'value'): string | undefined {
+          return 'test';
+        }
+        has(_key: 'value'): boolean {
+          return true;
         }
       }
 

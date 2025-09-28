@@ -22,6 +22,7 @@ describe('ImportResolver', () => {
             isRelative: true,
             isNodeModule: false,
             moduleName: 'utils',
+            originalPath: './utils',
             packageName: undefined,
             scopedPackage: undefined,
             subPath: undefined,
@@ -40,6 +41,7 @@ describe('ImportResolver', () => {
             isRelative: true,
             isNodeModule: false,
             moduleName: 'types',
+            originalPath: '../types',
             packageName: undefined,
             scopedPackage: undefined,
             subPath: undefined,
@@ -96,6 +98,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'lodash',
+            originalPath: 'lodash',
             packageName: 'lodash',
             scopedPackage: undefined,
             subPath: undefined,
@@ -114,6 +117,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'get',
+            originalPath: 'lodash/get',
             packageName: 'lodash',
             scopedPackage: undefined,
             subPath: 'get',
@@ -132,6 +136,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'ts_morph',
+            originalPath: 'ts-morph/lib/ts-morph',
             packageName: 'ts-morph',
             scopedPackage: undefined,
             subPath: 'lib/ts-morph',
@@ -199,6 +204,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'core',
+            originalPath: '@babel/core',
             packageName: '@babel/core',
             scopedPackage: '@babel',
             subPath: undefined,
@@ -217,6 +223,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'submodule',
+            originalPath: '@scope/package/submodule',
             packageName: '@scope/package',
             scopedPackage: '@scope',
             subPath: 'submodule',
@@ -250,6 +257,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'node',
+            originalPath: '@types/node',
             packageName: '@types/node',
             scopedPackage: '@types',
             subPath: undefined,
@@ -268,6 +276,7 @@ describe('ImportResolver', () => {
             isRelative: false,
             isNodeModule: true,
             moduleName: 'fs',
+            originalPath: '@types/node/fs',
             packageName: '@types/node',
             scopedPackage: '@types',
             subPath: 'fs',
@@ -421,6 +430,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'node',
+          originalPath: '@types/node',
           packageName: '@types/node' as const,
           scopedPackage: '@types' as const,
           subPath: undefined,
@@ -439,6 +449,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'fs',
+          originalPath: '@types/node/fs',
           packageName: '@types/node' as const,
           scopedPackage: '@types' as const,
           subPath: 'fs' as const,
@@ -457,6 +468,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'react',
+          originalPath: '@types/react',
           packageName: '@types/react' as const,
           scopedPackage: '@types' as const,
           subPath: undefined,
@@ -477,6 +489,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'lodash',
+          originalPath: 'lodash',
           packageName: 'lodash' as const,
           scopedPackage: undefined,
           subPath: undefined,
@@ -495,6 +508,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'get',
+          originalPath: 'lodash/get',
           packageName: 'lodash' as const,
           scopedPackage: undefined,
           subPath: 'get' as const,
@@ -513,6 +527,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'core',
+          originalPath: '@babel/core',
           packageName: '@babel/core' as const,
           scopedPackage: '@babel' as const,
           subPath: undefined,
@@ -531,6 +546,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'submodule',
+          originalPath: '@scope/package/submodule',
           packageName: '@scope/package' as const,
           scopedPackage: '@scope' as const,
           subPath: 'submodule' as const,
@@ -551,6 +567,7 @@ describe('ImportResolver', () => {
           isRelative: true,
           isNodeModule: false,
           moduleName: 'utils',
+          originalPath: './utils',
           packageName: undefined,
           scopedPackage: undefined,
           subPath: undefined,
@@ -568,7 +585,8 @@ describe('ImportResolver', () => {
         const info = {
           isRelative: true,
           isNodeModule: false,
-          moduleName: 'utils.ts',
+          moduleName: 'utils',
+          originalPath: './utils.ts',
           packageName: undefined,
           scopedPackage: undefined,
           subPath: undefined,
@@ -586,7 +604,8 @@ describe('ImportResolver', () => {
         const info = {
           isRelative: true,
           isNodeModule: false,
-          moduleName: 'Component.tsx',
+          moduleName: 'Component',
+          originalPath: './Component.tsx',
           packageName: undefined,
           scopedPackage: undefined,
           subPath: undefined,
@@ -607,6 +626,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: false,
           moduleName: 'someModule',
+          originalPath: '/absolute/someModule',
           packageName: undefined,
           scopedPackage: undefined,
           subPath: undefined,
@@ -625,6 +645,7 @@ describe('ImportResolver', () => {
           isRelative: false,
           isNodeModule: true,
           moduleName: 'fallbackModule',
+          originalPath: 'fallbackModule',
           packageName: undefined,
           scopedPackage: undefined,
           subPath: undefined,
@@ -637,6 +658,24 @@ describe('ImportResolver', () => {
 
         expect(formatted).toBe('fallbackModule');
       });
+    });
+  });
+
+  describe('bug verification tests', () => {
+    test('formats deep relative imports correctly', () => {
+      const resolveResult = resolver.resolve({
+        importPath: './utils/helpers/format',
+      });
+
+      expect(isOk(resolveResult)).toBe(true);
+      if (isOk(resolveResult)) {
+        const formatted = resolver.formatImportPath({
+          info: resolveResult.value,
+          sourceFilePath: '/src/components/Button.ts',
+        });
+
+        expect(formatted).toBe('/src/components/utils/helpers/format');
+      }
     });
   });
 

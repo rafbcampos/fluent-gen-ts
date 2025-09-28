@@ -22,6 +22,8 @@ import {
   type BuildMethodTransformation,
   type CustomMethodDefinition,
   type MethodParameter,
+  type PathMappingRule,
+  type RelativeToMonorepoMapping,
 } from '../plugin-types.js';
 import { ok } from '../../result.js';
 import { TypeKind } from '../../types.js';
@@ -183,6 +185,17 @@ describe('Plugin Types', () => {
         expect(context.symbol).toBe(mockSymbol);
         expect(context.sourceFile).toBe('/path/to/file.ts');
         expect(context.typeName).toBe('User');
+      });
+
+      test('should handle optional symbol property correctly', () => {
+        const mockType = {} as any;
+        const context: ResolveContext = {
+          type: mockType,
+          // symbol omitted to test optional behavior
+        };
+
+        expect(context.type).toBe(mockType);
+        expect(context.symbol).toBeUndefined();
       });
     });
 
@@ -586,6 +599,71 @@ describe('Plugin Types', () => {
 
         expect(matcher.including).toBeDefined();
         expect(matcher.exact).toBeDefined();
+      });
+    });
+  });
+
+  describe('Path Mapping Types', () => {
+    describe('PathMappingRule', () => {
+      test('should accept string pattern', () => {
+        const rule: PathMappingRule = {
+          pattern: '../utils',
+          replacement: '@my-org/utils',
+        };
+
+        expect(rule.pattern).toBe('../utils');
+        expect(rule.replacement).toBe('@my-org/utils');
+        expect(rule.isRegex).toBeUndefined();
+      });
+
+      test('should accept regex pattern', () => {
+        const rule: PathMappingRule = {
+          pattern: '^\\.\\./core',
+          isRegex: true,
+          replacement: '@my-org/core',
+        };
+
+        expect(rule.pattern).toBe('^\\.\\./core');
+        expect(rule.isRegex).toBe(true);
+        expect(rule.replacement).toBe('@my-org/core');
+      });
+    });
+
+    describe('RelativeToMonorepoMapping', () => {
+      test('should accept mapping with multiple rules', () => {
+        const mapping: RelativeToMonorepoMapping = {
+          pathMappings: [
+            {
+              pattern: '../utils',
+              replacement: '@my-org/utils',
+            },
+            {
+              pattern: '^\\.\\./core',
+              isRegex: true,
+              replacement: '@my-org/core',
+            },
+          ],
+          baseDir: '/project/src',
+        };
+
+        expect(mapping.pathMappings).toHaveLength(2);
+        expect(mapping.pathMappings[0]!.pattern).toBe('../utils');
+        expect(mapping.pathMappings[1]!.isRegex).toBe(true);
+        expect(mapping.baseDir).toBe('/project/src');
+      });
+
+      test('should work without base directory', () => {
+        const mapping: RelativeToMonorepoMapping = {
+          pathMappings: [
+            {
+              pattern: '../utils',
+              replacement: '@my-org/utils',
+            },
+          ],
+        };
+
+        expect(mapping.pathMappings).toHaveLength(1);
+        expect(mapping.baseDir).toBeUndefined();
       });
     });
   });

@@ -7,6 +7,38 @@ import type { Import, InternalImport, ExternalImport, PluginImports } from './pl
 export class ImportManager {
   private imports: Import[] = [];
 
+  private normalizeImports(imports: string | string[]): string[] {
+    return Array.isArray(imports) ? imports : [imports];
+  }
+
+  private buildImportOptions(options?: {
+    typeOnly?: boolean;
+    isDefault?: boolean;
+    defaultName?: string;
+  }): {
+    isTypeOnly?: boolean;
+    isDefault?: boolean;
+    defaultName?: string;
+  } {
+    const result: {
+      isTypeOnly?: boolean;
+      isDefault?: boolean;
+      defaultName?: string;
+    } = {};
+
+    if (options?.typeOnly !== undefined) {
+      result.isTypeOnly = options.typeOnly;
+    }
+    if (options?.isDefault !== undefined) {
+      result.isDefault = options.isDefault;
+    }
+    if (options?.defaultName !== undefined) {
+      result.defaultName = options.defaultName;
+    }
+
+    return result;
+  }
+
   /**
    * Add an internal project import
    * @param path - Relative path to the file
@@ -22,15 +54,13 @@ export class ImportManager {
       defaultName?: string;
     },
   ): this {
-    const importsList = Array.isArray(imports) ? imports : [imports];
+    const importsList = this.normalizeImports(imports);
 
     const internalImport: InternalImport = {
       kind: 'internal',
       path,
       imports: importsList,
-      ...(options?.typeOnly !== undefined ? { isTypeOnly: options.typeOnly } : {}),
-      ...(options?.isDefault !== undefined ? { isDefault: options.isDefault } : {}),
-      ...(options?.defaultName !== undefined ? { defaultName: options.defaultName } : {}),
+      ...this.buildImportOptions(options),
     };
 
     this.imports.push(internalImport);
@@ -52,15 +82,13 @@ export class ImportManager {
       defaultName?: string;
     },
   ): this {
-    const importsList = Array.isArray(imports) ? imports : [imports];
+    const importsList = this.normalizeImports(imports);
 
     const externalImport: ExternalImport = {
       kind: 'external',
       package: packageName,
       imports: importsList,
-      ...(options?.typeOnly !== undefined ? { isTypeOnly: options.typeOnly } : {}),
-      ...(options?.isDefault !== undefined ? { isDefault: options.isDefault } : {}),
-      ...(options?.defaultName !== undefined ? { defaultName: options.defaultName } : {}),
+      ...this.buildImportOptions(options),
     };
 
     this.imports.push(externalImport);
@@ -110,23 +138,22 @@ export class ImportManager {
   }
 
   /**
-   * Merge imports from another ImportManager
-   * @param other - Another ImportManager instance
+   * Merge imports from another ImportManager into this one
+   * @param other - Another ImportManager instance to merge from
+   * @returns This ImportManager for chaining
    */
   merge(other: ImportManager): this {
     this.imports.push(...other.getImports());
     return this;
   }
 
-  /**
-   * Get all configured imports
-   */
   getImports(): readonly Import[] {
     return this.imports;
   }
 
   /**
    * Build the final plugin imports configuration
+   * @returns PluginImports object containing all configured imports
    */
   build(): PluginImports {
     return {
@@ -135,29 +162,27 @@ export class ImportManager {
   }
 
   /**
-   * Convert imports to import statements
-   * Useful for generating the actual import code
+   * Convert imports to TypeScript/JavaScript import statements.
+   * Internal imports are listed first, followed by external imports.
+   * @returns Array of import statement strings ready for code generation
    */
   toImportStatements(): string[] {
-    const statements: string[] = [];
     const { internal, external } = this.getGroupedImports();
 
-    // Add internal imports first
-    for (const imp of internal) {
+    const internalStatements = this.importsToStatements(internal);
+    const externalStatements = this.importsToStatements(external);
+
+    return [...internalStatements, ...externalStatements];
+  }
+
+  private importsToStatements(imports: readonly Import[]): string[] {
+    const statements: string[] = [];
+    for (const imp of imports) {
       const statement = this.importToStatement(imp);
       if (statement) {
         statements.push(statement);
       }
     }
-
-    // Add external imports second
-    for (const imp of external) {
-      const statement = this.importToStatement(imp);
-      if (statement) {
-        statements.push(statement);
-      }
-    }
-
     return statements;
   }
 
@@ -184,44 +209,32 @@ export class ImportManager {
   }
 
   /**
-   * Check if an import already exists
+   * Check if an import matching the predicate exists
+   * @param predicate - Function to test each import
+   * @returns True if at least one import matches
    */
   hasImport(predicate: (imp: Import) => boolean): boolean {
     return this.imports.some(predicate);
   }
 
   /**
-   * Remove imports matching a predicate
+   * Remove all imports matching the predicate
+   * @param predicate - Function to test each import; returns true to remove
+   * @returns This ImportManager for chaining
    */
   removeImports(predicate: (imp: Import) => boolean): this {
-    const indicesToRemove: number[] = [];
-    this.imports.forEach((imp, index) => {
-      if (predicate(imp)) {
-        indicesToRemove.push(index);
-      }
-    });
-
-    // Remove in reverse order to maintain indices
-    for (let i = indicesToRemove.length - 1; i >= 0; i--) {
-      const indexToRemove = indicesToRemove[i];
-      if (indexToRemove !== undefined) {
-        this.imports.splice(indexToRemove, 1);
-      }
-    }
-
+    this.imports = this.imports.filter(imp => !predicate(imp));
     return this;
   }
 
-  /**
-   * Clear all imports
-   */
   clear(): this {
     this.imports.length = 0;
     return this;
   }
 
   /**
-   * Get imports grouped by source
+   * Get imports grouped by kind (internal vs external)
+   * @returns Object with internal and external import arrays
    */
   getGroupedImports(): {
     internal: readonly InternalImport[];
@@ -242,8 +255,19 @@ export class ImportManager {
   }
 
   /**
-   * Deduplicate imports by merging those from the same source with compatible options
-   * Type-only imports and regular imports are kept separate
+   * Deduplicate imports by merging those from the same source with compatible options.
+   * Type-only and regular imports are kept separate, as are default and named imports.
+   * Returns a new ImportManager instance with deduplicated imports.
+   *
+   * @returns A new ImportManager with deduplicated imports
+   * @example
+   * ```ts
+   * const manager = new ImportManager()
+   *   .addInternal('./types.js', 'User')
+   *   .addInternal('./types.js', 'Product');
+   * const deduped = manager.deduplicate();
+   * // Results in single import: import { User, Product } from './types.js'
+   * ```
    */
   deduplicate(): ImportManager {
     const mergedImports = new Map<string, Import>();
@@ -275,15 +299,15 @@ export class ImportManager {
 
   /**
    * Convert to PluginImports format
+   * @deprecated Use build() instead
    */
   toPluginImports(): PluginImports {
-    return {
-      imports: this.imports,
-    };
+    return this.build();
   }
 
   /**
-   * Clone this ImportManager
+   * Create a shallow copy of this ImportManager
+   * @returns New ImportManager with the same imports
    */
   clone(): ImportManager {
     const cloned = new ImportManager();

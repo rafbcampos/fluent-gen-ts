@@ -580,6 +580,219 @@ const electronics = category()
   .build();
 ```
 
+### Custom Nested Context Generation
+
+fluent-gen-ts uses a **deferred pattern** where nested builders are stored but
+not executed until the parent's `build()` is called. This allows you to
+customize how context flows from parent to child builders.
+
+#### Understanding the Deferred Pattern
+
+```typescript
+// When you do this:
+const parent = parentBuilder()
+  .withChild(childBuilder()) // Child is NOT built yet, just stored
+  .build(); // NOW parent builds and passes context to child
+
+// The execution flow is:
+// 1. Parent's build() is called
+// 2. Parent creates context for child (using parent's data only)
+// 3. Child's build() is called with that context
+// 4. Child can augment context before passing to grandchildren
+```
+
+**Important**: When the parent creates context for the child, the child hasn't
+been built yet! The parent can only use:
+
+- Its own context (from its parent)
+- Parameter metadata (property name, array index)
+- **NOT** child builder state (that comes later)
+
+#### Basic Example: Deterministic IDs
+
+Generate hierarchical IDs based on the object tree structure:
+
+```typescript
+import type { BaseBuildContext, NestedContextGenerator } from 'fluent-gen-ts';
+
+// 1. Define your custom context interface
+interface MyDomainContext extends BaseBuildContext {
+  nodeId?: string;
+}
+
+// 2. Create a context generator
+const nodeIdGenerator: NestedContextGenerator<MyDomainContext> = ({
+  parentContext,
+  parameterName,
+  index,
+}) => {
+  // Build hierarchical ID from parent
+  let nodeId = parentContext.nodeId || 'root';
+  nodeId += `-${parameterName}`;
+  if (index !== undefined) nodeId += `-${index}`;
+
+  return {
+    ...parentContext,
+    parameterName,
+    ...(index !== undefined ? { index } : {}),
+    nodeId,
+    __nestedContextGenerator__: nodeIdGenerator, // Pass it down!
+  };
+};
+
+// 3. Use it once at the root - it propagates automatically!
+const workflow = workflowBuilder()
+  .withName('Main Workflow')
+  .withSteps([
+    stepBuilder()
+      .withName('Step 1')
+      .withActions([
+        actionBuilder().withType('http'),
+        actionBuilder().withType('email'),
+      ]),
+    stepBuilder().withName('Step 2'),
+  ])
+  .build({
+    nodeId: 'root',
+    __nestedContextGenerator__: nodeIdGenerator,
+  });
+
+// Result IDs:
+// workflow:     "root"
+// steps[0]:     "root-steps-0"
+// actions[0]:   "root-steps-0-actions-0"
+// actions[1]:   "root-steps-0-actions-1"
+// steps[1]:     "root-steps-1"
+```
+
+#### Advanced: Child-Specific Context Augmentation
+
+Children can augment context with their own data before passing to
+grandchildren:
+
+```typescript
+interface MyDomainContext extends BaseBuildContext {
+  nodeId?: string;
+  type?: string;
+}
+
+class ActionBuilder extends FluentBuilderBase<Action, MyDomainContext> {
+  build(context?: MyDomainContext): Action {
+    // Child augments context based on its OWN state
+    const type = this.peek('type');
+    const binding = this.peek('binding');
+
+    let nodeId = context?.nodeId || 'root';
+    if (type) {
+      nodeId += `-${type}`;
+
+      // Conditional logic based on child's state
+      if (type === 'action' && binding) {
+        nodeId += `-${processBinding(binding)}`;
+      }
+    }
+
+    // Pass augmented context to nested builders
+    const augmentedContext: MyDomainContext = {
+      ...context,
+      nodeId,
+      type,
+      __nestedContextGenerator__: context?.__nestedContextGenerator__,
+    };
+
+    return this.buildWithDefaults(ActionBuilder.defaults, augmentedContext);
+  }
+}
+```
+
+#### Real-World Example: Multi-Tenant Context
+
+Track tenant information throughout the object tree:
+
+```typescript
+interface TenantContext extends BaseBuildContext {
+  tenantId?: string;
+  userId?: string;
+  nodeId?: string;
+  depth?: number;
+}
+
+const tenantContextGenerator: NestedContextGenerator<TenantContext> = ({
+  parentContext,
+  parameterName,
+  index,
+}) => {
+  let nodeId = parentContext.nodeId || 'root';
+  nodeId += `-${parameterName}`;
+  if (index !== undefined) nodeId += `-${index}`;
+
+  return {
+    ...parentContext,
+    parameterName,
+    ...(index !== undefined ? { index } : {}),
+    nodeId,
+    // Tenant info propagates automatically
+    tenantId: parentContext.tenantId,
+    userId: parentContext.userId,
+    depth: (parentContext.depth || 0) + 1,
+    __nestedContextGenerator__: tenantContextGenerator,
+  };
+};
+
+// Use in tests or domain logic
+const order = orderBuilder()
+  .withCustomerId('customer-123')
+  .withItems([
+    orderItemBuilder().withProductId('product-1'),
+    orderItemBuilder().withProductId('product-2'),
+  ])
+  .build({
+    tenantId: 'tenant-abc',
+    userId: 'user-xyz',
+    nodeId: 'order-root',
+    depth: 0,
+    __nestedContextGenerator__: tenantContextGenerator,
+  });
+
+// All nested items automatically have tenantId and userId!
+```
+
+#### Plugin Integration
+
+While the runtime generator lives in the context, you can use plugins to set the
+context type for code generation:
+
+```typescript
+import { createPlugin } from 'fluent-gen-ts';
+
+const myDomainPlugin = createPlugin('my-domain', '1.0.0')
+  .setContextTypeName('MyDomainContext')
+  .requireImports(imports =>
+    imports.addInternal('./common', ['MyDomainContext', 'nodeIdGenerator']),
+  )
+  .build();
+
+// In fluent-gen.config.js
+module.exports = {
+  plugins: [myDomainPlugin],
+  // Generated builders will use MyDomainContext type
+};
+```
+
+#### Best Practices
+
+1. **Always propagate the generator**: Include `__nestedContextGenerator__` in
+   returned context
+2. **Handle optional index**: Use `...(index !== undefined ? { index } : {})`
+   for type safety
+3. **Document the deferred pattern**: Make it clear when parent vs child
+   augments context
+4. **Pure functions**: Generators should be pure - no side effects
+5. **Type safety**: Define strict context interfaces extending
+   `BaseBuildContext`
+6. **Single responsibility**: Parent handles parent data, child handles child
+   data
+
 ## Performance Optimization
 
 ### Lazy Evaluation

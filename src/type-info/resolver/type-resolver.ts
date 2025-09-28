@@ -5,6 +5,7 @@ import type { TypeInfo } from '../../core/types.js';
 import { TypeKind } from '../../core/types.js';
 import { TypeResolutionCache } from '../../core/cache.js';
 import { PluginManager, HookType } from '../../core/plugin/index.js';
+import type { ResolveContext } from '../../core/plugin/plugin-types.js';
 import { UtilityTypeExpander } from '../utility-type-expander.js';
 import { MappedTypeResolver } from '../mapped-type-resolver.js';
 import { ConditionalTypeResolver } from '../conditional-type-resolver.js';
@@ -102,9 +103,15 @@ export class TypeResolver {
     this.context.markVisited(typeString);
 
     try {
+      const symbol = type.getSymbol();
+      const resolveContext: ResolveContext = { type };
+      if (symbol) {
+        (resolveContext as any).symbol = symbol;
+      }
+
       const hookResult = await this.pluginManager.executeHook({
         hookType: HookType.BeforeResolve,
-        input: { type, symbol: type.getSymbol() },
+        input: resolveContext,
       });
 
       if (!hookResult.ok) {
@@ -266,9 +273,15 @@ export class TypeResolver {
   }): Promise<Result<TypeInfo>> {
     const { typeInfo, type, typeString, cacheKey } = params;
 
+    const symbol = type.getSymbol();
+    const resolveContext: ResolveContext = { type };
+    if (symbol) {
+      (resolveContext as any).symbol = symbol;
+    }
+
     const afterHook = await this.pluginManager.executeHook({
       hookType: HookType.AfterResolve,
-      input: { type, symbol: type.getSymbol() },
+      input: resolveContext,
       additionalArgs: [typeInfo],
     });
 

@@ -268,6 +268,17 @@ class UserBuilder extends FluentBuilderBase<User, CustomBuildContext> {
 }
 ```
 
+#### Nested Context Generation
+
+Context is automatically passed from parent to child builders. You can customize
+this behavior to generate hierarchical IDs, track tenant information, or
+maintain any custom metadata throughout your object tree.
+
+For advanced scenarios like deterministic ID generation based on object
+position, see
+[Custom Nested Context Generation](./advanced-usage.md#custom-nested-context-generation)
+in the Advanced Usage guide.
+
 ## Type Resolution
 
 fluent-gen-ts handles complex TypeScript types:

@@ -13,8 +13,79 @@ import type {
 } from './plugin-types.js';
 
 /**
- * Builder for property method transformations
- * Provides a fluent API for defining how property methods are transformed
+ * Abstract base class for rule-based builders that manage transformation rules.
+ * Provides common functionality for validating rule states and managing rule lifecycle.
+ *
+ * @template TRule - The type of transformation rule this builder manages
+ * @template TContext - The context type passed to transformation predicates and functions
+ * @template TTransform - The type of transformation result returned by the build method
+ */
+abstract class BaseRuleBuilder<TRule, TContext, TTransform> {
+  protected rules: TRule[] = [];
+  protected currentRule: Partial<TRule> | null = null;
+
+  /**
+   * Validates that no rule is currently being built
+   */
+  protected validateNoActiveRule(): void {
+    if (this.currentRule) {
+      throw new Error('Previous transformation rule not completed. Call done() first.');
+    }
+  }
+
+  /**
+   * Validates that a rule is currently being built
+   */
+  protected validateActiveRule(): void {
+    if (!this.currentRule) {
+      throw new Error('No active rule. Call when() first.');
+    }
+  }
+
+  /**
+   * Validates that the current rule is complete before adding to rules
+   */
+  protected validateRuleComplete(): void {
+    if (!this.currentRule) {
+      throw new Error('No active rule to complete.');
+    }
+    if (!this.isRuleComplete(this.currentRule)) {
+      throw new Error('Rule is incomplete.');
+    }
+  }
+
+  /**
+   * Completes the current rule and adds it to the rules array
+   */
+  protected completeCurrentRule(): void {
+    this.validateRuleComplete();
+    this.rules.push(this.currentRule as TRule);
+    this.currentRule = null;
+  }
+
+  /**
+   * Validates that all rules are completed before building
+   */
+  protected validateReadyToBuild(): void {
+    if (this.currentRule) {
+      throw new Error('Unfinished rule. Call done() to complete it.');
+    }
+  }
+
+  /**
+   * Abstract method to check if a rule is complete
+   */
+  protected abstract isRuleComplete(rule: Partial<TRule>): boolean;
+
+  /**
+   * Abstract method to create the transformation function
+   */
+  abstract build(): (context: TContext) => TTransform;
+}
+
+/**
+ * Mutable interface for property method transformation rules.
+ * Used internally during rule construction.
  */
 interface MutablePropertyMethodTransformRule {
   predicate: (context: PropertyMethodContext) => boolean;
@@ -25,17 +96,43 @@ interface MutablePropertyMethodTransformRule {
   };
 }
 
-export class PropertyMethodTransformBuilder {
-  private rules: PropertyMethodTransformRule[] = [];
-  private currentRule: Partial<MutablePropertyMethodTransformRule> | null = null;
-
+/**
+ * Builder for property method transformations.
+ * Provides a fluent API for defining how property methods in generated builders are transformed.
+ *
+ * Property method transformations allow you to modify how setter methods are generated,
+ * including changing parameter types, adding validation, and extracting values.
+ *
+ * @example
+ * ```typescript
+ * const builder = new PropertyMethodTransformBuilder();
+ * const transform = builder
+ *   .when(ctx => ctx.type.isPrimitive('string'))
+ *   .setParameter('string | TaggedValue<string>')
+ *   .setExtractor('String(value)')
+ *   .setValidator('typeof value === "string"')
+ *   .done()
+ *   .build();
+ * ```
+ */
+export class PropertyMethodTransformBuilder extends BaseRuleBuilder<
+  PropertyMethodTransformRule,
+  PropertyMethodContext,
+  PropertyMethodTransform
+> {
   /**
-   * Start a new transformation rule with a condition
+   * Start a new transformation rule with a condition.
+   * The predicate determines when this transformation should apply to a property method.
+   *
+   * @param predicate - Function that receives a PropertyMethodContext and returns true if this transformation should apply
+   * @returns This builder instance for method chaining
+   * @example
+   * ```typescript
+   * builder.when(ctx => ctx.type.isPrimitive('string'))
+   * ```
    */
   when(predicate: (context: PropertyMethodContext) => boolean): this {
-    if (this.currentRule) {
-      throw new Error('Previous transformation rule not completed. Call done() first.');
-    }
+    this.validateNoActiveRule();
 
     this.currentRule = {
       predicate,
@@ -45,23 +142,34 @@ export class PropertyMethodTransformBuilder {
   }
 
   /**
-   * Set the parameter type transformation
+   * Set the parameter type transformation for the property method.
+   * This allows you to change the parameter type of the generated setter method.
+   *
+   * @param type - Either a string representing the new parameter type, or a function that transforms the original type
+   * @returns This builder instance for method chaining
+   * @example
+   * ```typescript
+   * // Static type transformation
+   * builder.setParameter('string | TaggedValue<string>')
+   *
+   * // Dynamic type transformation
+   * builder.setParameter(original => `${original} | null`)
+   * ```
    */
   setParameter(type: string | ((original: string) => string)): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
+    const rule = this.currentRule as MutablePropertyMethodTransformRule;
     if (typeof type === 'function') {
       // Will be applied to the original type string
-      this.currentRule.transform = {
-        ...this.currentRule.transform,
+      rule.transform = {
+        ...rule.transform,
         parameterType: '__FUNCTION__', // Placeholder, will be handled in build
       };
       // Store the function separately (would need to enhance the type)
     } else {
-      this.currentRule.transform = {
-        ...this.currentRule.transform,
+      rule.transform = {
+        ...rule.transform,
         parameterType: type,
       };
     }
@@ -72,12 +180,11 @@ export class PropertyMethodTransformBuilder {
    * Set the value extraction code
    */
   setExtractor(code: string): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
-    this.currentRule.transform = {
-      ...this.currentRule.transform,
+    const rule = this.currentRule as MutablePropertyMethodTransformRule;
+    rule.transform = {
+      ...rule.transform,
       extractValue: code,
     };
     return this;
@@ -87,12 +194,11 @@ export class PropertyMethodTransformBuilder {
    * Set the validation code
    */
   setValidator(code: string): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
-    this.currentRule.transform = {
-      ...this.currentRule.transform,
+    const rule = this.currentRule as MutablePropertyMethodTransformRule;
+    rule.transform = {
+      ...rule.transform,
       validate: code,
     };
     return this;
@@ -102,26 +208,24 @@ export class PropertyMethodTransformBuilder {
    * Complete the current rule and prepare for the next one
    */
   done(): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule to complete.');
-    }
-
-    if (!this.currentRule.predicate || !this.currentRule.transform) {
-      throw new Error('Rule is incomplete.');
-    }
-
-    this.rules.push(this.currentRule as PropertyMethodTransformRule);
-    this.currentRule = null;
+    this.completeCurrentRule();
     return this;
   }
 
   /**
-   * Build and return the transformation function
+   * Build and return the transformation function.
+   * The returned function can be used to transform property method contexts.
+   *
+   * @returns A function that takes a PropertyMethodContext and returns a PropertyMethodTransform or empty object
+   * @throws Error if there are unfinished rules (call done() to complete them)
+   * @example
+   * ```typescript
+   * const transform = builder.build();
+   * const result = transform(propertyMethodContext);
+   * ```
    */
   build(): (context: PropertyMethodContext) => PropertyMethodTransform {
-    if (this.currentRule) {
-      throw new Error('Unfinished rule. Call done() to complete it.');
-    }
+    this.validateReadyToBuild();
 
     return (context: PropertyMethodContext) => {
       for (const rule of this.rules) {
@@ -131,6 +235,13 @@ export class PropertyMethodTransformBuilder {
       }
       return {};
     };
+  }
+
+  /**
+   * Check if a rule is complete - required by base class
+   */
+  protected isRuleComplete(rule: Partial<MutablePropertyMethodTransformRule>): boolean {
+    return !!(rule.predicate && rule.transform);
   }
 
   /**
@@ -153,17 +264,16 @@ interface MutableValueTransformRule {
   };
 }
 
-export class ValueTransformBuilder {
-  private rules: ValueTransformRule[] = [];
-  private currentRule: Partial<MutableValueTransformRule> | null = null;
-
+export class ValueTransformBuilder extends BaseRuleBuilder<
+  ValueTransformRule,
+  ValueContext,
+  ValueTransform | null
+> {
   /**
    * Start a new transformation rule with a condition
    */
   when(predicate: (context: ValueContext) => boolean): this {
-    if (this.currentRule) {
-      throw new Error('Previous transformation rule not completed. Call done() first.');
-    }
+    this.validateNoActiveRule();
 
     this.currentRule = {
       predicate,
@@ -176,14 +286,13 @@ export class ValueTransformBuilder {
    * Set a condition for when the transformation should apply
    */
   condition(code: string): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
-    this.currentRule.transform = {
-      transform: this.currentRule.transform?.transform || '',
-      ...this.currentRule.transform,
+    const rule = this.currentRule as MutableValueTransformRule;
+    rule.transform = {
+      ...rule.transform,
       condition: code,
+      transform: rule.transform?.transform || '',
     };
     return this;
   }
@@ -192,12 +301,11 @@ export class ValueTransformBuilder {
    * Set the transformation code
    */
   transform(code: string): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
-    this.currentRule.transform = {
-      ...this.currentRule.transform,
+    const rule = this.currentRule as MutableValueTransformRule;
+    rule.transform = {
+      ...rule.transform,
       transform: code,
     };
     return this;
@@ -207,17 +315,16 @@ export class ValueTransformBuilder {
    * Wrap the value with a function call
    */
   wrap(wrapper: string): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule. Call when() first.');
-    }
+    this.validateActiveRule();
 
     // If wrapper contains VALUE, replace it. Otherwise wrap the value
     const transformCode = wrapper.includes('VALUE')
       ? wrapper.replace(/VALUE/g, 'value')
       : `${wrapper}(value)`;
 
-    this.currentRule.transform = {
-      ...this.currentRule.transform,
+    const rule = this.currentRule as MutableValueTransformRule;
+    rule.transform = {
+      ...rule.transform,
       transform: transformCode,
     };
     return this;
@@ -227,16 +334,7 @@ export class ValueTransformBuilder {
    * Complete the current rule
    */
   done(): this {
-    if (!this.currentRule) {
-      throw new Error('No active rule to complete.');
-    }
-
-    if (!this.currentRule.predicate || !this.currentRule.transform) {
-      throw new Error('Rule is incomplete.');
-    }
-
-    this.rules.push(this.currentRule as ValueTransformRule);
-    this.currentRule = null;
+    this.completeCurrentRule();
     return this;
   }
 
@@ -244,9 +342,7 @@ export class ValueTransformBuilder {
    * Build and return the transformation function
    */
   build(): (context: ValueContext) => ValueTransform | null {
-    if (this.currentRule) {
-      throw new Error('Unfinished rule. Call done() to complete it.');
-    }
+    this.validateReadyToBuild();
 
     return (context: ValueContext) => {
       for (const rule of this.rules) {
@@ -256,6 +352,13 @@ export class ValueTransformBuilder {
       }
       return null;
     };
+  }
+
+  /**
+   * Check if a rule is complete - required by base class
+   */
+  protected isRuleComplete(rule: Partial<MutableValueTransformRule>): boolean {
+    return !!(rule.predicate && rule.transform && rule.transform.transform);
   }
 }
 
@@ -370,15 +473,25 @@ export class BuildMethodTransformBuilder {
 
           case 'replace':
             if (transformation.marker && transformation.replacement) {
-              const replacementCode =
-                typeof transformation.replacement === 'function'
-                  ? (match: string) => (transformation.replacement as Function)(match, context)
-                  : transformation.replacement;
-
               if (typeof transformation.marker === 'string') {
-                code = code.replace(transformation.marker, replacementCode as string);
+                if (typeof transformation.replacement === 'function') {
+                  code = code.replace(
+                    transformation.marker,
+                    transformation.replacement('', context),
+                  );
+                } else {
+                  code = code.replace(transformation.marker, transformation.replacement);
+                }
               } else {
-                code = code.replace(transformation.marker, replacementCode as any);
+                // transformation.marker is RegExp
+                const replacementFn = transformation.replacement;
+                if (typeof replacementFn === 'function') {
+                  code = code.replace(transformation.marker, (match: string) =>
+                    replacementFn(match, context),
+                  );
+                } else if (replacementFn) {
+                  code = code.replace(transformation.marker, replacementFn);
+                }
               }
             }
             break;
@@ -502,7 +615,8 @@ export class CustomMethodBuilder {
 }
 
 /**
- * Helper functions to create builders
+ * Creates a new PropertyMethodTransformBuilder instance.
+ * @returns A new PropertyMethodTransformBuilder for configuring property method transformations
  */
 export function createPropertyMethodTransformBuilder(): PropertyMethodTransformBuilder {
   return new PropertyMethodTransformBuilder();

@@ -490,6 +490,53 @@ describe('PackageResolver', () => {
       });
     });
 
+    describe('bug regression tests', () => {
+      test('custom path with proper path separators', async () => {
+        const packageName = 'react';
+        const startPath = '/workspace/project';
+        const customPath = '/custom/location/node_modules';
+        const expectedPath = '/custom/location/node_modules/react';
+        const packageJsonPath = `${expectedPath}/package.json`;
+
+        const monorepoConfig = {
+          enabled: true,
+          customPaths: [customPath],
+        };
+
+        mockFs.existsSync.mockImplementation((filePath: fs.PathLike) => {
+          if (filePath === expectedPath) return true;
+          if (filePath === packageJsonPath) return true;
+          return false;
+        });
+
+        mockFs.readFileSync.mockReturnValue(
+          JSON.stringify({
+            name: 'react',
+            version: '18.0.0',
+          }),
+        );
+
+        const mockLstat: fs.Stats = {
+          isSymbolicLink: () => false,
+        } as fs.Stats;
+        mockFs.lstatSync.mockReturnValue(mockLstat);
+
+        const { glob } = await import('glob');
+        vi.mocked(glob).mockResolvedValue([]);
+
+        const result = await resolver.resolvePackage({
+          packageName,
+          startPath,
+          monorepoConfig,
+        });
+
+        expect(isOk(result)).toBe(true);
+        if (isOk(result)) {
+          expect(result.value.path).toBe(expectedPath);
+        }
+      });
+    });
+
     describe('types resolution', () => {
       test('finds types entry from package.json', async () => {
         const packageName = 'lodash';

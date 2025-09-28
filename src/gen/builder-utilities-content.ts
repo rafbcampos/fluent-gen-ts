@@ -15,6 +15,43 @@ export const BUILDER_UTILITIES_CONTENT = `/**
 export const FLUENT_BUILDER_SYMBOL = Symbol.for('fluent-builder');
 
 /**
+ * Parameters for nested context generation
+ * Used by parent builder to create context for child builders
+ *
+ * IMPORTANT: Due to the deferred pattern, child builders are NOT executed when context is created.
+ * The parent can only use information from its own state and parent context.
+ * Children should augment context in their own build() method before passing to grandchildren.
+ */
+export interface NestedContextParams<C extends BaseBuildContext> {
+  /** Context from parent builder */
+  readonly parentContext: C;
+  /** Name of the parameter being built */
+  readonly parameterName: string;
+  /** Index in array if building array elements */
+  readonly index?: number;
+}
+
+/**
+ * Function type for generating nested context
+ * Allows users to customize how context is passed from parent to child builders
+ *
+ * IMPORTANT: This function is called by the PARENT before the child builder executes.
+ * You can only access parent context and parameter metadata, NOT child builder state.
+ * If you need child-specific data in context, the child must augment context in its build() method.
+ *
+ * @example
+ * const generator: NestedContextGenerator<MyContext> = ({ parentContext, parameterName, index }) => {
+ *   let nodeId = parentContext.nodeId || 'root';
+ *   nodeId += \`-\${parameterName}\`;
+ *   if (index !== undefined) nodeId += \`-\${index}\`;
+ *   return { ...parentContext, parameterName, index, nodeId, __nestedContextGenerator__: generator };
+ * };
+ */
+export type NestedContextGenerator<C extends BaseBuildContext> = (
+  params: NestedContextParams<C>,
+) => C;
+
+/**
  * Base context interface for builder operations
  * Provides information about the builder's position in the object hierarchy
  */
@@ -25,6 +62,8 @@ export interface BaseBuildContext {
   readonly parameterName?: string;
   /** Index in array if building array elements */
   readonly index?: number;
+  /** Optional custom context generator for nested builders */
+  readonly __nestedContextGenerator__?: NestedContextGenerator<BaseBuildContext>;
   /** Additional context properties */
   readonly [key: string]: unknown;
 }
@@ -41,6 +80,17 @@ export interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext>
    * @param context - Optional build context
    */
   build(context?: C): T;
+  /**
+   * Get current value without building (useful for conditional logic and context generation)
+   * @param key - The property key
+   * @returns The current value or undefined
+   */
+  peek<K extends keyof T>(key: K): T[K] | undefined;
+  /**
+   * Checks if a property has been set
+   * @param key - The property key to check
+   */
+  has<K extends keyof T>(key: K): boolean;
 }
 
 /**
@@ -81,20 +131,37 @@ export function isBuilderArray<T = unknown, C extends BaseBuildContext = BaseBui
 
 /**
  * Creates a new context for nested builders with proper inheritance
- * @param parentContext - Context from parent builder
- * @param parameterName - Name of the parameter being built
- * @param index - Optional array index
+ * Supports custom context generation via __nestedContextGenerator__
+ *
+ * IMPORTANT: Due to the deferred pattern, this is called by the parent BEFORE the child executes.
+ * The parent can only pass information from its own context and parameter metadata.
+ * Children should augment the context in their build() method if they need to add child-specific data.
+ *
+ * @param params - Named parameters for context creation
+ * @param params.parentContext - Context from parent builder
+ * @param params.parameterName - Name of the parameter being built
+ * @param params.index - Optional array index
  * @returns New context with inherited properties
  */
-export function createNestedContext<C extends BaseBuildContext>(
-  parentContext: C,
-  parameterName: string,
-  index?: number,
-): C {
+export function createNestedContext<C extends BaseBuildContext>(params: {
+  readonly parentContext: C;
+  readonly parameterName: string;
+  readonly index?: number;
+}): C {
+  const { parentContext, parameterName, index } = params;
+
+  if (parentContext.__nestedContextGenerator__) {
+    return parentContext.__nestedContextGenerator__({
+      parentContext,
+      parameterName,
+      ...(index !== undefined ? { index } : {}),
+    }) as C;
+  }
+
   return {
     ...parentContext,
     parameterName,
-    index,
+    ...(index !== undefined ? { index } : {}),
   } as C;
 }
 
@@ -111,7 +178,9 @@ export function resolveValue<T, C extends BaseBuildContext>(value: unknown, cont
 
   if (Array.isArray(value)) {
     return value.map((item, index) => {
-      const arrayContext = context ? createNestedContext(context, 'array', index) : undefined;
+      const arrayContext = context
+        ? createNestedContext({ parentContext: context, parameterName: 'array', index })
+        : undefined;
       return resolveValue(item, arrayContext);
     });
   }
@@ -119,7 +188,9 @@ export function resolveValue<T, C extends BaseBuildContext>(value: unknown, cont
   if (value && typeof value === 'object' && value.constructor === Object) {
     const resolved: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
-      const nestedContext = context ? createNestedContext(context, key) : undefined;
+      const nestedContext = context
+        ? createNestedContext({ parentContext: context, parameterName: key })
+        : undefined;
       resolved[key] = resolveValue(val, nestedContext);
     }
     return resolved;
@@ -247,11 +318,13 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
       const resolvedArray: unknown[] = [];
       array.forEach((item, index) => {
         const indexedKey = \`\${key}[\${index}]\`;
-        const nestedContext = context ? createNestedContext(context, key, index) : undefined;
 
         // Check if this index has a builder stored
         if (this.builders.has(indexedKey)) {
           const builderOrObj = this.builders.get(indexedKey);
+          const nestedContext = context
+            ? createNestedContext({ parentContext: context, parameterName: key, index })
+            : undefined;
           resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
         } else {
           // Static value
@@ -268,7 +341,9 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
       // Skip keys that are in mixed arrays
       if (this.mixedArrays.has(key)) return;
 
-      const nestedContext = context ? createNestedContext(context, key) : undefined;
+      const nestedContext = context
+        ? createNestedContext({ parentContext: context, parameterName: key })
+        : undefined;
       result[key] = resolveValue(value, nestedContext);
     });
 

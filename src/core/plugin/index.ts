@@ -34,9 +34,8 @@
 // Core Types
 // ============================================================================
 
-// Import types for use in utility functions
 import type { Plugin } from './plugin-types.js';
-import { PluginManager as PM } from './plugin-manager.js';
+import { PluginManager } from './plugin-manager.js';
 
 export type {
   // Plugin Definition Types
@@ -144,7 +143,32 @@ export { TypeKind } from '../types.js';
 export type { Type, Symbol } from 'ts-morph';
 
 /**
- * Check if a plugin is valid
+ * Type guard to check if an object is a valid Plugin
+ *
+ * Validates that the object has the minimum required properties:
+ * - `name`: non-empty string
+ * - `version`: non-empty string
+ *
+ * Additional optional properties are allowed and not validated by this function.
+ * For comprehensive plugin validation including hook methods and imports structure,
+ * use `PluginManager.register()` which performs deeper validation.
+ *
+ * @param obj - The object to validate
+ * @returns `true` if the object is a valid Plugin, `false` otherwise
+ *
+ * @example
+ * ```typescript
+ * const plugin = { name: 'my-plugin', version: '1.0.0' };
+ * if (isValidPlugin(plugin)) {
+ *   console.log('Valid plugin:', plugin.name);
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * const invalid = { name: '', version: '1.0.0' };
+ * isValidPlugin(invalid); // false - empty name
+ * ```
  */
 export function isValidPlugin(obj: unknown): obj is Plugin {
   if (typeof obj !== 'object' || obj === null) {
@@ -162,8 +186,27 @@ export function isValidPlugin(obj: unknown): obj is Plugin {
 }
 
 /**
- * Create a plugin manager instance
+ * Factory function to create a new PluginManager instance
+ *
+ * The PluginManager handles plugin registration, validation, and hook execution.
+ * Each call creates a new, independent instance with its own plugin registry.
+ *
+ * @returns A new PluginManager instance
+ *
+ * @example
+ * ```typescript
+ * const manager = createPluginManager();
+ * const plugin = createPlugin('my-plugin', '1.0.0').build();
+ * manager.register(plugin);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Create separate managers for different contexts
+ * const devManager = createPluginManager();
+ * const prodManager = createPluginManager();
+ * ```
  */
-export function createPluginManager(): PM {
-  return new PM();
+export function createPluginManager(): PluginManager {
+  return new PluginManager();
 }

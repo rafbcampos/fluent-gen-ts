@@ -36,4 +36,9 @@ export {
   createNestedContext,
   resolveValue,
 } from './gen/builder-utilities.js';
-export type { FluentBuilder, BaseBuildContext } from './gen/builder-utilities.js';
+export type {
+  FluentBuilder,
+  BaseBuildContext,
+  NestedContextGenerator,
+  NestedContextParams,
+} from './gen/builder-utilities.js';
