@@ -106,7 +106,13 @@ export class ConfigLoader {
         return ok({});
       }
 
-      return this.validate(result.config);
+      // Extract default export if present (ES modules)
+      const config =
+        result.config && typeof result.config === 'object' && 'default' in result.config
+          ? result.config.default
+          : result.config;
+
+      return this.validate(config);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return err(new Error(`Failed to load configuration: ${message}`));

@@ -95,6 +95,63 @@ describe('ConfigLoader', () => {
         expect(result.value.generator).toEqual(validConfig);
       }
     });
+
+    test('extracts default export from ES module config', () => {
+      const validConfig = {
+        generator: {
+          naming: {
+            transform: '(typeName) => typeName.toLowerCase()',
+          },
+        },
+        targets: [{ file: 'test.ts' }],
+      };
+      // Simulate what cosmiconfig returns for ES module exports
+      const mockExplorer = {
+        search: vi.fn().mockReturnValue({
+          config: {
+            __esModule: true,
+            default: validConfig,
+          },
+        }),
+        load: vi.fn(),
+      };
+      (loader as any).explorer = mockExplorer;
+
+      const result = loader.load();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(validConfig);
+        expect(result.value.generator?.naming?.transform).toBe(
+          '(typeName) => typeName.toLowerCase()',
+        );
+      }
+    });
+
+    test('handles config without default export', () => {
+      const validConfig = {
+        generator: {
+          naming: {
+            convention: 'kebab-case',
+          },
+        },
+        targets: [{ file: 'test.ts' }],
+      };
+      const mockExplorer = {
+        search: vi.fn().mockReturnValue({
+          config: validConfig,
+        }),
+        load: vi.fn(),
+      };
+      (loader as any).explorer = mockExplorer;
+
+      const result = loader.load();
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toEqual(validConfig);
+      }
+    });
   });
 
   describe('validate', () => {
@@ -131,6 +188,47 @@ describe('ConfigLoader', () => {
 
       expect(result1.ok).toBe(false);
       expect(result2.ok).toBe(false);
+    });
+
+    test('validates config with naming.transform string expression', () => {
+      const validConfig = {
+        generator: {
+          naming: {
+            transform:
+              "(typeName) => typeName.charAt(0).toLowerCase() + typeName.replace(/Asset$/, '').slice(1)",
+          },
+        },
+        targets: [{ file: 'test.ts' }],
+      };
+
+      const result = loader.validate(validConfig);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.generator?.naming?.transform).toBe(
+          validConfig.generator.naming.transform,
+        );
+      }
+    });
+
+    test('validates config with all naming options', () => {
+      const validConfig = {
+        generator: {
+          naming: {
+            convention: 'camelCase' as const,
+            suffix: '.builder',
+            transform: '(typeName) => typeName.toLowerCase()',
+          },
+        },
+        targets: [{ file: 'test.ts' }],
+      };
+
+      const result = loader.validate(validConfig);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.generator?.naming).toEqual(validConfig.generator.naming);
+      }
     });
   });
 });
