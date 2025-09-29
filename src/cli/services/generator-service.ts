@@ -69,6 +69,9 @@ export class GeneratorService {
     if (options.contextType !== undefined) {
       result.contextType = options.contextType;
     }
+    if (options.importPath !== undefined) {
+      result.importPath = options.importPath;
+    }
 
     return result;
   }

@@ -103,6 +103,7 @@ function extractGeneratorConfig(options: FluentGenOptions): GeneratorConfig {
     'outputDir',
     'useDefaults',
     'contextType',
+    'importPath',
     'addComments',
     'tsConfigPath',
   ]);

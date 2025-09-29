@@ -214,7 +214,7 @@ export class BuilderGenerator {
       config: {
         isGeneratingMultiple: this.isGeneratingMultiple,
         hasExistingCommon: hasCommon,
-        commonImportPath: './common.js',
+        commonImportPath: this.config.importPath ?? './common.js',
         pluginManager: this.pluginManager,
         outputDir: checkDir,
       },
