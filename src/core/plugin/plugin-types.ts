@@ -2,10 +2,6 @@ import type { Result } from '../result.js';
 import type { TypeInfo, PropertyInfo, ResolvedType, GeneratorOptions } from '../types.js';
 import type { Type, Symbol } from 'ts-morph';
 
-// ============================================================================
-// UTILITY TYPES
-// ============================================================================
-
 /**
  * Generic type for values that can be static or dynamically generated from context
  *
@@ -20,10 +16,6 @@ import type { Type, Symbol } from 'ts-morph';
  * ```
  */
 export type StaticOrDynamic<TValue, TContext> = TValue | ((context: TContext) => TValue);
-
-// ============================================================================
-// IMPORT TYPES
-// ============================================================================
 
 /**
  * Base import properties shared by all import types
@@ -63,10 +55,6 @@ export type Import = InternalImport | ExternalImport;
 export interface PluginImports {
   readonly imports: readonly Import[];
 }
-
-// ============================================================================
-// CONTEXT TYPES
-// ============================================================================
 
 /**
  * Base context with common properties
@@ -126,10 +114,6 @@ export interface BuildMethodContext extends BuilderContextInfo, GenericsContextI
   readonly options: GeneratorOptions;
   readonly resolvedType: ResolvedType;
 }
-
-// ============================================================================
-// TYPE MATCHER INTERFACES
-// ============================================================================
 
 /**
  * Type matcher for fluent type checking and analysis
@@ -244,10 +228,6 @@ export interface ValueTransform {
   readonly transform: string;
 }
 
-// ============================================================================
-// STRUCTURED IMPORT TYPES
-// ============================================================================
-
 /**
  * Represents a structured import statement with parsed components
  */
@@ -356,10 +336,6 @@ export interface RelativeToMonorepoMapping {
   /** Base directory for resolving relative paths */
   readonly baseDir?: string;
 }
-
-// ============================================================================
-// PLUGIN CONFIGURATION
-// ============================================================================
 
 export const HookType = {
   BeforeParse: 'beforeParse',
@@ -524,10 +500,6 @@ export interface Plugin {
   transformValue?: PluginHookMap['transformValue'];
   transformImports?: PluginHookMap['transformImports'];
 }
-
-// ============================================================================
-// TRANSFORMATION TYPES
-// ============================================================================
 
 /**
  * Property method transform rule

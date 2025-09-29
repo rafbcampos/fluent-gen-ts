@@ -1,17 +1,25 @@
 import { Type, ts } from 'ts-morph';
-import type { Result } from '../core/result.js';
-import { ok, err } from '../core/result.js';
-import type { TypeInfo } from '../core/types.js';
-import { TypeKind } from '../core/types.js';
+import { ok, err, type Result } from '../core/result.js';
+import { TypeKind, type TypeInfo } from '../core/types.js';
 import type { GenericContext } from './generic-context.js';
 
+/**
+ * Configuration options for the ConditionalTypeResolver.
+ */
 export interface ConditionalTypeResolverOptions {
+  /** Maximum recursion depth to prevent infinite loops (default: 10) */
   readonly maxDepth?: number;
+  /** Generic context for tracking generic parameters */
   readonly genericContext?: GenericContext;
 }
 
+/**
+ * Parameters for resolving conditional types.
+ */
 export interface ResolveConditionalTypeParams {
+  /** The TypeScript type to analyze for conditional resolution */
   readonly type: Type;
+  /** Current recursion depth (used internally for depth limiting) */
   readonly depth?: number;
 }
 
@@ -27,67 +35,92 @@ export class ConditionalTypeResolver {
   private readonly maxDepth: number;
   private readonly genericContext: GenericContext | undefined;
 
+  /** Pre-compiled regex for extracting generic parameter names from conditional types */
+  private static readonly GENERIC_PARAM_PATTERN =
+    /^([A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*)\s+extends/;
+
+  /**
+   * Creates a new ConditionalTypeResolver instance.
+   *
+   * @param options - Configuration options for the resolver
+   */
   constructor(options: ConditionalTypeResolverOptions = {}) {
     this.maxDepth = options.maxDepth ?? 10;
     this.genericContext = options.genericContext;
   }
 
+  /**
+   * Resolves conditional types that haven't been resolved by TypeScript.
+   *
+   * Most conditional types are already resolved by TypeScript at compile time.
+   * This method handles edge cases where conditionals depend on unresolved
+   * generic parameters and returns them as Generic types for builder generation.
+   *
+   * @param params - The parameters for resolution including type and depth
+   * @returns Promise resolving to Result containing TypeInfo for unresolved conditionals, null for resolved ones, or error
+   *
+   * @example
+   * ```typescript
+   * // For unresolved: T extends string ? number : boolean
+   * const result = await resolver.resolveConditionalType({ type });
+   * // Returns: { kind: TypeKind.Generic, name: "T extends string ? number : boolean" }
+   *
+   * // For resolved: "hello" extends string ? number : boolean (becomes number)
+   * const result = await resolver.resolveConditionalType({ type });
+   * // Returns: null (already resolved by TypeScript)
+   * ```
+   */
   async resolveConditionalType(
     params: ResolveConditionalTypeParams,
   ): Promise<Result<TypeInfo | null>> {
     const { type, depth = 0 } = params;
 
+    if (!type) {
+      return err(new Error('Type parameter is required'));
+    }
+
     if (depth > this.maxDepth) {
       return err(new Error(`Max conditional type resolution depth exceeded`));
     }
 
-    // Most conditional types are already resolved by TypeScript.
-    // We only need to handle unresolved cases (e.g., dependent on generic parameters).
     if (!this.isUnresolvedConditionalType(type)) {
       return ok(null);
     }
 
-    // For unresolved conditionals, return as generic for builder generation
     return this.handleUnresolvedConditional(type);
   }
 
   private isUnresolvedConditionalType(type: Type): boolean {
-    // Check using TypeScript's Conditional flag
-    const tsType = type.compilerType as ts.Type;
+    const tsType = type.compilerType;
+    if (!tsType || typeof tsType.flags !== 'number') {
+      return false;
+    }
     return !!(tsType.flags & ts.TypeFlags.Conditional);
   }
 
   private handleUnresolvedConditional(type: Type): Result<TypeInfo | null> {
-    // For unresolved conditional types that depend on generic parameters,
-    // we preserve them as generics that will be resolved at instantiation time.
-    // This allows the builder to be generic: Builder<T> where T is the unresolved conditional.
+    let typeText: string;
+    try {
+      typeText = type.getText();
+    } catch (error) {
+      return err(
+        new Error(
+          `Failed to get type text: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        ),
+      );
+    }
 
-    const typeText = type.getText();
-
-    // Extract generic parameters from the conditional type if possible
-    // The type text might be something like "T extends string ? number : boolean"
-    // We want to identify T as a generic parameter
-
-    // Since this conditional depends on unresolved generics, we return it as a Generic type
-    // that preserves the conditional nature in its metadata
     const typeInfo: TypeInfo = {
       kind: TypeKind.Generic,
       name: typeText,
-      // Mark this as a conditional type for downstream processing
-      // The builder generator can use this to create appropriate generic constraints
     };
 
-    // If we have a generic context, register this as an unresolved generic
     if (this.genericContext) {
-      // Extract the generic parameter name from the conditional
-      // For simple cases like "T extends ...", the check type is T
-      const genericParamMatch = typeText.match(/^(\w+)\s+extends/);
+      const genericParamMatch = typeText.match(ConditionalTypeResolver.GENERIC_PARAM_PATTERN);
       if (genericParamMatch && genericParamMatch[1]) {
         const paramName = genericParamMatch[1];
 
-        // Check if this is already a known generic parameter
         if (this.genericContext.isGenericParam(paramName)) {
-          // It's already tracked, just return the generic reference
           return ok({
             kind: TypeKind.Generic,
             name: paramName,

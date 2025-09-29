@@ -355,6 +355,55 @@ describe('TemplateLiteralResolver', () => {
       }
     });
 
+    test('respects max combinations limit', async () => {
+      const resolverWithLowLimit = new TemplateLiteralResolver({
+        maxCombinations: 3,
+      });
+      const sourceFile = project.createSourceFile(
+        'test.ts',
+        `
+          type MultiPlaceholder<T, U> = \`\${T}_\${U}\`;
+        `,
+      );
+
+      const templateType = sourceFile.getTypeAliasOrThrow('MultiPlaceholder').getType();
+
+      let callCount = 0;
+      const mockResolveWithLargeUnion = async (): Promise<{
+        ok: true;
+        value: TypeInfo;
+      }> => {
+        callCount++;
+        return {
+          ok: true,
+          value: {
+            kind: TypeKind.Union,
+            unionTypes:
+              callCount === 1
+                ? [
+                    { kind: TypeKind.Literal, literal: 'a' },
+                    { kind: TypeKind.Literal, literal: 'b' },
+                  ]
+                : [
+                    { kind: TypeKind.Literal, literal: '1' },
+                    { kind: TypeKind.Literal, literal: '2' },
+                  ],
+          },
+        };
+      };
+
+      const result = await resolverWithLowLimit.resolveTemplateLiteral({
+        type: templateType,
+        resolveType: mockResolveWithLargeUnion as any,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('combinations');
+        expect(result.error.message).toContain('exceeding max');
+      }
+    });
+
     test('handles template literals without placeholders', async () => {
       const sourceFile = project.createSourceFile(
         'test.ts',

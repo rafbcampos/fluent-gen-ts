@@ -10,6 +10,9 @@ import { GenericResolver } from './generic-resolver.js';
 import { isTypeAlias, extractTypeName } from '../utils/type-helpers.js';
 import type { PluginManager } from '../../../core/plugin/index.js';
 
+/**
+ * Resolves object types and type aliases to their TypeInfo representation.
+ */
 export class ObjectResolver {
   private readonly propertyResolver: PropertyResolver;
   private readonly genericResolver: GenericResolver;
@@ -22,6 +25,11 @@ export class ObjectResolver {
     this.genericResolver = new GenericResolver(resolveType);
   }
 
+  /**
+   * Resolves an object type to its TypeInfo representation.
+   * @param params - The type resolution parameters
+   * @returns Result containing the resolved object TypeInfo
+   */
   async resolveObject(params: {
     type: Type;
     depth: number;
@@ -74,6 +82,11 @@ export class ObjectResolver {
     });
   }
 
+  /**
+   * Determines if a type alias should be resolved to its underlying type.
+   * @param params - The original and aliased types
+   * @returns True if the alias should be resolved
+   */
   private shouldResolveAlias(params: { type: Type; aliasedType: Type }): boolean {
     const { type, aliasedType } = params;
     const hasProperties = type.getProperties().length > 0;
@@ -82,6 +95,11 @@ export class ObjectResolver {
     return !(hasProperties && aliasedHasProperties);
   }
 
+  /**
+   * Gets the underlying type of a type alias.
+   * @param type - The type to get the aliased type from
+   * @returns The aliased type or null if not a type alias
+   */
   private getAliasedType(type: Type): Type | null {
     const symbol = type.getSymbol();
     if (!symbol) return null;
@@ -100,6 +118,11 @@ export class ObjectResolver {
     return null;
   }
 
+  /**
+   * Resolves type arguments of a generic type.
+   * @param params - The type resolution parameters
+   * @returns Array of resolved TypeInfo or undefined if resolution failed
+   */
   private async resolveTypeArguments(params: {
     type: Type;
     depth: number;
@@ -115,16 +138,11 @@ export class ObjectResolver {
     const resolvePromises = typeArgs.map(arg => this.resolveType(arg, depth + 1, context));
     const resolvedArgs = await Promise.all(resolvePromises);
 
-    const allOk = resolvedArgs.every(result => result.ok);
-    if (!allOk) {
+    const successfulArgs = resolvedArgs.filter(result => result.ok);
+    if (successfulArgs.length !== resolvedArgs.length) {
       return undefined;
     }
 
-    return resolvedArgs.map(result => {
-      if (result.ok) {
-        return result.value;
-      }
-      throw new Error('Unexpected error in type argument resolution');
-    });
+    return successfulArgs.map(result => (result.ok ? result.value : ({} as TypeInfo)));
   }
 }

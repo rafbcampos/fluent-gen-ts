@@ -1,4 +1,5 @@
 import { Project, SourceFile, Type, ts } from 'ts-morph';
+import type { ProjectOptions } from 'ts-morph';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import { TypeResolutionCache } from '../core/cache.js';
@@ -40,10 +41,10 @@ export class TypeScriptParser {
   private readonly cache: TypeResolutionCache;
   private readonly pluginManager: PluginManager;
   private readonly packageResolver: PackageResolver;
-  private readonly monorepoConfig?: MonorepoConfig;
+  private readonly monorepoConfig: MonorepoConfig | undefined;
 
   constructor(options: ParserOptions = {}) {
-    const projectOptions: any = {
+    const projectOptions: ProjectOptions = {
       ...(options.tsConfigPath && { tsConfigFilePath: options.tsConfigPath }),
       skipAddingFilesFromTsConfig: !options.tsConfigPath,
       compilerOptions: {
@@ -70,10 +71,7 @@ export class TypeScriptParser {
     this.cache = options.cache ?? new TypeResolutionCache();
     this.pluginManager = options.pluginManager ?? new PluginManager();
     this.packageResolver = new PackageResolver();
-    if (options.monorepoConfig !== undefined) {
-      (this as unknown as { monorepoConfig?: MonorepoConfig }).monorepoConfig =
-        options.monorepoConfig;
-    }
+    this.monorepoConfig = options.monorepoConfig;
   }
 
   /**
@@ -155,6 +153,19 @@ export class TypeScriptParser {
     }
   }
 
+  /**
+   * Parse a TypeScript file and return the SourceFile object
+   *
+   * @param filePath Absolute or relative path to the TypeScript file
+   * @returns Result containing the parsed SourceFile or an error
+   * @example
+   * ```typescript
+   * const result = await parser.parseFile('./src/types.ts');
+   * if (result.ok) {
+   *   console.log(`Parsed ${result.value.getFilePath()}`);
+   * }
+   * ```
+   */
   async parseFile(filePath: string): Promise<Result<SourceFile>> {
     try {
       const absolutePath = path.resolve(filePath);
@@ -173,6 +184,25 @@ export class TypeScriptParser {
     }
   }
 
+  /**
+   * Find a specific type declaration within a source file
+   *
+   * Searches for interfaces, type aliases, enums, and classes in the source file
+   * and its modules. Uses caching for performance and executes plugin hooks.
+   *
+   * @param params Object containing sourceFile and typeName
+   * @param params.sourceFile The SourceFile to search in
+   * @param params.typeName The name of the type to find
+   * @returns Result containing the found Type or an error
+   * @example
+   * ```typescript
+   * const result = await parser.findType({ sourceFile, typeName: 'UserInterface' });
+   * if (result.ok) {
+   *   const type = result.value;
+   *   console.log(`Found type: ${type.getSymbol()?.getName()}`);
+   * }
+   * ```
+   */
   async findType({ sourceFile, typeName }: FindTypeParams): Promise<Result<Type>> {
     const cacheKey = this.cache.getCacheKey({
       file: sourceFile.getFilePath(),
@@ -204,6 +234,21 @@ export class TypeScriptParser {
     return err(new Error(`Type '${typeName}' not found in ${sourceFile.getFilePath()}`));
   }
 
+  /**
+   * Resolve all import declarations in a source file to their corresponding SourceFile objects
+   *
+   * @param sourceFile The SourceFile to resolve imports for
+   * @returns Result containing a Map of module specifier to resolved SourceFile, or an error
+   * @example
+   * ```typescript
+   * const result = await parser.resolveImports(sourceFile);
+   * if (result.ok) {
+   *   for (const [specifier, resolvedFile] of result.value) {
+   *     console.log(`${specifier} -> ${resolvedFile.getFilePath()}`);
+   *   }
+   * }
+   * ```
+   */
   async resolveImports(sourceFile: SourceFile): Promise<Result<Map<string, SourceFile>>> {
     const imports = new Map<string, SourceFile>();
 
@@ -223,10 +268,32 @@ export class TypeScriptParser {
     }
   }
 
+  /**
+   * Get the underlying ts-morph Project instance
+   *
+   * @returns The ts-morph Project instance used by this parser
+   * @example
+   * ```typescript
+   * const project = parser.getProject();
+   * const sourceFiles = project.getSourceFiles();
+   * ```
+   */
   getProject(): Project {
     return this.project;
   }
 
+  /**
+   * Clear all cached source files and types
+   *
+   * Useful when you want to force re-parsing of files or free up memory.
+   * Note that this will clear both file and type caches.
+   *
+   * @example
+   * ```typescript
+   * parser.clearCache();
+   * // All subsequent parseFile and findType calls will re-parse from disk
+   * ```
+   */
   clearCache(): void {
     this.cache.clear();
   }
@@ -242,23 +309,28 @@ export class TypeScriptParser {
   }
 
   private isSourceFile(value: unknown): value is SourceFile {
-    return value != null && typeof value === 'object' && 'getFilePath' in value;
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      'getFilePath' in value &&
+      typeof (value as any).getFilePath === 'function'
+    );
   }
 
   private isType(value: unknown): value is Type {
-    return value != null && typeof value === 'object' && 'getSymbol' in value;
+    return (
+      value != null &&
+      typeof value === 'object' &&
+      'getSymbol' in value &&
+      typeof (value as any).getSymbol === 'function'
+    );
   }
 
   private async findTypeInSourceFile(
     context: TypeFinderContext,
   ): Promise<Result<Type> | undefined> {
     const { sourceFile } = context;
-    const typeFinders: TypeFinder[] = [
-      name => sourceFile.getInterface(name),
-      name => sourceFile.getTypeAlias(name),
-      name => sourceFile.getEnum(name),
-      name => sourceFile.getClass(name),
-    ];
+    const typeFinders = this.createTypeFinders(sourceFile);
 
     return this.tryTypeFinders({ typeFinders, context });
   }
@@ -267,12 +339,7 @@ export class TypeScriptParser {
     const { sourceFile } = context;
 
     for (const moduleDecl of sourceFile.getModules()) {
-      const typeFinders: TypeFinder[] = [
-        name => moduleDecl.getInterface(name),
-        name => moduleDecl.getTypeAlias(name),
-        name => moduleDecl.getEnum(name),
-        name => moduleDecl.getClass(name),
-      ];
+      const typeFinders = this.createTypeFinders(moduleDecl);
 
       const found = await this.tryTypeFinders({ typeFinders, context });
       if (found) {
@@ -320,5 +387,19 @@ export class TypeScriptParser {
     });
 
     return afterHook.ok ? ok(type) : afterHook;
+  }
+
+  private createTypeFinders(container: {
+    getInterface(name: string): TypeDeclaration | undefined;
+    getTypeAlias(name: string): TypeDeclaration | undefined;
+    getEnum(name: string): TypeDeclaration | undefined;
+    getClass(name: string): TypeDeclaration | undefined;
+  }): TypeFinder[] {
+    return [
+      name => container.getInterface(name),
+      name => container.getTypeAlias(name),
+      name => container.getEnum(name),
+      name => container.getClass(name),
+    ];
   }
 }

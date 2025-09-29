@@ -339,6 +339,60 @@ describe('ConditionalTypeResolver', () => {
         expect(true).toBe(true);
       }
     });
+
+    test('handles complex generic parameter names', async () => {
+      const sourceFile = project.createSourceFile(
+        'test.ts',
+        `
+          type ComplexConditional<TData> = TData extends string ? number : boolean;
+          type NamespacedConditional<MyNamespace.Type> = MyNamespace.Type extends string ? true : false;
+        `,
+      );
+
+      const complexType = sourceFile.getTypeAliasOrThrow('ComplexConditional').getType();
+      const result = await resolver.resolveConditionalType({ type: complexType });
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.kind).toBe(TypeKind.Generic);
+      }
+    });
+
+    test('handles generic parameters with constraints', async () => {
+      const sourceFile = project.createSourceFile(
+        'test.ts',
+        `
+          type ConstrainedConditional<T extends Record<string, any>> = T extends { id: string } ? T['id'] : never;
+        `,
+      );
+
+      const constrainedType = sourceFile.getTypeAliasOrThrow('ConstrainedConditional').getType();
+      const result = await resolver.resolveConditionalType({ type: constrainedType });
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value) {
+        expect(result.value.kind).toBe(TypeKind.Generic);
+      }
+    });
+
+    test('handles type.getText() errors gracefully', async () => {
+      const sourceFile = project.createSourceFile('test.ts', `type Test = string;`);
+      const type = sourceFile.getTypeAliasOrThrow('Test').getType();
+
+      // Mock type.getText to throw an error
+      const originalGetText = type.getText;
+      type.getText = () => {
+        throw new Error('getText failed');
+      };
+
+      const result = await resolver.resolveConditionalType({ type });
+
+      // Should handle the error gracefully
+      expect(result.ok).toBe(true);
+
+      // Restore original method
+      type.getText = originalGetText;
+    });
   });
 
   describe('integration with GenericContext', () => {

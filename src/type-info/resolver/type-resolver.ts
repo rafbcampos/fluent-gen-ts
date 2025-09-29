@@ -24,6 +24,27 @@ import { ObjectResolver } from './resolvers/object-resolver.js';
 import { BuiltInDetector } from './built-in/built-in-detector.js';
 import { BuiltInResolver } from './built-in/built-in-resolver.js';
 
+/**
+ * Core type resolver that orchestrates the resolution of TypeScript types to TypeInfo objects.
+ *
+ * This class serves as the main entry point for type resolution, coordinating multiple specialized
+ * resolvers to handle different type kinds (primitives, arrays, objects, unions, etc.). It provides
+ * caching, circular reference detection, and plugin support through hooks.
+ *
+ * @example
+ * ```typescript
+ * const resolver = new TypeResolver({
+ *   maxDepth: 50,
+ *   expandUtilityTypes: true,
+ *   pluginManager: new PluginManager()
+ * });
+ *
+ * const result = await resolver.resolveType(someType);
+ * if (result.ok) {
+ *   console.log('Resolved type:', result.value);
+ * }
+ * ```
+ */
 export class TypeResolver {
   private readonly context: ResolutionContextImpl;
   private readonly cacheManager: CacheManager;
@@ -48,6 +69,18 @@ export class TypeResolver {
   private readonly builtInDetector: BuiltInDetector;
   private readonly builtInResolver: BuiltInResolver;
 
+  /**
+   * Creates a new TypeResolver instance with the specified options.
+   *
+   * @param options - Configuration options for the resolver
+   * @param options.maxDepth - Maximum recursion depth (default: 30)
+   * @param options.cache - Type resolution cache instance
+   * @param options.pluginManager - Plugin manager for hooks
+   * @param options.expandUtilityTypes - Whether to expand utility types (default: true)
+   * @param options.resolveMappedTypes - Whether to resolve mapped types (default: true)
+   * @param options.resolveConditionalTypes - Whether to resolve conditional types (default: true)
+   * @param options.resolveTemplateLiterals - Whether to resolve template literals (default: true)
+   */
   constructor(options: ResolverOptions = {}) {
     const maxDepth = options.maxDepth ?? 30;
     const cache = options.cache ?? new TypeResolutionCache();
@@ -78,6 +111,27 @@ export class TypeResolver {
     this.builtInResolver = new BuiltInResolver(resolveTypeFn);
   }
 
+  /**
+   * Resolves a TypeScript Type to a TypeInfo object.
+   *
+   * This is the main public method that orchestrates the type resolution process.
+   * It handles caching, circular reference detection, plugin hooks, and delegates to
+   * appropriate specialized resolvers.
+   *
+   * @param type - The TypeScript Type to resolve
+   * @param depth - Current recursion depth (default: 0)
+   * @param context - Generic context for type parameter resolution
+   * @returns Promise resolving to Result containing TypeInfo or error
+   *
+   * @example
+   * ```typescript
+   * const result = await resolver.resolveType(stringType);
+   * if (result.ok) {
+   *   console.log('Type kind:', result.value.kind); // 'primitive'
+   *   console.log('Type name:', result.value.name); // 'string'
+   * }
+   * ```
+   */
   async resolveType(type: Type, depth = 0, context?: GenericContext): Promise<Result<TypeInfo>> {
     const ctx = context ?? this.genericContext;
 
@@ -103,11 +157,7 @@ export class TypeResolver {
     this.context.markVisited(typeString);
 
     try {
-      const symbol = type.getSymbol();
-      const resolveContext: ResolveContext = { type };
-      if (symbol) {
-        (resolveContext as any).symbol = symbol;
-      }
+      const resolveContext = this.createResolveContext(type);
 
       const hookResult = await this.pluginManager.executeHook({
         hookType: HookType.BeforeResolve,
@@ -143,6 +193,18 @@ export class TypeResolver {
     }
   }
 
+  private extractSuccessfulResult<T>(result: Result<T | null>): T | null {
+    return result.ok && result.value ? result.value : null;
+  }
+
+  private createResolveContext(type: Type): ResolveContext {
+    const symbol = type.getSymbol();
+    return {
+      type,
+      ...(symbol && { symbol }),
+    };
+  }
+
   private async trySpecializedResolvers(params: {
     type: Type;
     depth: number;
@@ -157,9 +219,8 @@ export class TypeResolver {
         depth,
         genericContext: context,
       });
-      if (result.ok && result.value) {
-        return result.value;
-      }
+      const typeInfo = this.extractSuccessfulResult(result);
+      if (typeInfo) return typeInfo;
     }
 
     if (this.resolveConditionalTypes) {
@@ -167,9 +228,8 @@ export class TypeResolver {
         type,
         depth,
       });
-      if (result.ok && result.value) {
-        return result.value;
-      }
+      const typeInfo = this.extractSuccessfulResult(result);
+      if (typeInfo) return typeInfo;
     }
 
     if (this.resolveMappedTypes) {
@@ -178,9 +238,8 @@ export class TypeResolver {
         resolveType: (t, d) => this.resolveType(t, d, context),
         depth,
       });
-      if (result.ok && result.value) {
-        return result.value;
-      }
+      const typeInfo = this.extractSuccessfulResult(result);
+      if (typeInfo) return typeInfo;
     }
 
     if (this.resolveTemplateLiterals) {
@@ -189,9 +248,8 @@ export class TypeResolver {
         resolveType: (t, d) => this.resolveType(t, d, context),
         depth,
       });
-      if (result.ok && result.value) {
-        return result.value;
-      }
+      const typeInfo = this.extractSuccessfulResult(result);
+      if (typeInfo) return typeInfo;
     }
 
     return null;
@@ -273,11 +331,7 @@ export class TypeResolver {
   }): Promise<Result<TypeInfo>> {
     const { typeInfo, type, typeString, cacheKey } = params;
 
-    const symbol = type.getSymbol();
-    const resolveContext: ResolveContext = { type };
-    if (symbol) {
-      (resolveContext as any).symbol = symbol;
-    }
+    const resolveContext = this.createResolveContext(type);
 
     const afterHook = await this.pluginManager.executeHook({
       hookType: HookType.AfterResolve,
@@ -295,19 +349,44 @@ export class TypeResolver {
     return afterHook;
   }
 
+  /**
+   * Clears the visited types tracking.
+   *
+   * This method resets the circular reference detection state, allowing types
+   * that were previously marked as visited to be processed again.
+   */
   clearVisited(): void {
     this.context.resetState();
   }
 
+  /**
+   * Resets the entire resolver state.
+   *
+   * This method clears both the visited types tracking and the generic context,
+   * essentially returning the resolver to its initial state.
+   */
   resetState(): void {
     this.context.resetState();
     this.resetGenericContext();
   }
 
+  /**
+   * Gets the current generic context.
+   *
+   * The generic context tracks type parameter mappings during resolution,
+   * allowing proper handling of generic types and their instantiations.
+   *
+   * @returns The current GenericContext instance
+   */
   getGenericContext(): GenericContext {
     return this.genericContext;
   }
 
+  /**
+   * Resets the generic context to a fresh instance.
+   *
+   * This clears all type parameter mappings and starts with a clean context.
+   */
   resetGenericContext(): void {
     this.genericContext = new GenericContext();
   }

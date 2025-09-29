@@ -12,15 +12,47 @@ import { FluentGen } from '../gen/index.js';
 import type { Result } from '../core/result.js';
 
 /**
+ * TypeScript compiler options configuration
+ */
+export interface TsConfig {
+  compilerOptions?: {
+    target?: string;
+    module?: string;
+    moduleResolution?: string;
+    strict?: boolean;
+    noUncheckedIndexedAccess?: boolean;
+    exactOptionalPropertyTypes?: boolean;
+    skipLibCheck?: boolean;
+    esModuleInterop?: boolean;
+    forceConsistentCasingInFileNames?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * Package.json configuration
+ */
+export interface PackageJsonConfig {
+  name?: string;
+  version?: string;
+  type?: string;
+  scripts?: Record<string, string>;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+/**
  * Configuration for a test project
  */
 export interface TestProjectConfig {
   /** Name of the temporary project */
   projectName?: string;
   /** Custom TypeScript configuration */
-  tsConfig?: Record<string, unknown>;
+  tsConfig?: TsConfig;
   /** Custom package.json configuration */
-  packageJson?: Record<string, unknown>;
+  packageJson?: PackageJsonConfig;
   /** Whether to install dependencies */
   installDependencies?: boolean;
   /** Additional dependencies to install */
@@ -121,7 +153,7 @@ export function createTestProject(config: TestProjectConfig = {}): TestProject {
       ...DEFAULT_PACKAGE_JSON.devDependencies,
       ...config.devDependencies,
     },
-    dependencies: config.dependencies,
+    ...(config.dependencies && { dependencies: config.dependencies }),
   };
   writeFileSync(join(dir, 'package.json'), JSON.stringify(packageJson, null, 2));
 
@@ -139,6 +171,9 @@ export function createTestProject(config: TestProjectConfig = {}): TestProject {
 
   /**
    * Run a command in the project directory
+   * @param command - The command to execute
+   * @param args - Command line arguments
+   * @returns Promise resolving to command result with exit code, stdout, and stderr
    */
   const runCommand = (command: string, args: string[]): Promise<CommandResult> => {
     return new Promise(resolve => {
@@ -185,11 +220,11 @@ export function createTestProject(config: TestProjectConfig = {}): TestProject {
       runCommand('npx', [
         'tsc',
         '--target',
-        'ES2022',
+        tsConfig.compilerOptions?.target || 'ES2022',
         '--module',
-        'ES2022',
+        tsConfig.compilerOptions?.module || 'ESNext',
         '--moduleResolution',
-        'bundler',
+        tsConfig.compilerOptions?.moduleResolution || 'bundler',
         ...files,
       ]),
 
@@ -214,11 +249,11 @@ export function createTestProject(config: TestProjectConfig = {}): TestProject {
 /**
  * Test runner builder for creating test files
  */
-export interface TestRunnerConfig {
+export interface TestRunnerConfig<T = Record<string, unknown>> {
   /** Import statements */
   imports: string[];
   /** Test cases to run */
-  testCases: TestCase[];
+  testCases: TestCase<T>[];
   /** Additional setup code */
   setup?: string;
   /** Additional teardown code */
@@ -228,13 +263,13 @@ export interface TestRunnerConfig {
 /**
  * Individual test case
  */
-export interface TestCase {
+export interface TestCase<T = Record<string, unknown>> {
   /** Name of the test case */
   name: string;
   /** Code to build the object using the builder */
   builderCode: string;
   /** Expected object (will be type-checked) */
-  expectedObject: Record<string, unknown>;
+  expectedObject: T;
   /** Type name for the expected object */
   typeName: string;
   /** Additional assertions */
@@ -287,7 +322,16 @@ ${testCase.assertions?.join('\n') ?? ''}
 
   return `${imports}
 
-// Deep comparison utility function
+/**
+ * Type guard to check if a value is a plain object (not array, date, etc.)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date);
+}
+
+/**
+ * Deep comparison utility function with better type safety
+ */
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a == null || b == null) return a === b;
@@ -305,12 +349,14 @@ function deepEqual(a: unknown, b: unknown): boolean {
     return true;
   }
 
-  if (typeof a === 'object' && typeof b === 'object') {
-    const keysA = Object.keys(a as Record<string, unknown>);
-    const keysB = Object.keys(b as Record<string, unknown>);
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
     if (keysA.length !== keysB.length) return false;
+
+    const keysBSet = new Set(keysB);
     for (const key of keysA) {
-      if (!keysB.includes(key) || !deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key])) return false;
+      if (!keysBSet.has(key) || !deepEqual(a[key], b[key])) return false;
     }
     return true;
   }
@@ -368,14 +414,41 @@ export function assertMultipleBuildersGenerated(
 }
 
 /**
+ * Generates export keyword for TypeScript declarations
+ * @param shouldExport - Whether the declaration should be exported (defaults to true)
+ * @returns Export keyword string or empty string
+ */
+function generateExportKeyword(shouldExport: boolean = true): string {
+  return shouldExport ? 'export ' : '';
+}
+
+/**
+ * Generates JSDoc comment for TypeScript declarations
+ * @param comment - The comment text
+ * @returns Formatted JSDoc comment or empty string
+ */
+function generateComment(comment?: string): string {
+  return comment ? `/** ${comment} */\n` : '';
+}
+
+/**
+ * Generates generic parameters for TypeScript declarations
+ * @param genericParams - The generic parameters string (e.g., "T, K extends string")
+ * @returns Formatted generic parameters or empty string
+ */
+function generateGenericParams(genericParams?: string): string {
+  return genericParams ? `<${genericParams}>` : '';
+}
+
+/**
  * Creates TypeScript interface definitions
  */
 export function createInterfaceFile(interfaces: InterfaceDefinition[]): string {
   return interfaces
     .map(def => {
-      const genericParams = def.genericParams ? `<${def.genericParams}>` : '';
+      const genericParams = generateGenericParams(def.genericParams);
       const extendsClause = def.extends ? ` extends ${def.extends}` : '';
-      const exportKeyword = def.export !== false ? 'export ' : '';
+      const exportKeyword = generateExportKeyword(def.export);
 
       const properties = def.properties
         .map(prop => {
@@ -386,7 +459,7 @@ export function createInterfaceFile(interfaces: InterfaceDefinition[]): string {
         })
         .join('\n');
 
-      const comment = def.comment ? `/** ${def.comment} */\n` : '';
+      const comment = generateComment(def.comment);
 
       return `${comment}${exportKeyword}interface ${def.name}${genericParams}${extendsClause} {
 ${properties}
@@ -435,9 +508,9 @@ export interface PropertyDefinition {
 export function createTypeFile(types: TypeDefinition[]): string {
   return types
     .map(def => {
-      const genericParams = def.genericParams ? `<${def.genericParams}>` : '';
-      const exportKeyword = def.export !== false ? 'export ' : '';
-      const comment = def.comment ? `/** ${def.comment} */\n` : '';
+      const genericParams = generateGenericParams(def.genericParams);
+      const exportKeyword = generateExportKeyword(def.export);
+      const comment = generateComment(def.comment);
 
       return `${comment}${exportKeyword}type ${def.name}${genericParams} = ${def.definition};`;
     })
@@ -466,8 +539,8 @@ export interface TypeDefinition {
 export function createEnumFile(enums: EnumDefinition[]): string {
   return enums
     .map(def => {
-      const exportKeyword = def.export !== false ? 'export ' : '';
-      const comment = def.comment ? `/** ${def.comment} */\n` : '';
+      const exportKeyword = generateExportKeyword(def.export);
+      const comment = generateComment(def.comment);
 
       const members = def.members
         .map(member => {

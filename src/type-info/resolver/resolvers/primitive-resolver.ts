@@ -4,7 +4,17 @@ import { ok } from '../../../core/result.js';
 import type { TypeInfo } from '../../../core/types.js';
 import { TypeKind } from '../../../core/types.js';
 
+const OBJECT_TYPE_TEXT = 'object';
+
+/**
+ * Resolves primitive and literal types to their TypeInfo representation.
+ */
 export class PrimitiveResolver {
+  /**
+   * Resolves a primitive type to its TypeInfo representation.
+   * @param params - The type to resolve
+   * @returns Result containing the resolved primitive TypeInfo, or null if not a primitive
+   */
   resolvePrimitive(params: { type: Type }): Result<TypeInfo> | null {
     const { type } = params;
 
@@ -29,13 +39,18 @@ export class PrimitiveResolver {
     if (type.isNever()) {
       return ok({ kind: TypeKind.Never });
     }
-    if (type.getText() === 'object') {
+    if (type.getText() === OBJECT_TYPE_TEXT) {
       return ok({ kind: TypeKind.Primitive, name: 'object' });
     }
 
     return null;
   }
 
+  /**
+   * Resolves a literal type to its TypeInfo representation.
+   * @param params - The type to resolve
+   * @returns Result containing the resolved literal TypeInfo, or null if not a literal
+   */
   resolveLiteral(params: { type: Type }): Result<TypeInfo> | null {
     const { type } = params;
 
@@ -43,8 +58,11 @@ export class PrimitiveResolver {
       return null;
     }
 
-    let literalValue: string | number | ts.PseudoBigInt | boolean | undefined =
-      type.getLiteralValue();
+    let literalValue: string | number | boolean | undefined = type.getLiteralValue() as
+      | string
+      | number
+      | boolean
+      | undefined;
 
     if (literalValue === undefined) {
       const compilerType = type.compilerType;
@@ -61,6 +79,12 @@ export class PrimitiveResolver {
     });
   }
 
+  /**
+   * Checks if a compiler type has the expected intrinsic name.
+   * @param compilerType - The TypeScript compiler type
+   * @param expectedName - The expected intrinsic name
+   * @returns True if the type has the expected intrinsic name
+   */
   private hasIntrinsicName(compilerType: ts.Type, expectedName: string): boolean {
     return (
       typeof compilerType === 'object' &&

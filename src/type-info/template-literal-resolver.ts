@@ -4,13 +4,25 @@ import { ok, err } from '../core/result.js';
 import type { TypeInfo } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
 
+/**
+ * Configuration options for TemplateLiteralResolver.
+ */
 export interface TemplateLiteralResolverOptions {
+  /** Maximum recursion depth for resolving nested template literals (default: 10) */
   readonly maxDepth?: number;
+  /** Maximum number of string combinations to generate (default: 1000) */
+  readonly maxCombinations?: number;
 }
 
+/**
+ * Parameters for resolving template literal types.
+ */
 export interface TemplateLiteralResolveParams {
+  /** The TypeScript type to resolve */
   readonly type: Type;
+  /** Function to resolve placeholder types within the template literal */
   readonly resolveType: (t: Type, depth: number) => Promise<Result<TypeInfo>>;
+  /** Current recursion depth (default: 0) */
   readonly depth?: number;
 }
 
@@ -19,13 +31,35 @@ interface TemplateLiteralStructure {
   readonly types: readonly ts.Type[];
 }
 
+/**
+ * Resolves TypeScript template literal types into concrete type representations.
+ * Handles template literals with placeholders by expanding them into unions of literal types.
+ *
+ * @example
+ * ```ts
+ * // Given: type Greeting<T> = `Hello ${T}`
+ * // With T = "World" | "TypeScript"
+ * // Resolves to: "Hello World" | "Hello TypeScript"
+ * ```
+ */
 export class TemplateLiteralResolver {
   private readonly maxDepth: number;
+  private readonly maxCombinations: number;
 
   constructor(options: TemplateLiteralResolverOptions = {}) {
     this.maxDepth = options.maxDepth ?? 10;
+    this.maxCombinations = options.maxCombinations ?? 1000;
   }
 
+  /**
+   * Resolves a template literal type into a concrete TypeInfo representation.
+   *
+   * @param params - Resolution parameters
+   * @param params.type - The type to resolve
+   * @param params.resolveType - Function to resolve placeholder types
+   * @param params.depth - Current recursion depth (default: 0)
+   * @returns Result containing the resolved TypeInfo, null if not a template literal, or an error
+   */
   async resolveTemplateLiteral(
     params: TemplateLiteralResolveParams,
   ): Promise<Result<TypeInfo | null>> {
@@ -38,13 +72,12 @@ export class TemplateLiteralResolver {
       if (!this.isTemplateLiteralType(type)) {
         return ok(null);
       }
-      // Extract template literal structure using TypeScript's internal representation
+
       const templateStructure = this.extractTemplateLiteralStructure(type);
       if (!templateStructure) {
         return ok(null);
       }
 
-      // If it's a simple template literal without placeholders, return as a literal type
       if (templateStructure.types.length === 0) {
         return ok({
           kind: TypeKind.Literal,
@@ -52,7 +85,6 @@ export class TemplateLiteralResolver {
         });
       }
 
-      // For template literals with placeholders, resolve the placeholders
       const expandedValues = await this.expandTemplateLiteralValues({
         templateStructure,
         resolveType,
@@ -61,7 +93,6 @@ export class TemplateLiteralResolver {
       if (!expandedValues.ok) return expandedValues;
 
       if (expandedValues.value.length === 0) {
-        // If we couldn't expand to concrete values, return as generic template literal
         return ok({
           kind: TypeKind.Generic,
           name: type.getText(),
@@ -69,14 +100,12 @@ export class TemplateLiteralResolver {
       }
 
       if (expandedValues.value.length === 1) {
-        // Single concrete value
         return ok({
           kind: TypeKind.Literal,
           literal: expandedValues.value[0],
         });
       }
 
-      // Multiple possible values - return as a union of literals
       const unionTypes: TypeInfo[] = expandedValues.value.map(value => ({
         kind: TypeKind.Literal,
         literal: value,
@@ -87,17 +116,18 @@ export class TemplateLiteralResolver {
         unionTypes,
       });
     } catch (error) {
-      return err(new Error(`Failed to resolve template literal type: ${error}`));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return err(new Error(`Failed to resolve template literal type: ${errorMessage}`));
     }
   }
 
   private isTemplateLiteralType(type: Type): boolean {
-    const compilerType = type.compilerType as ts.Type;
+    const compilerType = type.compilerType;
     return !!(compilerType.flags & ts.TypeFlags.TemplateLiteral);
   }
 
   private extractTemplateLiteralStructure(type: Type): TemplateLiteralStructure | null {
-    const compilerType = type.compilerType as ts.TemplateLiteralType;
+    const compilerType = type.compilerType;
 
     if (!this.hasTemplateLiteralStructure(compilerType)) {
       return null;
@@ -123,33 +153,47 @@ export class TemplateLiteralResolver {
     const { templateStructure, resolveType, depth } = params;
 
     if (templateStructure.types.length === 0) {
-      // No placeholders, just return the single text
       return ok([templateStructure.texts[0] || '']);
     }
 
-    // Try to resolve each placeholder type to concrete values
     const resolvedTypes: string[][] = [];
+    let totalCombinations = 1;
 
     for (const placeholderType of templateStructure.types) {
-      const typeWrapper = { compilerType: placeholderType } as Type;
+      const typeWrapper = this.wrapCompilerType(placeholderType);
       const resolved = await resolveType(typeWrapper, depth + 1);
 
       if (!resolved.ok) {
-        // If we can't resolve a placeholder, we can't expand the template
         return ok([]);
       }
 
       const values = this.extractStringValues(resolved.value);
       if (values.length === 0) {
-        // If we can't get concrete string values, we can't expand
         return ok([]);
+      }
+
+      totalCombinations *= values.length;
+      if (totalCombinations > this.maxCombinations) {
+        return err(
+          new Error(
+            `Template literal would generate ${totalCombinations} combinations, exceeding max of ${this.maxCombinations}`,
+          ),
+        );
       }
 
       resolvedTypes.push(values);
     }
 
-    // Generate all combinations of the resolved values
     return ok(this.generateTemplateCombinations(templateStructure.texts, resolvedTypes));
+  }
+
+  /**
+   * Wraps a TypeScript compiler type as a ts-morph Type for compatibility.
+   * Note: This creates a minimal wrapper that only includes the compilerType property.
+   * It should only be used with functions that only access compilerType.
+   */
+  private wrapCompilerType(compilerType: ts.Type): Type {
+    return { compilerType } as Type;
   }
 
   private extractStringValues(typeInfo: TypeInfo): string[] {
@@ -159,7 +203,6 @@ export class TemplateLiteralResolver {
       case TypeKind.Union:
         return typeInfo.unionTypes.flatMap(unionType => this.extractStringValues(unionType));
       case TypeKind.Primitive:
-        // Can't extract concrete values from primitive types
         return [];
       default:
         return [];
@@ -178,13 +221,14 @@ export class TemplateLiteralResolver {
 
     const generateCombination = (index: number, current: string): void => {
       if (index >= resolvedTypes.length) {
-        // Add the final text segment
         combinations.push(current + (texts[index] || ''));
         return;
       }
 
       const currentResolvedTypes = resolvedTypes[index];
-      if (!currentResolvedTypes) return;
+      if (!currentResolvedTypes || currentResolvedTypes.length === 0) {
+        return;
+      }
 
       for (const value of currentResolvedTypes) {
         const nextCurrent = current + (texts[index] || '') + value;

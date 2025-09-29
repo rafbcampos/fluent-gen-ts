@@ -9,12 +9,20 @@ import type { TypeResolverFunction } from '../core/resolver-context.js';
 import type { PluginManager } from '../../../core/plugin/index.js';
 import { HookType } from '../../../core/plugin/index.js';
 
+/**
+ * Resolves object properties and index signatures to their TypeInfo representation.
+ */
 export class PropertyResolver {
   constructor(
     private readonly resolveType: TypeResolverFunction,
     private readonly pluginManager: PluginManager,
   ) {}
 
+  /**
+   * Resolves all properties of a type.
+   * @param params - The type resolution parameters
+   * @returns Result containing an array of resolved PropertyInfo
+   */
   async resolveProperties(params: {
     type: Type;
     depth: number;
@@ -35,7 +43,11 @@ export class PropertyResolver {
 
       return ok(properties);
     } catch (error) {
-      return err(new Error(`Failed to resolve properties: ${error}`));
+      return err(
+        new Error(
+          `Failed to resolve properties: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
     }
   }
 
@@ -56,7 +68,7 @@ export class PropertyResolver {
     const callSignatures = propType.getCallSignatures();
 
     if (callSignatures.length > 0) {
-      return this.resolveFunctionProperty({ symbol, callSignatures: callSignatures as any });
+      return this.resolveFunctionProperty({ symbol, callSignatures });
     }
 
     const resolvedType = await this.resolveType(propType, depth + 1, context);
@@ -92,31 +104,7 @@ export class PropertyResolver {
 
     try {
       const propName = symbol.getName();
-      let propType: Type | undefined;
-
-      if (symbol.getTypeAtLocation) {
-        try {
-          const parentSymbol = type.getSymbol();
-          const sourceFile = parentSymbol?.getDeclarations()?.[0]?.getSourceFile();
-          if (sourceFile) {
-            propType = symbol.getTypeAtLocation(sourceFile);
-          }
-        } catch {
-          // Ignore and try next method
-        }
-      }
-
-      if (!propType) {
-        const parentSymbol = type.getSymbol();
-        const sourceFile = parentSymbol?.getDeclarations()?.[0]?.getSourceFile();
-        if (sourceFile) {
-          try {
-            propType = symbol.getTypeAtLocation(sourceFile);
-          } catch {
-            return null;
-          }
-        }
-      }
+      const propType = this.getPropertyType(symbol, type);
 
       if (!propType) {
         return null;
@@ -140,7 +128,7 @@ export class PropertyResolver {
 
   private resolveFunctionProperty(params: {
     symbol: TsSymbol;
-    callSignatures: ts.Signature[];
+    callSignatures: ReturnType<Type['getCallSignatures']>;
   }): PropertyInfo {
     const { symbol, callSignatures } = params;
     let functionSignature: string;
@@ -152,7 +140,7 @@ export class PropertyResolver {
       }
       const paramStrings = this.buildParameterStrings(callSignature);
       const returnType = callSignature.getReturnType();
-      const returnTypeText = (returnType as any).getText?.() ?? returnType.toString();
+      const returnTypeText = this.getTypeText(returnType);
       functionSignature = `(${paramStrings.join(', ')}) => ${returnTypeText}`;
     } catch {
       functionSignature = 'Function';
@@ -171,20 +159,20 @@ export class PropertyResolver {
     };
   }
 
-  private buildParameterStrings(callSignature: ts.Signature): string[] {
+  private buildParameterStrings(callSignature: ReturnType<Type['getCallSignatures']>[0]): string[] {
     const params = callSignature.getParameters();
     return params.map(param => {
       const paramName = param.getName();
-      const paramDeclaration = param.valueDeclaration;
+      const paramDeclaration = (param as any).valueDeclaration;
 
       if (!paramDeclaration) {
-        const isOptional = (param as any).isOptional?.() ?? false;
+        const isOptional = this.isOptionalParameter(param);
         return `${paramName}${isOptional ? '?' : ''}: any`;
       }
 
-      const paramType = (param as any).getTypeAtLocation?.(paramDeclaration);
-      const isOptional = (param as any).isOptional?.() ?? false;
-      const typeText = paramType?.getText?.() ?? 'any';
+      const paramType = this.getParameterType(param, paramDeclaration);
+      const isOptional = this.isOptionalParameter(param);
+      const typeText = paramType ? this.getTypeText(paramType) : 'any';
       return `${paramName}${isOptional ? '?' : ''}: ${typeText}`;
     });
   }
@@ -287,5 +275,86 @@ export class PropertyResolver {
     }
 
     return false;
+  }
+
+  /**
+   * Gets property type from a symbol and parent type.
+   * @param symbol - The property symbol
+   * @param type - The parent type
+   * @returns The property type or undefined
+   */
+  private getPropertyType(symbol: TsSymbol, type: Type): Type | undefined {
+    const parentSymbol = type.getSymbol();
+    const sourceFile = parentSymbol?.getDeclarations()?.[0]?.getSourceFile();
+
+    if (!sourceFile || !symbol.getTypeAtLocation) {
+      return undefined;
+    }
+
+    try {
+      return symbol.getTypeAtLocation(sourceFile);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Gets text representation of a type.
+   * @param type - The type to get text for
+   * @returns String representation of the type
+   */
+  private getTypeText(type: unknown): string {
+    if (
+      type &&
+      typeof type === 'object' &&
+      'getText' in type &&
+      typeof type.getText === 'function'
+    ) {
+      return type.getText();
+    }
+    if (
+      type &&
+      typeof type === 'object' &&
+      'toString' in type &&
+      typeof type.toString === 'function'
+    ) {
+      return type.toString();
+    }
+    return 'unknown';
+  }
+
+  /**
+   * Checks if a parameter is optional.
+   * @param param - The parameter to check
+   * @returns True if the parameter is optional
+   */
+  private isOptionalParameter(param: unknown): boolean {
+    if (
+      param &&
+      typeof param === 'object' &&
+      'isOptional' in param &&
+      typeof param.isOptional === 'function'
+    ) {
+      return Boolean(param.isOptional());
+    }
+    return false;
+  }
+
+  /**
+   * Gets the type of a parameter at a given location.
+   * @param param - The parameter
+   * @param location - The location node
+   * @returns The parameter type or undefined
+   */
+  private getParameterType(param: unknown, location: Node): Type | undefined {
+    if (
+      param &&
+      typeof param === 'object' &&
+      'getTypeAtLocation' in param &&
+      typeof param.getTypeAtLocation === 'function'
+    ) {
+      return param.getTypeAtLocation(location) as Type;
+    }
+    return undefined;
   }
 }

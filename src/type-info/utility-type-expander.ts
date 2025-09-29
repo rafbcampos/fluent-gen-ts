@@ -5,6 +5,25 @@ import type { TypeInfo } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
 import type { GenericContext } from './generic-context.js';
 
+const UTILITY_TYPE_NAMES = [
+  'Partial',
+  'Required',
+  'Readonly',
+  'Pick',
+  'Omit',
+  'Record',
+  'Exclude',
+  'Extract',
+  'NonNullable',
+  'Parameters',
+  'ReturnType',
+  'ConstructorParameters',
+  'InstanceType',
+  'Awaited',
+] as const;
+
+const UTILITY_TYPE_PATTERNS = new Set(UTILITY_TYPE_NAMES.map(name => `${name}<`));
+
 export interface UtilityTypeExpanderOptions {
   readonly maxDepth?: number;
   readonly genericContext?: GenericContext;
@@ -34,6 +53,26 @@ export class UtilityTypeExpander {
     this.genericContext = options.genericContext;
   }
 
+  /**
+   * Attempts to expand an unresolved utility type.
+   *
+   * @param params - The expansion parameters
+   * @param params.type - The TypeScript type to potentially expand
+   * @param params.resolveType - Function to resolve nested types
+   * @param params.depth - Current recursion depth
+   * @param params.genericContext - Context for tracking generic parameters
+   * @returns A Result containing TypeInfo if the utility type was expanded, null if it was already resolved, or an error
+   *
+   * @example
+   * ```ts
+   * // For unresolved generic utility types like Pick<T, K>
+   * const result = await expander.expandUtilityType({
+   *   type: pickType,
+   *   resolveType: async (t, d) => resolveTypeInfo(t, d)
+   * });
+   * // Returns: { kind: 'generic', name: 'Pick<T, K>' }
+   * ```
+   */
   async expandUtilityType(params: ExpandUtilityTypeParams): Promise<Result<TypeInfo | null>> {
     const { type, depth = 0, genericContext } = params;
     const context = genericContext ?? this.genericContext;
@@ -48,105 +87,16 @@ export class UtilityTypeExpander {
       return ok(null);
     }
 
-    // Handle unresolved utility types based on their text representation
     const typeText = type.getText();
 
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Partial<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Required<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Readonly<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Pick<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Omit<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Record<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Exclude<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Extract<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'NonNullable<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Parameters<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'ReturnType<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'ConstructorParameters<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'InstanceType<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
-    }
-
-    if (this.isUtilityTypePattern({ typeText, pattern: 'Awaited<' })) {
-      return this.handleUnresolvedUtilityType({
-        typeText,
-        ...(context !== undefined && { context }),
-      });
+    // Check if this matches any known utility type pattern
+    for (const pattern of UTILITY_TYPE_PATTERNS) {
+      if (typeText.startsWith(pattern)) {
+        return this.handleUnresolvedUtilityType({
+          typeText,
+          ...(context !== undefined && { context }),
+        });
+      }
     }
 
     // TypeScript has already resolved this utility type
@@ -178,34 +128,12 @@ export class UtilityTypeExpander {
   }
 
   private hasUtilityTypePattern(typeText: string): boolean {
-    const utilityPatterns = [
-      'Partial<',
-      'Required<',
-      'Readonly<',
-      'Pick<',
-      'Omit<',
-      'Record<',
-      'Exclude<',
-      'Extract<',
-      'NonNullable<',
-      'Parameters<',
-      'ReturnType<',
-      'ConstructorParameters<',
-      'InstanceType<',
-      'Awaited<',
-    ];
-
-    return utilityPatterns.some(pattern => typeText.includes(pattern));
-  }
-
-  private isUtilityTypePattern({
-    typeText,
-    pattern,
-  }: {
-    typeText: string;
-    pattern: string;
-  }): boolean {
-    return typeText.includes(pattern);
+    for (const pattern of UTILITY_TYPE_PATTERNS) {
+      if (typeText.startsWith(pattern)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private handleUnresolvedUtilityType({
@@ -247,36 +175,15 @@ export class UtilityTypeExpander {
     if (!genericParamMatches) return;
 
     for (const paramName of genericParamMatches) {
-      // Skip utility type names themselves
-      const utilityTypes = [
-        'Partial',
-        'Required',
-        'Readonly',
-        'Pick',
-        'Omit',
-        'Record',
-        'Exclude',
-        'Extract',
-        'NonNullable',
-        'Parameters',
-        'ReturnType',
-        'ConstructorParameters',
-        'InstanceType',
-        'Awaited',
-      ];
-
-      if (utilityTypes.includes(paramName)) {
+      if (UTILITY_TYPE_NAMES.includes(paramName as any)) {
         continue;
       }
 
       // Check if this is already a known generic parameter
       if (!context.isGenericParam(paramName)) {
-        // Register as unresolved generic parameter
         context.registerGenericParam({
           param: {
             name: paramName,
-            // For utility types, we don't know the constraints
-            // The builder generator will handle these appropriately
           },
         });
       }

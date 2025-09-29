@@ -400,5 +400,62 @@ export interface GenericContainer<T = string> {
         // Cleanup
       }
     });
+
+    test('should handle very long file paths', async () => {
+      const extractor = new TypeExtractor();
+      const longPath = 'a'.repeat(1000) + '.ts';
+
+      const result = await extractor.extractType(longPath, 'User');
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('does not exist');
+      }
+    });
+
+    test('should handle special characters in type names validation', async () => {
+      const extractor = new TypeExtractor();
+
+      const invalidNames = ['type-name', 'type.name', 'type name', '123', 'class'];
+
+      for (const invalidName of invalidNames) {
+        const result = await extractor.extractType(testFile, invalidName);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.error.message).toContain('not a valid TypeScript identifier');
+        }
+      }
+    });
+
+    test('should handle null/undefined inputs gracefully', async () => {
+      const extractor = new TypeExtractor();
+
+      // Test null/undefined file path
+      const result1 = await extractor.extractType(null as unknown as string, 'User');
+      expect(result1.ok).toBe(false);
+
+      const result2 = await extractor.extractType(undefined as unknown as string, 'User');
+      expect(result2.ok).toBe(false);
+
+      // Test null/undefined type name
+      const result3 = await extractor.extractType(testFile, null as unknown as string);
+      expect(result3.ok).toBe(false);
+
+      const result4 = await extractor.extractType(testFile, undefined as unknown as string);
+      expect(result4.ok).toBe(false);
+    });
+
+    test('should handle extractMultiple with partial failures correctly', async () => {
+      const extractor = new TypeExtractor();
+      const typeNames = ['User', 'NonExistent1', 'Address', 'NonExistent2'];
+
+      const result = await extractor.extractMultiple(testFile, typeNames);
+
+      // Should fail early on first error
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('NonExistent1');
+      }
+    });
   });
 });

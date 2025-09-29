@@ -413,6 +413,49 @@ describe('UtilityTypeExpander', () => {
   });
 
   describe('edge cases', () => {
+    test('does not match custom types with utility type names', async () => {
+      const sourceFile = project.createSourceFile(
+        'test.ts',
+        `
+        interface MyPartial<T> { value: T; }
+        interface CustomPick<T, K> { data: T; }
+        interface User { id: string; name: string; }
+
+        const myPartial: MyPartial<User> = { value: { id: "1", name: "John" } };
+        const customPick: CustomPick<User, 'id'> = { data: { id: "1", name: "John" } };
+      `,
+      );
+
+      const mockResolveType = async (): Promise<Result<TypeInfo>> =>
+        ok({ kind: TypeKind.Object, properties: [] });
+
+      // Test MyPartial - should return null (not treated as Partial<T>)
+      const myPartialType = sourceFile.getVariableDeclarationOrThrow('myPartial').getType();
+      const myPartialResult = await expander.expandUtilityType({
+        type: myPartialType,
+        resolveType: mockResolveType,
+        depth: 0,
+      });
+
+      expect(myPartialResult.ok).toBe(true);
+      if (myPartialResult.ok) {
+        expect(myPartialResult.value).toBe(null); // Should not be treated as utility type
+      }
+
+      // Test CustomPick - should return null (not treated as Pick<T, K>)
+      const customPickType = sourceFile.getVariableDeclarationOrThrow('customPick').getType();
+      const customPickResult = await expander.expandUtilityType({
+        type: customPickType,
+        resolveType: mockResolveType,
+        depth: 0,
+      });
+
+      expect(customPickResult.ok).toBe(true);
+      if (customPickResult.ok) {
+        expect(customPickResult.value).toBe(null); // Should not be treated as utility type
+      }
+    });
+
     test('returns error when max depth exceeded', async () => {
       const shallowExpander = new UtilityTypeExpander({ maxDepth: 0 });
       const sourceFile = project.createSourceFile(

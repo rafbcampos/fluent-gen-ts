@@ -513,6 +513,96 @@ describe('GenericContext', () => {
     });
   });
 
+  describe('circular constraint detection', () => {
+    test('detects direct circular constraint', () => {
+      const param: GenericParam = {
+        name: 'T',
+        constraint: { kind: TypeKind.Reference, name: 'T' },
+      };
+
+      const result = context.registerGenericParam({ param });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('Circular constraint');
+      }
+    });
+
+    test('should detect indirect circular constraints between two parameters', () => {
+      // First register T extends U - this should succeed
+      const paramT: GenericParam = {
+        name: 'T',
+        constraint: { kind: TypeKind.Reference, name: 'U' },
+      };
+
+      const resultT = context.registerGenericParam({ param: paramT });
+      expect(resultT.ok).toBe(true);
+
+      // Now try to register U extends T - this should fail due to circularity
+      const paramU: GenericParam = {
+        name: 'U',
+        constraint: { kind: TypeKind.Reference, name: 'T' },
+      };
+
+      const resultU = context.registerGenericParam({ param: paramU });
+      expect(resultU.ok).toBe(false);
+      if (!resultU.ok) {
+        expect(resultU.error.message).toContain('Circular constraint');
+      }
+    });
+
+    test('should detect indirect circular constraints in chain', () => {
+      // Register T extends U
+      const paramT: GenericParam = {
+        name: 'T',
+        constraint: { kind: TypeKind.Reference, name: 'U' },
+      };
+      expect(context.registerGenericParam({ param: paramT }).ok).toBe(true);
+
+      // Register U extends V
+      const paramU: GenericParam = {
+        name: 'U',
+        constraint: { kind: TypeKind.Reference, name: 'V' },
+      };
+      expect(context.registerGenericParam({ param: paramU }).ok).toBe(true);
+
+      // Try to register V extends T - should fail
+      const paramV: GenericParam = {
+        name: 'V',
+        constraint: { kind: TypeKind.Reference, name: 'T' },
+      };
+
+      const resultV = context.registerGenericParam({ param: paramV });
+      expect(resultV.ok).toBe(false);
+      if (!resultV.ok) {
+        expect(resultV.error.message).toContain('Circular constraint');
+      }
+    });
+
+    test('allows valid constraint chains without circularity', () => {
+      // T extends string - should work
+      const paramT: GenericParam = {
+        name: 'T',
+        constraint: { kind: TypeKind.Primitive, name: 'string' },
+      };
+      expect(context.registerGenericParam({ param: paramT }).ok).toBe(true);
+
+      // U extends T - should work
+      const paramU: GenericParam = {
+        name: 'U',
+        constraint: { kind: TypeKind.Reference, name: 'T' },
+      };
+      expect(context.registerGenericParam({ param: paramU }).ok).toBe(true);
+
+      // V extends U - should work
+      const paramV: GenericParam = {
+        name: 'V',
+        constraint: { kind: TypeKind.Reference, name: 'U' },
+      };
+      expect(context.registerGenericParam({ param: paramV }).ok).toBe(true);
+    });
+  });
+
   describe('edge cases and error conditions', () => {
     test('rejects empty parameter names', () => {
       const param: GenericParam = { name: '' };
@@ -521,6 +611,20 @@ describe('GenericContext', () => {
 
       expect(result.ok).toBe(false);
       expect(context.isGenericParam('')).toBe(false);
+    });
+
+    test('rejects non-string parameter names', () => {
+      const paramWithNumber = { name: 123 } as any;
+      const result1 = context.registerGenericParam({ param: paramWithNumber });
+      expect(result1.ok).toBe(false);
+
+      const paramWithNull = { name: null } as any;
+      const result2 = context.registerGenericParam({ param: paramWithNull });
+      expect(result2.ok).toBe(false);
+
+      const paramWithUndefined = { name: undefined } as any;
+      const result3 = context.registerGenericParam({ param: paramWithUndefined });
+      expect(result3.ok).toBe(false);
     });
 
     test('handles special characters in parameter names', () => {
@@ -621,6 +725,26 @@ describe('GenericContext', () => {
       const secondCall = child.getAllGenericParams();
       expect(secondCall).toHaveLength(2);
       expect(secondCall.map(p => p.name)).toContain('U');
+    });
+
+    test('child context cache should reflect parent context changes', () => {
+      const parent = new GenericContext();
+      const child = parent.createChildContext();
+
+      // Build initial cache in child
+      parent.registerGenericParam({ param: { name: 'T' } });
+      const firstCall = child.getAllGenericParams();
+      expect(firstCall).toHaveLength(1);
+      expect(firstCall.map(p => p.name)).toContain('T');
+
+      // Add parameter to parent after child cache is built
+      parent.registerGenericParam({ param: { name: 'U' } });
+
+      // Child should see the new parameter from parent
+      // This test may currently fail due to cache invalidation bug
+      const secondCall = child.getAllGenericParams();
+      expect(secondCall).toHaveLength(2);
+      expect(secondCall.map(p => p.name)).toEqual(expect.arrayContaining(['T', 'U']));
     });
   });
 });

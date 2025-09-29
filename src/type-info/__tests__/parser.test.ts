@@ -541,6 +541,21 @@ describe('TypeScriptParser', () => {
       expect(falsyGuard).toBe(false);
     });
 
+    test('improved type guards validate function properties', async () => {
+      const parser = new TypeScriptParser({ cache, pluginManager });
+
+      // Test improved type guards that check if methods are functions
+      const validSourceFile = { getFilePath: () => 'test' };
+      const invalidSourceFile = { getFilePath: 'not-a-function' };
+      const validType = { getSymbol: () => ({}) };
+      const invalidType = { getSymbol: 'not-a-function' };
+
+      expect((parser as any).isSourceFile(validSourceFile)).toBe(true);
+      expect((parser as any).isSourceFile(invalidSourceFile)).toBe(false);
+      expect((parser as any).isType(validType)).toBe(true);
+      expect((parser as any).isType(invalidType)).toBe(false);
+    });
+
     test('cache type safety works correctly', async () => {
       const parser = new TypeScriptParser({ cache, pluginManager });
 
@@ -667,6 +682,48 @@ describe('TypeScriptParser', () => {
       // All should succeed, proving the refactored approach works for all cases
       for (const result of results) {
         expect(result.ok).toBe(true);
+      }
+    });
+  });
+
+  describe('parseFile method', () => {
+    test('handles absolute and relative paths correctly', async () => {
+      const parser = new TypeScriptParser({ cache, pluginManager });
+
+      // Create a temporary file to test with
+      const project = parser.getProject();
+      const sourceFile = project.createSourceFile(
+        'test-file.ts',
+        'export interface TestType { value: string; }',
+      );
+      const filePath = sourceFile.getFilePath();
+
+      // Test parseFile method
+      const parseResult = await parser.parseFile(filePath);
+
+      expect(parseResult.ok).toBe(true);
+      if (parseResult.ok) {
+        expect(parseResult.value.getFilePath()).toBe(filePath);
+      }
+    });
+
+    test('returns cached file on subsequent calls', async () => {
+      const parser = new TypeScriptParser({ cache, pluginManager });
+
+      const project = parser.getProject();
+      const sourceFile = project.createSourceFile(
+        'cached-file.ts',
+        'export interface CachedType { id: string; }',
+      );
+      const filePath = sourceFile.getFilePath();
+
+      const firstParse = await parser.parseFile(filePath);
+      const secondParse = await parser.parseFile(filePath);
+
+      expect(firstParse.ok).toBe(true);
+      expect(secondParse.ok).toBe(true);
+      if (firstParse.ok && secondParse.ok) {
+        expect(firstParse.value).toBe(secondParse.value);
       }
     });
   });

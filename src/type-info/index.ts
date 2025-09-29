@@ -1,10 +1,21 @@
-import { TypeScriptParser } from './parser.js';
-import { TypeResolver } from './resolver/index.js';
+// Node.js built-ins
+import path from 'node:path';
+import { access, constants } from 'node:fs/promises';
+
+// External dependencies
+import type { SourceFile } from 'ts-morph';
+
+// Core modules
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { ResolvedType, TypeInfo } from '../core/types.js';
 import { TypeResolutionCache } from '../core/cache.js';
 import { PluginManager } from '../core/plugin/index.js';
+import type { MonorepoConfig } from '../core/package-resolver.js';
+
+// Type-info modules
+import { TypeScriptParser } from './parser.js';
+import { TypeResolver } from './resolver/index.js';
 import {
   isObjectTypeInfo,
   isArrayTypeInfo,
@@ -12,26 +23,139 @@ import {
   isIntersectionTypeInfo,
   isReferenceTypeInfo,
 } from './type-guards.js';
-import path from 'node:path';
-import { access, constants } from 'node:fs/promises';
-import type { SourceFile } from 'ts-morph';
 
-import type { MonorepoConfig } from '../core/package-resolver.js';
+/**
+ * Reserved TypeScript keywords that cannot be used as type names
+ */
+const TYPESCRIPT_RESERVED_KEYWORDS = new Set([
+  'abstract',
+  'any',
+  'as',
+  'asserts',
+  'assert',
+  'async',
+  'await',
+  'boolean',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'constructor',
+  'continue',
+  'debugger',
+  'declare',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'from',
+  'function',
+  'get',
+  'if',
+  'implements',
+  'import',
+  'in',
+  'instanceof',
+  'interface',
+  'is',
+  'keyof',
+  'let',
+  'module',
+  'namespace',
+  'never',
+  'new',
+  'null',
+  'number',
+  'object',
+  'of',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'readonly',
+  'require',
+  'return',
+  'set',
+  'static',
+  'string',
+  'super',
+  'switch',
+  'symbol',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'type',
+  'typeof',
+  'undefined',
+  'unique',
+  'unknown',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+]);
 
+/**
+ * Configuration options for TypeExtractor
+ */
 export interface TypeExtractorOptions {
+  /** Path to TypeScript configuration file. If not provided, will use default resolution. */
   tsConfigPath?: string;
+  /** Cache instance for type resolution. If not provided, a new cache will be created. */
   cache?: TypeResolutionCache;
+  /** Plugin manager for extending functionality. If not provided, a new instance will be created. */
   pluginManager?: PluginManager;
+  /** Maximum depth for type resolution to prevent infinite recursion. Must be between 1 and 100. */
   maxDepth?: number;
+  /** Configuration for monorepo support. */
   monorepoConfig?: MonorepoConfig;
 }
 
+/**
+ * Main class for extracting TypeScript type information from source files.
+ *
+ * Provides functionality to:
+ * - Extract individual type definitions from TypeScript files
+ * - Extract multiple types in parallel
+ * - Scan files to discover available type definitions
+ * - Resolve type dependencies and import relationships
+ *
+ * @example
+ * ```typescript
+ * const extractor = new TypeExtractor({
+ *   tsConfigPath: './tsconfig.json',
+ *   maxDepth: 10
+ * });
+ *
+ * const result = await extractor.extractType('./types.ts', 'User');
+ * if (result.ok) {
+ *   console.log(result.value.typeInfo);
+ * }
+ * ```
+ */
 export class TypeExtractor {
+  private static readonly MAX_PACKAGE_JSON_SEARCH_DEPTH = 50;
+
   private readonly parser: TypeScriptParser;
   private readonly resolver: TypeResolver;
   private readonly cache: TypeResolutionCache;
   private readonly pluginManager: PluginManager;
 
+  /**
+   * Creates a new TypeExtractor instance.
+   *
+   * @param options - Configuration options for the extractor
+   * @throws {Error} If options validation fails (e.g., invalid maxDepth or tsConfigPath)
+   */
   constructor(options: TypeExtractorOptions = {}) {
     const validationResult = this.validateOptions(options);
     if (!validationResult.ok) {
@@ -74,9 +198,9 @@ export class TypeExtractor {
   }
 
   /**
-   * Validates file path parameter
+   * Validates file path parameter and returns absolute path
    */
-  private validateFilePath(filePath: string): Result<void> {
+  private async validateAndResolvePath(filePath: string): Promise<Result<string>> {
     if (typeof filePath !== 'string' || filePath.trim() === '') {
       return err(new Error('filePath must be a non-empty string'));
     }
@@ -85,7 +209,15 @@ export class TypeExtractor {
       return err(new Error('filePath must be a TypeScript file (.ts, .tsx, or .d.ts)'));
     }
 
-    return ok(undefined);
+    const absolutePath = path.resolve(filePath);
+
+    // Check if file exists
+    try {
+      await access(absolutePath, constants.F_OK | constants.R_OK);
+      return ok(absolutePath);
+    } catch (error) {
+      return err(new Error(`File '${absolutePath}' does not exist or is not readable: ${error}`));
+    }
   }
 
   /**
@@ -102,40 +234,52 @@ export class TypeExtractor {
       return err(new Error(`typeName '${typeName}' is not a valid TypeScript identifier`));
     }
 
+    // Check for reserved keywords
+    if (TYPESCRIPT_RESERVED_KEYWORDS.has(typeName.toLowerCase())) {
+      return err(new Error(`typeName '${typeName}' is not a valid TypeScript identifier`));
+    }
+
     return ok(undefined);
   }
 
   /**
-   * Checks if file exists and is readable
+   * Validates file path and type name, returning absolute path if valid
    */
-  private async validateFileExists(filePath: string): Promise<Result<void>> {
-    try {
-      await access(filePath, constants.F_OK | constants.R_OK);
-      return ok(undefined);
-    } catch (error) {
-      return err(new Error(`File '${filePath}' does not exist or is not readable: ${error}`));
-    }
-  }
-
-  async extractType(filePath: string, typeName: string): Promise<Result<ResolvedType>> {
-    // Validate inputs
-    const filePathValidation = this.validateFilePath(filePath);
-    if (!filePathValidation.ok) {
-      return filePathValidation;
-    }
-
+  private async validateInputs(filePath: string, typeName: string): Promise<Result<string>> {
     const typeNameValidation = this.validateTypeName(typeName);
     if (!typeNameValidation.ok) {
       return typeNameValidation;
     }
 
-    const absolutePath = path.resolve(filePath);
+    return await this.validateAndResolvePath(filePath);
+  }
 
-    // Check if file exists before proceeding
-    const fileExistsValidation = await this.validateFileExists(absolutePath);
-    if (!fileExistsValidation.ok) {
-      return fileExistsValidation;
+  /**
+   * Extracts a single type definition from a TypeScript file.
+   *
+   * @param filePath - Path to the TypeScript file (.ts, .tsx, or .d.ts)
+   * @param typeName - Name of the type to extract (must be a valid TypeScript identifier)
+   * @returns Promise resolving to Result containing the resolved type information or error
+   *
+   * @example
+   * ```typescript
+   * const result = await extractor.extractType('./user.ts', 'User');
+   * if (result.ok) {
+   *   console.log('Type:', result.value.name);
+   *   console.log('Properties:', result.value.typeInfo.properties);
+   * } else {
+   *   console.error('Error:', result.error.message);
+   * }
+   * ```
+   */
+  async extractType(filePath: string, typeName: string): Promise<Result<ResolvedType>> {
+    // Validate inputs and get absolute path
+    const absolutePathResult = await this.validateInputs(filePath, typeName);
+    if (!absolutePathResult.ok) {
+      return absolutePathResult;
     }
+
+    const absolutePath = absolutePathResult.value;
 
     const sourceFileResult = await this.parser.parseFile(absolutePath);
     if (!sourceFileResult.ok) {
@@ -187,13 +331,24 @@ export class TypeExtractor {
     return ok(resolvedType);
   }
 
+  /**
+   * Extracts multiple type definitions from a TypeScript file in parallel.
+   *
+   * @param filePath - Path to the TypeScript file (.ts, .tsx, or .d.ts)
+   * @param typeNames - Array of type names to extract (each must be a valid TypeScript identifier)
+   * @returns Promise resolving to Result containing array of resolved types or error
+   *
+   * @example
+   * ```typescript
+   * const result = await extractor.extractMultiple('./types.ts', ['User', 'Address', 'Profile']);
+   * if (result.ok) {
+   *   result.value.forEach(type => console.log('Extracted:', type.name));
+   * } else {
+   *   console.error('Error:', result.error.message);
+   * }
+   * ```
+   */
   async extractMultiple(filePath: string, typeNames: string[]): Promise<Result<ResolvedType[]>> {
-    // Validate file path
-    const filePathValidation = this.validateFilePath(filePath);
-    if (!filePathValidation.ok) {
-      return filePathValidation;
-    }
-
     // Validate type names array
     if (!Array.isArray(typeNames)) {
       return err(new Error('typeNames must be an array'));
@@ -201,6 +356,12 @@ export class TypeExtractor {
 
     if (typeNames.length === 0) {
       return ok([]);
+    }
+
+    // Validate file path once
+    const absolutePathResult = await this.validateAndResolvePath(filePath);
+    if (!absolutePathResult.ok) {
+      return absolutePathResult;
     }
 
     // Validate each type name
@@ -212,7 +373,56 @@ export class TypeExtractor {
     }
 
     try {
-      const extractionPromises = typeNames.map(typeName => this.extractType(filePath, typeName));
+      // Parse file once and reuse for all type extractions
+      const absolutePath = absolutePathResult.value;
+      const sourceFileResult = await this.parser.parseFile(absolutePath);
+      if (!sourceFileResult.ok) {
+        return sourceFileResult;
+      }
+
+      const sourceFile = sourceFileResult.value;
+
+      // Load external dependencies once
+      await this.loadExternalDependencies(sourceFile, path.dirname(absolutePath));
+
+      // Extract all types in parallel, reusing the parsed source file
+      const extractionPromises = typeNames.map(async typeName => {
+        const typeResult = await this.parser.findType({ sourceFile, typeName });
+        if (!typeResult.ok) {
+          return typeResult;
+        }
+
+        const type = typeResult.value;
+        const typeInfoResult = await this.resolver.resolveType(type);
+        if (!typeInfoResult.ok) {
+          return typeInfoResult;
+        }
+
+        const importsResult = await this.parser.resolveImports(sourceFile);
+        if (!importsResult.ok) {
+          return importsResult;
+        }
+
+        const imports = Array.from(importsResult.value.keys());
+        const dependencies = await this.resolveDependencies(
+          typeInfoResult.value,
+          sourceFile.getFilePath(),
+        );
+
+        if (!dependencies.ok) {
+          return dependencies;
+        }
+
+        const resolvedType: ResolvedType = {
+          sourceFile: absolutePath,
+          name: typeName,
+          typeInfo: typeInfoResult.value,
+          imports,
+          dependencies: dependencies.value,
+        };
+
+        return ok(resolvedType);
+      });
 
       const results = await Promise.all(extractionPromises);
 
@@ -223,33 +433,44 @@ export class TypeExtractor {
         }
       }
 
-      // All successful, extract values
-      const resolvedTypes = results.map(result => {
+      // All successful - extract values with proper type safety
+      const resolvedTypes: ResolvedType[] = [];
+      for (const result of results) {
         if (result.ok) {
-          return result.value;
+          resolvedTypes.push(result.value);
         }
-        throw new Error('Unexpected error: result should be ok at this point');
-      });
+      }
       return ok(resolvedTypes);
     } catch (error) {
       return err(new Error(`Failed to extract multiple types: ${error}`));
     }
   }
 
+  /**
+   * Scans a TypeScript file to discover all available type definitions.
+   *
+   * @param filePath - Path to the TypeScript file (.ts, .tsx, or .d.ts)
+   * @returns Promise resolving to Result containing array of type names or error
+   *
+   * @example
+   * ```typescript
+   * const result = await extractor.scanFile('./types.ts');
+   * if (result.ok) {
+   *   console.log('Available types:', result.value);
+   *   // Output: ['User', 'Address', 'Profile', ...]
+   * } else {
+   *   console.error('Error:', result.error.message);
+   * }
+   * ```
+   */
   async scanFile(filePath: string): Promise<Result<string[]>> {
-    // Validate file path
-    const filePathValidation = this.validateFilePath(filePath);
-    if (!filePathValidation.ok) {
-      return filePathValidation;
+    // Validate file path and get absolute path
+    const absolutePathResult = await this.validateAndResolvePath(filePath);
+    if (!absolutePathResult.ok) {
+      return absolutePathResult;
     }
 
-    const absolutePath = path.resolve(filePath);
-
-    // Check if file exists before proceeding
-    const fileExistsValidation = await this.validateFileExists(absolutePath);
-    if (!fileExistsValidation.ok) {
-      return fileExistsValidation;
-    }
+    const absolutePath = absolutePathResult.value;
 
     const sourceFileResult = await this.parser.parseFile(absolutePath);
     if (!sourceFileResult.ok) {
@@ -347,19 +568,20 @@ export class TypeExtractor {
     }
 
     if (externalPackages.size > 0) {
-      // Find project root by looking for package.json
+      // Find project root by looking for package.json (with max depth protection)
       let searchDir = projectRoot;
-      while (searchDir !== path.dirname(searchDir)) {
+      let maxIterations = TypeExtractor.MAX_PACKAGE_JSON_SEARCH_DEPTH;
+      while (searchDir !== path.dirname(searchDir) && maxIterations > 0) {
         const packageJsonPath = path.join(searchDir, 'package.json');
-        if (
-          await access(packageJsonPath, constants.F_OK)
-            .then(() => true)
-            .catch(() => false)
-        ) {
+        try {
+          await access(packageJsonPath, constants.F_OK);
           projectRoot = searchDir;
           break;
+        } catch {
+          // Continue searching in parent directory
         }
         searchDir = path.dirname(searchDir);
+        maxIterations--;
       }
 
       // Load the dependencies
@@ -374,6 +596,18 @@ export class TypeExtractor {
     return [];
   }
 
+  /**
+   * Clears all cached type resolution data and resets internal state.
+   *
+   * This is useful when you want to ensure fresh type resolution,
+   * for example after TypeScript files have been modified.
+   *
+   * @example
+   * ```typescript
+   * extractor.clearCache();
+   * // Now subsequent extractions will re-parse and re-resolve types
+   * ```
+   */
   clearCache(): void {
     this.cache.clear();
     this.resolver.resetState();
