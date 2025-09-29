@@ -154,7 +154,7 @@ describe('PackageResolver', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('Invalid resolved type');
+        expect(result.error.message).toContain('ResolvedType is null or undefined');
       }
     });
 
@@ -167,7 +167,7 @@ describe('PackageResolver', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('Invalid resolved type');
+        expect(result.error.message).toContain('ResolvedType.imports is not an array');
       }
     });
   });
@@ -347,13 +347,13 @@ describe('PackageResolver', () => {
     test('throws error for invalid input', () => {
       expect(() => {
         resolver.resolveImportPath(null as any);
-      }).toThrow('Invalid resolved type or source file path');
+      }).toThrow('Invalid resolved type');
 
       expect(() => {
         resolver.resolveImportPath({
           sourceFile: null,
         } as any);
-      }).toThrow('Invalid resolved type or source file path');
+      }).toThrow('Invalid resolved type');
     });
   });
 

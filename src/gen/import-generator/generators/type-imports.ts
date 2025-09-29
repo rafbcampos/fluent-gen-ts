@@ -14,15 +14,44 @@ import { PackageResolver } from '../resolvers/package-resolver.js';
 import { TypeDefinitionFinder } from '../resolvers/type-definition-finder.js';
 import { ok, err } from '../../../core/result.js';
 
+/**
+ * Generates TypeScript import statements for all types referenced by a given resolved type.
+ * This includes local types, relative imports from other files, and external package imports.
+ */
 export class TypeImportsGenerator {
   private readonly dependencyResolver = new DependencyResolver();
   private readonly packageResolver = new PackageResolver();
   private readonly typeDefinitionFinder = new TypeDefinitionFinder();
 
+  /**
+   * Generates import statements for all types referenced by the given resolved type.
+   *
+   * @param resolvedType - The type to generate imports for
+   * @param outputDir - Optional output directory for resolving relative paths
+   * @returns A result containing the generated import statements or an error
+   *
+   * @example
+   * ```typescript
+   * const generator = new TypeImportsGenerator();
+   * const result = generator.generateTypeImports(userType, './dist');
+   * if (result.ok) {
+   *   console.log(result.value); // "import type { User, Profile } from './types.js';"
+   * }
+   * ```
+   */
   generateTypeImports(resolvedType: ResolvedType, outputDir?: string): Result<string, Error> {
     try {
-      if (!resolvedType?.name) {
-        return err(new Error('Invalid resolved type or missing name'));
+      if (!resolvedType) {
+        return err(new Error('Cannot generate imports: resolved type is null or undefined'));
+      }
+
+      if (!resolvedType.name) {
+        return err(
+          new Error(
+            `Cannot generate imports: resolved type is missing required 'name' property. ` +
+              `Source file: ${resolvedType.sourceFile || 'unknown'}`,
+          ),
+        );
       }
 
       const categories: TypeImportCategories = {
@@ -40,17 +69,34 @@ export class TypeImportsGenerator {
       const importStatements = this.generateImportStatements(categories, resolvedType, outputDir);
 
       if (importStatements.length === 0) {
-        return err(new Error('No valid importable types found'));
+        return err(
+          new Error(
+            `No valid importable types found for '${resolvedType.name}' ` +
+              `from '${resolvedType.sourceFile}'. This may indicate that the type has no dependencies ` +
+              `or all dependencies are global types.`,
+          ),
+        );
       }
 
       return ok(importStatements.join('\n'));
     } catch (error) {
-      return err(new Error(`Failed to generate type imports: ${error}`));
+      const errorContext = resolvedType?.name
+        ? `Failed to generate type imports for '${resolvedType.name}' from '${resolvedType.sourceFile || 'unknown'}'`
+        : 'Failed to generate type imports for unknown type';
+
+      return err(
+        new Error(`${errorContext}: ${error instanceof Error ? error.message : String(error)}`),
+      );
     }
   }
 
+  /**
+   * Cleanup method to dispose of internal resources.
+   * Should be called when the generator is no longer needed.
+   */
   dispose(): void {
     this.dependencyResolver.dispose();
+    this.packageResolver.dispose();
     this.typeDefinitionFinder.dispose();
   }
 
@@ -117,55 +163,86 @@ export class TypeImportsGenerator {
     if (!typeInfo) return;
 
     if (this.isObjectType(typeInfo)) {
-      // Process named objects
-      if (typeInfo.name && validateTypeName(typeInfo.name)) {
-        // If sourceFile is missing, try to find it
-        let sourceFile = typeInfo.sourceFile;
-        if (!sourceFile) {
-          const foundSource = this.typeDefinitionFinder.findTypeSourceFile(
-            typeInfo.name,
-            mainSourceFile,
-          );
-          sourceFile = foundSource ?? undefined;
-        }
-        this.categorizeTypeBySource(typeInfo.name, sourceFile, mainSourceFile, categories);
-      }
-
-      // Process all object properties, even for unnamed objects
-      for (const prop of typeInfo.properties) {
-        // Pass along the sourceFile if we have one, so nested types can use it as a hint
-        let propTypeInfo = prop.type;
-        const hintSourceFile = typeInfo.sourceFile || mainSourceFile;
-
-        if (
-          this.isObjectType(propTypeInfo) &&
-          !propTypeInfo.sourceFile &&
-          propTypeInfo.name &&
-          validateTypeName(propTypeInfo.name)
-        ) {
-          // Try to find the nested type's actual source
-          const nestedSource = this.typeDefinitionFinder.findTypeSourceFile(
-            propTypeInfo.name,
-            hintSourceFile,
-          );
-          if (nestedSource) {
-            // Create a new object with the sourceFile instead of mutating
-            propTypeInfo = {
-              ...propTypeInfo,
-              sourceFile: nestedSource,
-            };
-          }
-        }
-        this.categorizeTypesFromTypeInfo({
-          typeInfo: propTypeInfo,
-          mainSourceFile,
-          categories,
-        });
-      }
+      this.processObjectType(typeInfo, mainSourceFile, categories);
       return;
     }
 
     this.processNestedTypeStructures(typeInfo, mainSourceFile, categories);
+  }
+
+  /**
+   * Processes object types, handling both named types and their properties.
+   */
+  private processObjectType(
+    typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
+    mainSourceFile: string,
+    categories: TypeImportCategories,
+  ): void {
+    // Process named objects
+    if (typeInfo.name && validateTypeName(typeInfo.name)) {
+      const sourceFile = this.resolveTypeSourceFile(typeInfo, mainSourceFile);
+      this.categorizeTypeBySource(typeInfo.name, sourceFile, mainSourceFile, categories);
+    }
+
+    // Process all object properties, even for unnamed objects
+    for (const prop of typeInfo.properties) {
+      const propTypeInfo = this.enhanceNestedTypeInfo(prop.type, typeInfo, mainSourceFile);
+      this.categorizeTypesFromTypeInfo({
+        typeInfo: propTypeInfo,
+        mainSourceFile,
+        categories,
+      });
+    }
+  }
+
+  /**
+   * Resolves the source file for a type, attempting to find it if missing.
+   */
+  private resolveTypeSourceFile(
+    typeInfo: { sourceFile?: string; name?: string },
+    mainSourceFile: string,
+  ): string | undefined {
+    if (typeInfo.sourceFile) {
+      return typeInfo.sourceFile;
+    }
+
+    if (!typeInfo.name) {
+      return undefined;
+    }
+
+    const foundSource = this.typeDefinitionFinder.findTypeSourceFile(typeInfo.name, mainSourceFile);
+    return foundSource ?? undefined;
+  }
+
+  /**
+   * Enhances nested type info by attempting to resolve missing source files.
+   */
+  private enhanceNestedTypeInfo(
+    propTypeInfo: TypeInfo,
+    parentTypeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
+    mainSourceFile: string,
+  ): TypeInfo {
+    if (
+      this.isObjectType(propTypeInfo) &&
+      !propTypeInfo.sourceFile &&
+      propTypeInfo.name &&
+      validateTypeName(propTypeInfo.name)
+    ) {
+      const hintSourceFile = parentTypeInfo.sourceFile || mainSourceFile;
+      const nestedSource = this.typeDefinitionFinder.findTypeSourceFile(
+        propTypeInfo.name,
+        hintSourceFile,
+      );
+
+      if (nestedSource) {
+        return {
+          ...propTypeInfo,
+          sourceFile: nestedSource,
+        };
+      }
+    }
+
+    return propTypeInfo;
   }
 
   private processNestedTypeStructures(
@@ -173,45 +250,46 @@ export class TypeImportsGenerator {
     mainSourceFile: string,
     categories: TypeImportCategories,
   ): void {
-    if (typeInfo.kind === TypeKind.Array) {
+    switch (typeInfo.kind) {
+      case TypeKind.Array:
+        this.categorizeTypesFromTypeInfo({
+          typeInfo: typeInfo.elementType,
+          mainSourceFile,
+          categories,
+        });
+        break;
+
+      case TypeKind.Union:
+        this.processTypeCollection(typeInfo.unionTypes, mainSourceFile, categories);
+        break;
+
+      case TypeKind.Intersection:
+        this.processTypeCollection(typeInfo.intersectionTypes, mainSourceFile, categories);
+        break;
+
+      default:
+        // Handle generic type arguments for any type that might have them
+        if ('typeArguments' in typeInfo && typeInfo.typeArguments) {
+          this.processTypeCollection(typeInfo.typeArguments, mainSourceFile, categories);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Processes a collection of types, extracting imports from each.
+   */
+  private processTypeCollection(
+    types: readonly TypeInfo[],
+    mainSourceFile: string,
+    categories: TypeImportCategories,
+  ): void {
+    for (const type of types) {
       this.categorizeTypesFromTypeInfo({
-        typeInfo: typeInfo.elementType,
+        typeInfo: type,
         mainSourceFile,
         categories,
       });
-      return;
-    }
-
-    if (typeInfo.kind === TypeKind.Union) {
-      for (const unionType of typeInfo.unionTypes) {
-        this.categorizeTypesFromTypeInfo({
-          typeInfo: unionType,
-          mainSourceFile,
-          categories,
-        });
-      }
-      return;
-    }
-
-    if (typeInfo.kind === TypeKind.Intersection) {
-      for (const intersectionType of typeInfo.intersectionTypes) {
-        this.categorizeTypesFromTypeInfo({
-          typeInfo: intersectionType,
-          mainSourceFile,
-          categories,
-        });
-      }
-      return;
-    }
-
-    if ('typeArguments' in typeInfo && typeInfo.typeArguments) {
-      for (const arg of typeInfo.typeArguments) {
-        this.categorizeTypesFromTypeInfo({
-          typeInfo: arg,
-          mainSourceFile,
-          categories,
-        });
-      }
     }
   }
 
@@ -259,10 +337,12 @@ export class TypeImportsGenerator {
     } else if (typeSourceFile === mainSourceFile) {
       categories.localTypes.add(typeName);
     } else {
-      if (!categories.relativeImports.has(typeSourceFile)) {
-        categories.relativeImports.set(typeSourceFile, new Set());
+      const existingTypes = categories.relativeImports.get(typeSourceFile);
+      if (existingTypes) {
+        existingTypes.add(typeName);
+      } else {
+        categories.relativeImports.set(typeSourceFile, new Set([typeName]));
       }
-      categories.relativeImports.get(typeSourceFile)!.add(typeName);
     }
   }
 

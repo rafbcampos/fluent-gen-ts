@@ -10,13 +10,21 @@ import * as fs from 'node:fs';
 export class TypeDefinitionFinder {
   private project: Project | undefined;
   private readonly typeLocationCache = new Map<string, string | null>();
-  private readonly visitedFiles = new Set<string>();
 
   /**
-   * Finds the source file for a type by searching the codebase
-   * @param typeName The name of the type to find
-   * @param startingFile The file to start searching from
+   * Finds the source file for a type by searching the codebase.
+   * Handles interfaces, type aliases, classes, and re-exported types.
+   *
+   * @param typeName - The name of the type to find
+   * @param startingFile - The file to start searching from
    * @returns The path to the file containing the type definition, or null if not found
+   *
+   * @example
+   * ```typescript
+   * const finder = new TypeDefinitionFinder();
+   * const sourcePath = finder.findTypeSourceFile('UserModel', './src/index.ts');
+   * console.log(sourcePath); // './src/models/user.ts'
+   * ```
    */
   findTypeSourceFile(typeName: string, startingFile: string): string | null {
     if (!typeName || !startingFile) {
@@ -26,7 +34,7 @@ export class TypeDefinitionFinder {
     // Check cache first
     const cacheKey = `${typeName}:${startingFile}`;
     if (this.typeLocationCache.has(cacheKey)) {
-      return this.typeLocationCache.get(cacheKey) ?? null;
+      return this.typeLocationCache.get(cacheKey) || null;
     }
 
     try {
@@ -38,28 +46,44 @@ export class TypeDefinitionFinder {
       }
 
       // Start searching from the starting file and its imports
-      const result = this.searchForType(typeName, startingFile);
+      const visitedFiles = new Set<string>();
+      const result = this.searchForType(typeName, startingFile, visitedFiles);
 
       // Cache the result
       this.typeLocationCache.set(cacheKey, result);
 
       return result;
-    } catch (error) {
-      console.warn(`Failed to find source for type ${typeName}:`, error);
+    } catch {
+      // Silently fail and cache null result
       this.typeLocationCache.set(cacheKey, null);
       return null;
     }
   }
 
-  private searchForType(typeName: string, filePath: string): string | null {
-    if (!fs.existsSync(filePath) || this.visitedFiles.has(filePath)) {
+  /**
+   * Recursively searches for a type definition through imports.
+   *
+   * @param typeName - The type name to search for
+   * @param filePath - Current file being searched
+   * @param visitedFiles - Set of already visited files to prevent infinite recursion
+   * @returns Path to the file containing the type, or null if not found
+   */
+  private searchForType(
+    typeName: string,
+    filePath: string,
+    visitedFiles: Set<string>,
+  ): string | null {
+    if (!fs.existsSync(filePath) || visitedFiles.has(filePath)) {
       return null;
     }
 
-    this.visitedFiles.add(filePath);
+    visitedFiles.add(filePath);
 
     try {
-      const sourceFile = this.project!.addSourceFileAtPath(filePath);
+      if (!this.project) {
+        throw new Error('Project not initialized');
+      }
+      const sourceFile = this.project.addSourceFileAtPath(filePath);
 
       // Check if this file defines the type
       const hasType = this.fileDefinesType(sourceFile, typeName);
@@ -79,7 +103,7 @@ export class TypeDefinitionFinder {
 
         const resolvedPath = this.resolveImportPath(filePath, moduleSpecifier);
         if (resolvedPath) {
-          const result = this.searchForType(typeName, resolvedPath);
+          const result = this.searchForType(typeName, resolvedPath, visitedFiles);
           if (result) {
             return result;
           }
@@ -89,24 +113,27 @@ export class TypeDefinitionFinder {
       return null;
     } catch {
       return null;
-    } finally {
-      this.visitedFiles.delete(filePath);
     }
   }
 
+  /**
+   * Checks if a source file defines a specific type.
+   * Handles interfaces, type aliases, classes, and re-exported types.
+   *
+   * @param sourceFile - The ts-morph SourceFile to check
+   * @param typeName - The type name to look for
+   * @returns True if the file defines the type
+   */
   private fileDefinesType(sourceFile: SourceFile, typeName: string): boolean {
-    // Check for interface declarations
-    const interfaces = sourceFile.getInterfaces();
-    for (const iface of interfaces) {
-      if (iface.getName() === typeName) {
-        return true;
-      }
-    }
+    // Check all type declarations using a helper to reduce duplication
+    const declarations = [
+      ...sourceFile.getInterfaces(),
+      ...sourceFile.getTypeAliases(),
+      ...sourceFile.getClasses(),
+    ];
 
-    // Check for type alias declarations
-    const typeAliases = sourceFile.getTypeAliases();
-    for (const typeAlias of typeAliases) {
-      if (typeAlias.getName() === typeName) {
+    for (const decl of declarations) {
+      if (decl.getName() === typeName) {
         return true;
       }
     }
@@ -125,16 +152,43 @@ export class TypeDefinitionFinder {
     return false;
   }
 
+  /**
+   * Resolves an import path to an actual file path.
+   * Handles TypeScript extensions and index files.
+   *
+   * @param fromFile - The file containing the import
+   * @param importPath - The import path to resolve
+   * @returns The resolved file path or null if not found
+   */
   private resolveImportPath(fromFile: string, importPath: string): string | null {
     const dir = path.dirname(fromFile);
-    const possiblePaths = [
-      path.resolve(dir, `${importPath}.ts`),
-      path.resolve(dir, `${importPath}.tsx`),
-      path.resolve(dir, `${importPath}/index.ts`),
-      path.resolve(dir, `${importPath}/index.tsx`),
-      path.resolve(dir, importPath.replace(/\.js$/, '.ts')),
-      path.resolve(dir, importPath.replace(/\.jsx$/, '.tsx')),
-    ];
+
+    // Define extension mappings for cleaner code
+    const extensions = ['.ts', '.tsx'];
+    const jsExtensions: Record<string, string> = {
+      '.js': '.ts',
+      '.jsx': '.tsx',
+    };
+
+    // Build possible paths
+    const possiblePaths: string[] = [];
+
+    // Direct file with TypeScript extensions
+    for (const ext of extensions) {
+      possiblePaths.push(path.resolve(dir, `${importPath}${ext}`));
+    }
+
+    // Index files
+    for (const ext of extensions) {
+      possiblePaths.push(path.resolve(dir, `${importPath}/index${ext}`));
+    }
+
+    // JavaScript extensions mapped to TypeScript
+    for (const [jsExt, tsExt] of Object.entries(jsExtensions)) {
+      if (importPath.endsWith(jsExt)) {
+        possiblePaths.push(path.resolve(dir, importPath.replace(new RegExp(`\\${jsExt}$`), tsExt)));
+      }
+    }
 
     for (const possiblePath of possiblePaths) {
       if (fs.existsSync(possiblePath)) {
@@ -145,9 +199,12 @@ export class TypeDefinitionFinder {
     return null;
   }
 
+  /**
+   * Disposes of internal resources and clears caches.
+   * Should be called when the finder is no longer needed.
+   */
   dispose(): void {
     this.typeLocationCache.clear();
-    this.visitedFiles.clear();
     this.project = undefined;
   }
 }

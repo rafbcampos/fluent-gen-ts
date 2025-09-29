@@ -107,6 +107,8 @@ class MethodGeneratorUtils {
 
   /**
    * Type guard to check if typeInfo is an object type
+   * @param typeInfo - The type info to check
+   * @returns True if the type is an object type with properties
    */
   isObjectType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Object }> {
     return typeInfo.kind === TypeKind.Object;
@@ -114,6 +116,8 @@ class MethodGeneratorUtils {
 
   /**
    * Gets the builder class name for a type
+   * @param typeName - The name of the type to create a builder for
+   * @returns The builder class name (e.g., "User" -> "UserBuilder")
    */
   getBuilderName(typeName: string): string {
     return `${typeName}Builder`;
@@ -122,6 +126,11 @@ class MethodGeneratorUtils {
   /**
    * Converts property names to valid method names
    * Handles kebab-case and reserved keywords
+   * @param propertyName - The property name to convert (e.g., "user-name", "class")
+   * @returns The method name (e.g., "withUserName", "withClass")
+   * @example
+   * getMethodName("user-name") // "withUserName"
+   * getMethodName("id") // "withId"
    */
   getMethodName(propertyName: string): string {
     return `with${this.capitalizePropertyName(propertyName)}`;
@@ -140,6 +149,8 @@ class MethodGeneratorUtils {
 
   /**
    * Gets generic parameter information for a type
+   * @param typeInfo - The type info to extract generic information from
+   * @returns Object containing formatted generic parameters and constraints
    */
   getGenericContext(typeInfo: TypeInfo): GenericContext {
     if (!this.isObjectType(typeInfo)) {
@@ -288,6 +299,63 @@ class MethodGeneratorUtils {
       throw new Error('Object type must have properties array');
     }
   }
+
+  /**
+   * Validates custom method structure
+   * @param method - The method object to validate
+   * @returns True if the method has valid name and signature properties
+   */
+  validateCustomMethod(method: unknown): method is CustomMethod {
+    if (!method || typeof method !== 'object') {
+      return false;
+    }
+
+    const candidate = method as unknown as Record<string, unknown>;
+    return (
+      typeof candidate.name === 'string' &&
+      candidate.name.trim().length > 0 &&
+      typeof candidate.signature === 'string' &&
+      candidate.signature.trim().length > 0
+    );
+  }
+
+  /**
+   * Validates custom method with implementation
+   * @param method - The method object to validate
+   * @returns True if the method has valid name, signature, and implementation properties
+   */
+  validateCustomMethodWithImplementation(method: unknown): method is CustomMethod {
+    if (!this.validateCustomMethod(method)) {
+      return false;
+    }
+
+    const candidate = method as unknown as Record<string, unknown>;
+    return (
+      typeof candidate.implementation === 'string' && candidate.implementation.trim().length > 0
+    );
+  }
+
+  /**
+   * Gets custom methods from plugin manager with error handling
+   * @param builderContext - The builder context for the plugin
+   * @param pluginManager - The plugin manager to get methods from
+   * @returns Array of custom methods, or empty array if none found or on error
+   */
+  getCustomMethodsSafely(
+    builderContext: BuilderContext,
+    pluginManager: PluginManager,
+  ): CustomMethod[] {
+    try {
+      const customMethods = pluginManager.getCustomMethods(builderContext);
+      if (!Array.isArray(customMethods) || customMethods.length === 0) {
+        return [];
+      }
+      return customMethods;
+    } catch (error) {
+      console.warn('Failed to get custom methods from plugin manager:', error);
+      return [];
+    }
+  }
 }
 
 /**
@@ -298,6 +366,10 @@ export class MethodGenerator {
 
   /**
    * Generates the builder interface with methods
+   * @param typeName - The name of the type to generate builder interface for
+   * @param typeInfo - Complete type information including properties and generics
+   * @param config - Configuration options for method generation
+   * @returns Promise resolving to the complete interface code as a string
    */
   async generateBuilderInterface(
     typeName: string,
@@ -310,6 +382,12 @@ export class MethodGenerator {
 
   /**
    * Generates builder class methods
+   * @param typeInfo - Complete type information including properties and generics
+   * @param builderName - Name of the builder class being generated
+   * @param genericConstraints - Generic constraints string (e.g., "<T extends string>")
+   * @param config - Configuration options for method generation
+   * @param typeName - The name of the original type being built
+   * @returns Promise resolving to the complete method implementations as a string
    */
   async generateClassMethods(
     typeInfo: TypeInfo,
@@ -330,6 +408,10 @@ export class MethodGenerator {
 
   /**
    * Generates the build method for a builder
+   * @param typeName - The name of the type being built
+   * @param typeInfo - Complete type information to determine if defaults are needed
+   * @param config - Configuration options including context type
+   * @returns The complete build method implementation as a string
    */
   generateBuildMethod(typeName: string, typeInfo: TypeInfo, config: MethodGeneratorConfig): string {
     const params: BuildMethodParams = { typeName, typeInfo, config };
@@ -346,18 +428,18 @@ export class MethodGenerator {
     const validatedTypeName = this.utils.validateTypeName(params.typeName);
 
     const builderName = this.utils.getBuilderName(validatedTypeName);
-    const { genericParams } = this.utils.getGenericContext(params.typeInfo);
+    const genericContext = this.utils.getGenericContext(params.typeInfo);
 
     const methods = await this.generateInterfaceMethodSignatures({
       typeInfo: params.typeInfo,
       builderName,
-      genericConstraints: this.utils.getGenericContext(params.typeInfo).genericConstraints,
+      genericConstraints: genericContext.genericConstraints,
       config: params.config,
       typeName: validatedTypeName,
     });
 
     return `
-export interface ${builderName}Methods${genericParams} {
+export interface ${builderName}Methods${genericContext.genericParams} {
 ${methods}
 }`.trim();
   }
@@ -596,81 +678,38 @@ ${methods}
       return '';
     }
 
-    try {
-      const context = this.utils.createBuilderContext(params);
-      const customMethods = params.config.pluginManager.getCustomMethods(context);
+    const context = this.utils.createBuilderContext(params);
+    const customMethods = this.utils.getCustomMethodsSafely(context, params.config.pluginManager);
 
-      if (!Array.isArray(customMethods) || customMethods.length === 0) {
-        return '';
-      }
+    const validMethods = customMethods.filter(this.utils.validateCustomMethod).map(method => {
+      const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
+      return `${jsDoc}  ${method.name.trim()}${method.signature.trim()}: ${params.builderName}${params.genericConstraints};`;
+    });
 
-      const validMethods = customMethods
-        .filter((method): method is CustomMethod => {
-          // Validate method structure
-          return (
-            method &&
-            typeof method === 'object' &&
-            typeof method.name === 'string' &&
-            method.name.trim().length > 0 &&
-            typeof method.signature === 'string' &&
-            method.signature.trim().length > 0
-          );
-        })
-        .map(method => {
-          const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
-          return `${jsDoc}  ${method.name.trim()}${method.signature.trim()}: ${params.builderName}${params.genericConstraints};`;
-        });
-
-      return validMethods.join('\n');
-    } catch (error) {
-      console.warn('Failed to generate custom method signatures:', error);
-      return '';
-    }
+    return validMethods.join('\n');
   }
 
   /**
    * Generate custom method implementations from plugins
    */
   private async generateCustomMethodImplementations(params: ClassMethodsParams): Promise<string> {
-    // Skip if no plugin manager
     if (!params.config.pluginManager) {
       return '';
     }
 
-    try {
-      const context = this.utils.createBuilderContext(params);
-      const customMethods = params.config.pluginManager.getCustomMethods(context);
+    const context = this.utils.createBuilderContext(params);
+    const customMethods = this.utils.getCustomMethodsSafely(context, params.config.pluginManager);
 
-      if (!Array.isArray(customMethods) || customMethods.length === 0) {
-        return '';
-      }
+    const validMethods = customMethods
+      .filter(this.utils.validateCustomMethodWithImplementation)
+      .map(method => {
+        const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
+        const implementation = method.implementation.trim();
 
-      const validMethods = customMethods
-        .filter((method): method is CustomMethod => {
-          // Validate method structure
-          return (
-            method &&
-            typeof method === 'object' &&
-            typeof method.name === 'string' &&
-            method.name.trim().length > 0 &&
-            typeof method.signature === 'string' &&
-            method.signature.trim().length > 0 &&
-            typeof method.implementation === 'string' &&
-            method.implementation.trim().length > 0
-          );
-        })
-        .map(method => {
-          const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
-          const implementation = method.implementation.trim();
+        // The implementation should already be the complete method definition
+        return `${jsDoc}${implementation}`;
+      });
 
-          // The implementation should already be the complete method definition
-          return `${jsDoc}${implementation}`;
-        });
-
-      return validMethods.join('\n\n');
-    } catch (error) {
-      console.warn('Failed to generate custom method implementations:', error);
-      return '';
-    }
+    return validMethods.join('\n\n');
   }
 }

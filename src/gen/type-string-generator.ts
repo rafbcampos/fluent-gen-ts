@@ -35,8 +35,13 @@ export class TypeStringGenerator {
   /**
    * Converts TypeInfo to a TypeScript type string
    * @param typeInfo - The type information to convert
+   * @throws Error if typeInfo is malformed
    */
   typeInfoToString(typeInfo: TypeInfo): string {
+    // Validate input in development mode
+    if (process.env.NODE_ENV !== 'production') {
+      this.validateTypeInfo(typeInfo);
+    }
     switch (typeInfo.kind) {
       case TypeKind.Primitive:
         return this.handlePrimitiveType(typeInfo);
@@ -53,11 +58,8 @@ export class TypeStringGenerator {
       case TypeKind.Reference:
         return typeInfo.name;
       case TypeKind.Generic:
-        if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
-          const args = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg)).join(', ');
-          return `${typeInfo.name}<${args}>`;
-        }
-        return typeInfo.name;
+        const genericArgs = this.formatTypeArguments(typeInfo.typeArguments);
+        return `${typeInfo.name}${genericArgs}`;
       case TypeKind.Function:
         return typeInfo.name ?? 'Function';
       case TypeKind.Tuple:
@@ -77,6 +79,14 @@ export class TypeStringGenerator {
       case TypeKind.Never:
         return 'never';
       default:
+        // This should never happen with well-formed TypeInfo
+        // Log or throw in development to catch missing cases
+        if (process.env.NODE_ENV !== 'production') {
+          // Use type assertion here since we're in the default case of an exhaustive switch
+          // This means we've encountered an unexpected TypeKind value
+          const unknownTypeInfo = typeInfo as TypeInfo & { kind: unknown };
+          console.warn(`Unhandled TypeKind: ${unknownTypeInfo.kind}`);
+        }
         return 'unknown';
     }
   }
@@ -84,8 +94,18 @@ export class TypeStringGenerator {
   /**
    * Gets the property type string with optional builder support
    * @param prop - The property information
+   * @throws Error if prop is malformed
    */
   getPropertyType(prop: PropertyInfo): string {
+    if (!prop) {
+      throw new Error('PropertyInfo cannot be null or undefined');
+    }
+    if (!prop.type) {
+      throw new Error('PropertyInfo must have a type property');
+    }
+    if (typeof prop.name !== 'string' || prop.name.trim() === '') {
+      throw new Error('PropertyInfo must have a valid name');
+    }
     const baseType = this.getCleanPropertyType(prop);
 
     // Handle arrays with nested builders
@@ -157,10 +177,10 @@ export class TypeStringGenerator {
       // (e.g., PagedData<User>) instead of the expanded structure
       let builderTypeString = typeInfo.name;
 
-      if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
+      const typeArgs = this.formatTypeArguments(typeInfo.typeArguments);
+      if (typeArgs) {
         // Reconstruct generic signature: TypeName<Arg1, Arg2, ...>
-        const typeArgStrings = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg));
-        builderTypeString = `${typeInfo.name}<${typeArgStrings.join(', ')}>`;
+        builderTypeString = `${typeInfo.name}${typeArgs}`;
       }
 
       return `${this.options.builderTypeName}<${builderTypeString}, ${this.options.contextTypeName}>`;
@@ -199,7 +219,92 @@ export class TypeStringGenerator {
   }
 
   /**
-   * Handles primitive type conversion
+   * Formats type arguments for generic types
+   * @param typeArguments - The type arguments to format
+   * @returns Formatted type arguments string like "<T, U>" or empty string if no args
+   */
+  private formatTypeArguments(typeArguments?: readonly TypeInfo[]): string {
+    if (!typeArguments || typeArguments.length === 0) {
+      return '';
+    }
+    const args = typeArguments.map(arg => this.typeInfoToString(arg)).join(', ');
+    return `<${args}>`;
+  }
+
+  /**
+   * Type guard to check if typeInfo is a union type.
+   */
+  private isUnionType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Union }> {
+    return typeInfo.kind === TypeKind.Union;
+  }
+
+  /**
+   * Type guard to check if typeInfo is an intersection type.
+   */
+  private isIntersectionType(
+    typeInfo: TypeInfo,
+  ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Intersection }> {
+    return typeInfo.kind === TypeKind.Intersection;
+  }
+
+  /**
+   * Type guard to check if typeInfo is an array type.
+   */
+  private isArrayType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Array }> {
+    return typeInfo.kind === TypeKind.Array;
+  }
+
+  /**
+   * Type guard to check if typeInfo is a tuple type.
+   */
+  private isTupleType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Tuple }> {
+    return typeInfo.kind === TypeKind.Tuple;
+  }
+
+  /**
+   * Validates that a TypeInfo object has the minimum required structure.
+   * @param typeInfo - The type information to validate
+   * @throws Error if the typeInfo is invalid
+   */
+  private validateTypeInfo(typeInfo: TypeInfo): void {
+    if (!typeInfo) {
+      throw new Error('TypeInfo cannot be null or undefined');
+    }
+    if (!typeInfo.kind) {
+      throw new Error('TypeInfo must have a kind property');
+    }
+
+    // Validate specific requirements based on type kind
+    switch (typeInfo.kind) {
+      case TypeKind.Union:
+        if (this.isUnionType(typeInfo) && !Array.isArray(typeInfo.unionTypes)) {
+          throw new Error('Union type must have unionTypes array');
+        }
+        break;
+      case TypeKind.Intersection:
+        if (this.isIntersectionType(typeInfo) && !Array.isArray(typeInfo.intersectionTypes)) {
+          throw new Error('Intersection type must have intersectionTypes array');
+        }
+        break;
+      case TypeKind.Array:
+        if (this.isArrayType(typeInfo) && !typeInfo.elementType) {
+          throw new Error('Array type must have elementType');
+        }
+        break;
+      case TypeKind.Tuple:
+        if (this.isTupleType(typeInfo) && !Array.isArray(typeInfo.elements)) {
+          throw new Error('Tuple type must have elements array');
+        }
+        break;
+    }
+  }
+
+  /**
+   * Handles primitive type conversion.
+   * Primitive types (string, number, boolean, etc.) are returned as-is.
+   *
+   * @param typeInfo - The primitive type information
+   * @returns The primitive type name (e.g., "string", "number", "boolean")
    */
   private handlePrimitiveType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Primitive }>): string {
     return typeInfo.name;
@@ -209,6 +314,9 @@ export class TypeStringGenerator {
    * Handles union type conversion
    */
   private handleUnionType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>): string {
+    if (!typeInfo.unionTypes || typeInfo.unionTypes.length === 0) {
+      return 'never';
+    }
     return typeInfo.unionTypes.map(t => this.typeInfoToString(t)).join(' | ');
   }
 
@@ -218,11 +326,23 @@ export class TypeStringGenerator {
   private handleIntersectionType(
     typeInfo: Extract<TypeInfo, { kind: TypeKind.Intersection }>,
   ): string {
+    if (!typeInfo.intersectionTypes || typeInfo.intersectionTypes.length === 0) {
+      return 'unknown';
+    }
     return typeInfo.intersectionTypes.map(t => this.typeInfoToString(t)).join(' & ');
   }
 
   /**
-   * Handles literal type conversion
+   * Handles literal type conversion.
+   * Converts JavaScript literal values to their TypeScript literal type representation.
+   *
+   * @param typeInfo - The literal type information
+   * @returns Properly formatted literal type string
+   *
+   * @example
+   * // String literal: "hello" -> '"hello"'
+   * // Number literal: 42 -> "42"
+   * // Boolean literal: true -> "true"
    */
   private handleLiteralType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Literal }>): string {
     return typeof typeInfo.literal === 'string'
@@ -231,7 +351,17 @@ export class TypeStringGenerator {
   }
 
   /**
-   * Handles object type conversion
+   * Handles object type conversion.
+   * For named object types (like User, Address), returns the type name with generic arguments if present.
+   * For internal TypeScript types (like __type), returns the generic "object" type.
+   *
+   * @param typeInfo - The object type information
+   * @returns Formatted object type string
+   *
+   * @example
+   * // Named type: "User" -> "User"
+   * // Generic type: "PagedData<User>" -> "PagedData<User>"
+   * // Internal type: "__type" -> "object"
    */
   private handleObjectType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>): string {
     // For internal TypeScript types like "__type", use "object" instead
@@ -240,16 +370,25 @@ export class TypeStringGenerator {
     }
 
     // For resolved generic instantiations, reconstruct the original generic signature
-    if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
-      const typeArgStrings = typeInfo.typeArguments.map(arg => this.typeInfoToString(arg));
-      return `${typeInfo.name}<${typeArgStrings.join(', ')}>`;
+    const typeArgs = this.formatTypeArguments(typeInfo.typeArguments);
+    if (typeArgs) {
+      return `${typeInfo.name}${typeArgs}`;
     }
 
     return typeInfo.name;
   }
 
   /**
-   * Removes undefined from union types for optional properties
+   * Removes undefined from union types for optional properties.
+   * Since optional properties are marked with '?', we don't need undefined in the type union.
+   *
+   * @param prop - The property information containing type and optional flag
+   * @param baseType - The base type string (used as fallback if not a union or no changes needed)
+   * @returns Type string with undefined removed from union if applicable
+   *
+   * @example
+   * // For optional property with type: string | undefined
+   * // Returns: "string" (undefined removed since property is marked optional)
    */
   private removeUndefinedFromType(prop: PropertyInfo, baseType: string): string {
     if (prop.type.kind === TypeKind.Union) {
@@ -264,7 +403,12 @@ export class TypeStringGenerator {
   }
 
   /**
-   * Type guard to check if typeInfo is an object type
+   * Type guard to check if typeInfo is an object type.
+   * This is used throughout the code to safely access object-specific properties
+   * like 'name' and 'properties' after confirming the type kind.
+   *
+   * @param typeInfo - The type information to check
+   * @returns True if the type is an object type, with proper type narrowing
    */
   private isObjectType(
     typeInfo: TypeInfo,
@@ -321,7 +465,7 @@ export class TypeStringGenerator {
       return false;
     }
 
-    // Check if any properties have buildable types
+    // Check if properties have buildable types
     return typeInfo.properties?.some(prop => this.isTypeBuilderEligible(prop.type)) ?? false;
   }
 

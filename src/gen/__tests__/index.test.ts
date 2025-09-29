@@ -160,11 +160,11 @@ describe('FluentGen', () => {
     });
 
     test('should return error for invalid file extension', async () => {
-      const result = await fluentGen.generateBuilder('/test/file.js', 'User');
+      const result = await fluentGen.generateBuilder('/test/file.py', 'User');
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.message).toBe(
-          'filePath must be a TypeScript file (.ts, .tsx, or .d.ts)',
+          'filePath must be a TypeScript or JavaScript file (.ts, .tsx, .d.ts, .js, .jsx)',
         );
       }
     });
@@ -360,6 +360,53 @@ describe('FluentGen', () => {
 
       expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
       expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+    });
+
+    test('should prevent type name collisions by using unique filenames', async () => {
+      const mockResolvedType1: ResolvedType = {
+        sourceFile: '/test/user.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      const mockResolvedType2: ResolvedType = {
+        sourceFile: '/test/customer.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType)
+        .mockResolvedValueOnce(ok(mockResolvedType1))
+        .mockResolvedValueOnce(ok(mockResolvedType2));
+      vi.mocked(mockBuilderGenerator.generate)
+        .mockResolvedValueOnce(ok('user code'))
+        .mockResolvedValueOnce(ok('customer code'));
+      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+
+      const fileTypeMap = new Map([
+        ['/test/user.ts', ['User']],
+        ['/test/customer.ts', ['User']], // Same type name, different file
+      ]);
+
+      const result = await fluentGen.generateMultipleFromFiles(fileTypeMap);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Fixed: No more collisions - both User types are preserved with unique names
+        expect(result.value.size).toBe(3); // common.ts + User.builder.ts + User.customer.builder.ts
+        expect(result.value.get('User.builder.ts')).toBe('user code'); // First one
+
+        // Debug: Check what keys exist
+        const keys = Array.from(result.value.keys());
+        const customerKey = keys.find(
+          key => key.includes('customer') || (key.includes('User') && key !== 'User.builder.ts'),
+        );
+        expect(result.value.get(customerKey!)).toBe('customer code'); // Second one with unique name
+      }
     });
   });
 

@@ -14,7 +14,6 @@ describe('InteractiveService', () => {
 
   describe('groupInterfacesByFile', () => {
     it('should handle empty interfaces array', () => {
-      // Test potential bug: empty array should not cause errors
       const result = (service as any).groupInterfacesByFile([]);
       expect(result).toEqual([]);
     });

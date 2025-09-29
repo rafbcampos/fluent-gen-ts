@@ -421,6 +421,49 @@ describe('TypeStringGenerator', () => {
     });
   });
 
+  describe('validation', () => {
+    test('throws error for null typeInfo', () => {
+      expect(() => {
+        generator.typeInfoToString(null as any);
+      }).toThrow('TypeInfo cannot be null or undefined');
+    });
+
+    test('throws error for undefined typeInfo', () => {
+      expect(() => {
+        generator.typeInfoToString(undefined as any);
+      }).toThrow('TypeInfo cannot be null or undefined');
+    });
+
+    test('throws error for typeInfo without kind', () => {
+      expect(() => {
+        generator.typeInfoToString({} as any);
+      }).toThrow('TypeInfo must have a kind property');
+    });
+
+    test('throws error for null property', () => {
+      expect(() => {
+        generator.getPropertyType(null as any);
+      }).toThrow('PropertyInfo cannot be null or undefined');
+    });
+
+    test('throws error for property without type', () => {
+      expect(() => {
+        generator.getPropertyType({ name: 'test' } as any);
+      }).toThrow('PropertyInfo must have a type property');
+    });
+
+    test('throws error for property with empty name', () => {
+      expect(() => {
+        generator.getPropertyType({
+          name: '',
+          type: { kind: TypeKind.Primitive, name: 'string' },
+          optional: false,
+          readonly: false,
+        });
+      }).toThrow('PropertyInfo must have a valid name');
+    });
+  });
+
   describe('edge cases', () => {
     test('handles empty union types gracefully', () => {
       const typeInfo: TypeInfo = {
@@ -429,7 +472,7 @@ describe('TypeStringGenerator', () => {
       };
 
       const result = generator.typeInfoToString(typeInfo);
-      expect(result).toBe('');
+      expect(result).toBe('never');
     });
 
     test('handles empty intersection types gracefully', () => {
@@ -439,7 +482,7 @@ describe('TypeStringGenerator', () => {
       };
 
       const result = generator.typeInfoToString(typeInfo);
-      expect(result).toBe('');
+      expect(result).toBe('unknown');
     });
 
     test('handles empty tuple types gracefully', () => {

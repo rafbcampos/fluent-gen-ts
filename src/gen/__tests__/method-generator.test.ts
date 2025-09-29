@@ -531,6 +531,34 @@ describe('MethodGenerator', () => {
       }).rejects.toThrow('Type name must be a non-empty string');
     });
 
+    test('throws error for null/undefined type name', async () => {
+      const typeInfo: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'User',
+        properties: [],
+      };
+
+      await expect(async () => {
+        await methodGenerator.generateBuilderInterface(null as any, typeInfo, baseConfig);
+      }).rejects.toThrow('Type name must be a non-empty string');
+
+      await expect(async () => {
+        await methodGenerator.generateBuilderInterface(undefined as any, typeInfo, baseConfig);
+      }).rejects.toThrow('Type name must be a non-empty string');
+    });
+
+    test('throws error for non-string type name', async () => {
+      const typeInfo: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'User',
+        properties: [],
+      };
+
+      await expect(async () => {
+        await methodGenerator.generateBuilderInterface(123 as any, typeInfo, baseConfig);
+      }).rejects.toThrow('Type name must be a non-empty string');
+    });
+
     test('handles malformed property gracefully', async () => {
       const typeInfo: TypeInfo = {
         kind: TypeKind.Object,
@@ -628,6 +656,95 @@ describe('MethodGenerator', () => {
       expect(interfaceResult).toContain('withName');
       expect(classResult).toContain('withName');
     });
+
+    test('handles malformed plugin transform objects safely', async () => {
+      const pluginManager = new PluginManager();
+
+      // Mock plugin that returns malformed transforms
+      const malformedPlugin = {
+        name: 'malformed-plugin',
+        version: '1.0.0',
+        transformPropertyMethod: (context: PropertyMethodContext) => {
+          // Return malformed objects to test safety
+          if (context.property.name === 'test1') {
+            return ok(null as any); // null transform
+          }
+          if (context.property.name === 'test2') {
+            return ok(undefined as any); // undefined transform
+          }
+          if (context.property.name === 'test3') {
+            return ok('not an object' as any); // string instead of object
+          }
+          if (context.property.name === 'test4') {
+            return ok({
+              parameterType: 123, // number instead of string
+              extractValue: null, // null instead of string
+              validate: '', // empty string should be ignored
+            } as any);
+          }
+          return ok({});
+        },
+      };
+
+      pluginManager.register(malformedPlugin);
+
+      const config = { ...baseConfig, pluginManager };
+      const typeInfo: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'TestObject',
+        properties: [
+          {
+            name: 'test1',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+          {
+            name: 'test2',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+          {
+            name: 'test3',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+          {
+            name: 'test4',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+        ],
+      };
+
+      // Should not throw, but should handle malformed plugin transforms gracefully
+      const interfaceResult = await methodGenerator.generateBuilderInterface(
+        'TestObject',
+        typeInfo,
+        config,
+      );
+
+      const classResult = await methodGenerator.generateClassMethods(
+        typeInfo,
+        'TestObjectBuilder',
+        '',
+        config,
+        'TestObject',
+      );
+
+      // All methods should be generated with fallback to original types
+      expect(interfaceResult).toContain('withTest1(value: string)');
+      expect(interfaceResult).toContain('withTest2(value: string)');
+      expect(interfaceResult).toContain('withTest3(value: string)');
+      expect(interfaceResult).toContain('withTest4(value: string)');
+      expect(classResult).toContain('withTest1');
+      expect(classResult).toContain('withTest2');
+      expect(classResult).toContain('withTest3');
+      expect(classResult).toContain('withTest4');
+    });
   });
 
   describe('type safety and validation', () => {
@@ -691,6 +808,47 @@ describe('MethodGenerator', () => {
 
       // Should still generate methods for readonly properties in builders
       expect(result).toContain('withId(value: string): ImmutableUserBuilder');
+    });
+
+    test('skips properties with never type', async () => {
+      const typeInfo: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'MixedObject',
+        properties: [
+          {
+            name: 'validProperty',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+          {
+            name: 'neverProperty',
+            type: { kind: TypeKind.Never },
+            optional: false,
+            readonly: false,
+          },
+        ],
+      };
+
+      const interfaceResult = await methodGenerator.generateBuilderInterface(
+        'MixedObject',
+        typeInfo,
+        baseConfig,
+      );
+
+      const classResult = await methodGenerator.generateClassMethods(
+        typeInfo,
+        'MixedObjectBuilder',
+        '',
+        baseConfig,
+        'MixedObject',
+      );
+
+      // Should only generate method for valid property, not never type
+      expect(interfaceResult).toContain('withValidProperty(value: string)');
+      expect(interfaceResult).not.toContain('withNeverProperty');
+      expect(classResult).toContain('withValidProperty');
+      expect(classResult).not.toContain('withNeverProperty');
     });
   });
 

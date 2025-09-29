@@ -17,6 +17,7 @@ vi.mock('../../resolvers/package-resolver.js', () => ({
     generateExternalTypeImports: vi.fn(),
     resolveImportPath: vi.fn(),
     shouldPreserveNamedImports: vi.fn(),
+    dispose: vi.fn(),
   })),
 }));
 
@@ -31,6 +32,13 @@ vi.mock('../../utils/path-utils.js', () => ({
 
 vi.mock('../../utils/deduplication.js', () => ({
   resolveImportConflicts: vi.fn(),
+}));
+
+vi.mock('../../resolvers/type-definition-finder.js', () => ({
+  TypeDefinitionFinder: vi.fn(() => ({
+    findTypeSourceFile: vi.fn(),
+    dispose: vi.fn(),
+  })),
 }));
 
 describe('TypeImportsGenerator', () => {
@@ -48,6 +56,7 @@ describe('TypeImportsGenerator', () => {
       generateExternalTypeImports: vi.fn(() => ({ ok: true, value: [] })),
       resolveImportPath: vi.fn((type, _outputDir) => type.sourceFile.replace('.ts', '.js')),
       shouldPreserveNamedImports: vi.fn(() => false),
+      dispose: vi.fn(),
     };
 
     const { DependencyResolver } = vi.mocked(
@@ -479,7 +488,7 @@ describe('TypeImportsGenerator', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('Invalid resolved type');
+        expect(result.error.message).toContain('null or undefined');
       }
     });
 
@@ -493,7 +502,7 @@ describe('TypeImportsGenerator', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('missing name');
+        expect(result.error.message).toContain('missing required');
       }
     });
 
@@ -539,6 +548,118 @@ describe('TypeImportsGenerator', () => {
       if (result.ok) {
         // Should still work, just without external imports
         expect(result.value).toContain('User');
+      }
+    });
+
+    test('handles null typeInfo gracefully', () => {
+      const resolvedType = createResolvedType('User', '/project/src/user.ts', {
+        kind: TypeKind.Object,
+        properties: [
+          createProperty('nullProp', null as any), // Edge case: null typeInfo
+        ],
+      });
+
+      const result = generator.generateTypeImports(resolvedType);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('User');
+      }
+    });
+
+    test('handles undefined generic parameters gracefully', () => {
+      const resolvedType = createResolvedType('Generic', '/project/src/types.ts', {
+        kind: TypeKind.Object,
+        properties: [],
+        genericParams: [null as any, undefined as any], // Edge case: null/undefined params
+      });
+
+      const result = generator.generateTypeImports(resolvedType);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('Generic');
+      }
+    });
+
+    test('handles empty arrays and sets gracefully', () => {
+      const resolvedType = createResolvedType('Empty', '/project/src/types.ts', {
+        kind: TypeKind.Object,
+        properties: [],
+        genericParams: [],
+      });
+
+      const result = generator.generateTypeImports(resolvedType);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('Empty');
+      }
+    });
+
+    test('returns descriptive error for null resolved type', () => {
+      const result = generator.generateTypeImports(null as any);
+
+      expect(result.ok).toBe(false);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('null or undefined');
+      }
+    });
+
+    test('returns descriptive error for undefined resolved type', () => {
+      const result = generator.generateTypeImports(undefined as any);
+
+      expect(result.ok).toBe(false);
+      if (isErr(result)) {
+        expect(result.error.message).toContain('null or undefined');
+      }
+    });
+
+    test('handles deeply nested union and intersection types', () => {
+      const resolvedType = createResolvedType('Complex', '/project/src/types.ts', {
+        kind: TypeKind.Object,
+        properties: [
+          createProperty('complex', {
+            kind: TypeKind.Union,
+            unionTypes: [
+              {
+                kind: TypeKind.Intersection,
+                intersectionTypes: [
+                  {
+                    kind: TypeKind.Object,
+                    name: 'BaseType',
+                    sourceFile: '/project/src/base.ts',
+                    properties: [],
+                  },
+                  {
+                    kind: TypeKind.Object,
+                    name: 'MixinType',
+                    sourceFile: '/project/src/mixin.ts',
+                    properties: [],
+                  },
+                ],
+              },
+              {
+                kind: TypeKind.Array,
+                elementType: {
+                  kind: TypeKind.Object,
+                  name: 'Item',
+                  sourceFile: '/project/src/item.ts',
+                  properties: [],
+                },
+              },
+            ],
+          }),
+        ],
+      });
+
+      const result = generator.generateTypeImports(resolvedType);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('BaseType');
+        expect(result.value).toContain('MixinType');
+        expect(result.value).toContain('Item');
       }
     });
 

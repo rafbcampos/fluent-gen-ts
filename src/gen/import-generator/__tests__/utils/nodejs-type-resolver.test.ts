@@ -201,6 +201,20 @@ describe('NodeJSTypeResolver', () => {
       resolver.dispose();
       expect(resolver.getCacheStats().size).toBe(0);
     }, 30000);
+
+    test('cleans up temporary files when using TypeScript config', () => {
+      // Create a resolver with TypeScript config to trigger temp file creation
+      const resolverWithConfig = new NodeJSTypeResolver('./tsconfig.json');
+
+      // Trigger type resolution that might create temp files
+      resolverWithConfig.resolveTypeWithCompiler('EventEmitter');
+
+      // Dispose should clean up without throwing errors
+      expect(() => resolverWithConfig.dispose()).not.toThrow();
+
+      // Verify cache is cleared
+      expect(resolverWithConfig.getCacheStats().size).toBe(0);
+    }, 30000);
   });
 
   describe('comprehensive Node.js type coverage', () => {

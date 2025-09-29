@@ -97,6 +97,27 @@ describe('deduplication utilities', () => {
       const result = deduplicateImports(imports);
       expect(result).toEqual(imports);
     });
+
+    test('handles performance efficiently with many duplicates', () => {
+      const imports: string[] = [];
+      // Add many duplicate imports
+      for (let i = 0; i < 100; i++) {
+        imports.push('import type { User } from "./types.js";');
+        imports.push('import { Component } from "react";');
+      }
+
+      const startTime = performance.now();
+      const result = deduplicateImports(imports);
+      const endTime = performance.now();
+
+      // Should only keep first occurrences
+      expect(result).toHaveLength(2);
+      expect(result[0]).toBe('import type { User } from "./types.js";');
+      expect(result[1]).toBe('import { Component } from "react";');
+
+      // Should complete quickly (less than 10ms for 200 imports)
+      expect(endTime - startTime).toBeLessThan(10);
+    });
   });
 
   describe('extractImportedTypes', () => {
@@ -166,6 +187,32 @@ describe('deduplication utilities', () => {
       const result = extractModulesFromNamedImports(imports);
       expect(result.has('./types.js')).toBe(true);
       expect(result.has('@company/api')).toBe(true);
+    });
+
+    test('correctly identifies type imports with improved regex', () => {
+      const imports = `
+        import { Helper, utils } from "./helpers.js";
+        import { Component } from "react";
+        import { helper } from "./utils.js";
+      `;
+      const result = extractModulesFromNamedImports(imports);
+      // Helper and Component start with capital letters (likely types)
+      expect(result.has('./helpers.js')).toBe(true);
+      expect(result.has('react')).toBe(true);
+      // helper is lowercase - not a type
+      expect(result.has('./utils.js')).toBe(false);
+    });
+
+    test('handles edge cases with explicit type keyword correctly', () => {
+      const imports = `
+        import { type UserType, utils } from "./mixed.js";
+        import { typeHelper } from "./utils.js";
+      `;
+      const result = extractModulesFromNamedImports(imports);
+      // Has explicit type keyword
+      expect(result.has('./mixed.js')).toBe(true);
+      // 'typeHelper' starts with 'type' but not as a keyword
+      expect(result.has('./utils.js')).toBe(false);
     });
 
     test('extracts modules from mixed imports with types', () => {
@@ -238,6 +285,27 @@ describe('deduplication utilities', () => {
       expect(result.has('@company/config')).toBe(true); // has type Config
       expect(result.has('./api.js')).toBe(false); // no types
       expect(result.has('./utils.js')).toBe(false); // namespace import, no named types
+    });
+
+    test('processes truncated input correctly without re-checking length', () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      // Create a valid import that will still be valid after truncation
+      const validImport = 'import type { User } from "module";';
+      const padding = 'a'.repeat(10000); // Just padding that won't affect the regex
+      const veryLongImports = validImport + padding;
+
+      const result = extractModulesFromNamedImports(veryLongImports);
+
+      // Should have warned once
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Import statements string too long, truncating for safety',
+      );
+
+      // Should still process the truncated content
+      expect(result.has('module')).toBe(true);
+
+      consoleSpy.mockRestore();
     });
   });
 

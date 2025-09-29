@@ -1,18 +1,40 @@
 import type { StructuredImport, StructuredNamedImport } from '../plugin/plugin-types.js';
 
 /**
- * Core import parsing utilities - shared across all import processing
+ * Core import parsing utilities for JavaScript/TypeScript import statements.
+ *
+ * Provides low-level parsing and manipulation of import statements, including:
+ * - Splitting concatenated imports
+ * - Extracting import sources
+ * - Identifying import types (type-only, side-effect)
+ * - Parsing named imports with aliases and type modifiers
+ * - Converting import strings to structured objects
+ *
+ * This class is used internally by higher-level import transformation APIs.
  */
 export class ImportParsingUtils {
   /**
-   * Split concatenated import statements into individual statements
+   * Splits concatenated import statements into individual statements.
+   *
+   * Handles imports separated by semicolons and whitespace, such as:
+   * `import {A} from "a"; import {B} from "b";`
+   *
+   * @param importStatement - The concatenated import statement string
+   * @returns Array of individual import statements, each ending with a semicolon
+   *
+   * @example
+   * ```typescript
+   * const result = ImportParsingUtils.splitConcatenatedImports(
+   *   'import {A} from "a"; import {B} from "b";'
+   * );
+   * // result = ['import {A} from "a";', 'import {B} from "b";']
+   * ```
    */
   static splitConcatenatedImports(importStatement: string): string[] {
     const trimmed = importStatement.trim();
     if (!trimmed) return [];
 
-    // Check if this is a concatenated import statement
-    if (trimmed.includes(';\nimport') || trimmed.includes('; import')) {
+    if (/;\s*import\s/.test(trimmed)) {
       return trimmed
         .split(/;\s*(?=import\s)/g)
         .map(s => s.trim())
@@ -24,7 +46,24 @@ export class ImportParsingUtils {
   }
 
   /**
-   * Extract the source module from an import statement
+   * Extracts the source module path from an import statement.
+   *
+   * Works with all import types:
+   * - Regular imports: `import {X} from "module"` → `"module"`
+   * - Side-effect imports: `import "module"` → `"module"`
+   * - Namespace imports: `import * as X from "module"` → `"module"`
+   *
+   * @param importStatement - The import statement to parse
+   * @returns The module path/specifier, or null if not found
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.extractSource('import {A} from "./module.js";');
+   * // returns: './module.js'
+   *
+   * ImportParsingUtils.extractSource('import "./styles.css";');
+   * // returns: './styles.css'
+   * ```
    */
   static extractSource(importStatement: string): string | null {
     // Handle side-effect imports first: import "module"
@@ -39,21 +78,64 @@ export class ImportParsingUtils {
   }
 
   /**
-   * Check if import statement is type-only
+   * Checks if an import statement is type-only.
+   *
+   * Type-only imports use the `type` modifier:
+   * `import type {X} from "module"` or `import type * as X from "module"`
+   *
+   * @param importStatement - The import statement to check
+   * @returns True if the statement begins with `import type`
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.isTypeOnlyImport('import type {User} from "./types";');
+   * // returns: true
+   *
+   * ImportParsingUtils.isTypeOnlyImport('import {type User} from "./types";');
+   * // returns: false (this is a mixed import, not fully type-only)
+   * ```
    */
   static isTypeOnlyImport(importStatement: string): boolean {
     return /^import\s+type\s+/.test(importStatement.trim());
   }
 
   /**
-   * Check if import statement is side-effect only
+   * Checks if an import statement is side-effect only.
+   *
+   * Side-effect imports have no bindings: `import "module"`
+   *
+   * @param importStatement - The import statement to check
+   * @returns True if the statement imports a module for side effects only
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.isSideEffectImport('import "./styles.css";');
+   * // returns: true
+   *
+   * ImportParsingUtils.isSideEffectImport('import {A} from "./module";');
+   * // returns: false
+   * ```
    */
   static isSideEffectImport(importStatement: string): boolean {
     return /^import\s+["'][^"']+["']\s*;?$/.test(importStatement.trim());
   }
 
   /**
-   * Extract import part (everything between 'import' and 'from')
+   * Extracts the import specifiers part of an import statement.
+   *
+   * Returns everything between 'import' and 'from', excluding the 'type' modifier:
+   * - `import {A, B} from "m"` → `"{A, B}"`
+   * - `import type {A} from "m"` → `"{A}"`
+   * - `import * as X from "m"` → `"* as X"`
+   *
+   * @param importStatement - The import statement to parse
+   * @returns The import specifiers as a string
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.extractImportPart('import {A, B as C} from "m";');
+   * // returns: '{A, B as C}'
+   * ```
    */
   static extractImportPart(importStatement: string): string {
     const cleaned = importStatement.replace(/^import\s+(?:type\s+)?/, '');
@@ -61,7 +143,28 @@ export class ImportParsingUtils {
   }
 
   /**
-   * Parse named imports from import part string
+   * Parses named imports from a braced import specifiers string.
+   *
+   * Handles:
+   * - Simple names: `A` → `{name: 'A'}`
+   * - Aliases: `A as B` → `{name: 'A', alias: 'B'}`
+   * - Type modifiers: `type A` → `{name: 'A', isTypeOnly: true}`
+   * - Combined: `type A as B` → `{name: 'A', alias: 'B', isTypeOnly: true}`
+   *
+   * @param namedImportsStr - The content inside braces (e.g., "A, B as C")
+   * @param parentTypeOnly - If true, all imports inherit type-only status
+   * @returns Array of structured named import objects
+   * @throws {Error} If an import specifier is malformed
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.parseNamedImports('A, B as C, type D');
+   * // returns: [
+   * //   {name: 'A'},
+   * //   {name: 'B', alias: 'C'},
+   * //   {name: 'D', isTypeOnly: true}
+   * // ]
+   * ```
    */
   static parseNamedImports(
     namedImportsStr: string,
@@ -115,20 +218,18 @@ export class ImportParsingUtils {
     return imports;
   }
 
-  /**
-   * Extract all imported names from an import statement (for backward compatibility)
-   */
-  static extractAllImportedNames(importStatement: string): string[] {
+  private static extractNamesFromBracedImports(
+    importStatement: string,
+    filter: (name: string) => boolean,
+  ): string[] {
     const names: string[] = [];
 
-    // Extract from type-only imports: import type { A, B } from "module"
     const typeOnlyMatch = importStatement.match(/import\s+type\s+\{\s*([^}]+)\s*\}/);
     if (typeOnlyMatch?.[1]) {
       const typeList = typeOnlyMatch[1].split(',').map(t => t.trim());
       names.push(...typeList);
     }
 
-    // Extract from mixed imports: import [Default,] { a, type B, c } from "module"
     const mixedMatch = importStatement.match(/import\s+(?:\w+\s*,\s*)?\{\s*([^}]+)\s*\}/);
     if (mixedMatch?.[1]) {
       const items = mixedMatch[1].split(',');
@@ -137,7 +238,7 @@ export class ImportParsingUtils {
         const typeMatch = trimmed.match(/^type\s+(\w+)$/);
         if (typeMatch?.[1]) {
           names.push(typeMatch[1]);
-        } else if (/^\w+$/.test(trimmed)) {
+        } else if (filter(trimmed)) {
           names.push(trimmed);
         }
       }
@@ -147,39 +248,82 @@ export class ImportParsingUtils {
   }
 
   /**
-   * Extract only type imports from an import statement (for backward compatibility)
+   * Extracts all imported names from braced imports.
+   *
+   * Returns identifiers from both type-only and mixed imports.
+   * Does not handle default or namespace imports.
+   *
+   * @param importStatement - The import statement to parse
+   * @returns Array of imported identifier names
+   * @deprecated For backward compatibility only. Use parseImportToStructured for new code.
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.extractAllImportedNames('import {A, type B, C} from "m";');
+   * // returns: ['A', 'B', 'C']
+   * ```
+   */
+  static extractAllImportedNames(importStatement: string): string[] {
+    return this.extractNamesFromBracedImports(importStatement, name => /^\w+$/.test(name));
+  }
+
+  /**
+   * Extracts type imports from braced imports.
+   *
+   * Returns identifiers that are:
+   * - Explicitly marked with `type` modifier
+   * - Follow PascalCase naming convention (heuristic for backward compatibility)
+   *
+   * @param importStatement - The import statement to parse
+   * @param validateTypeName - Optional validator for type names
+   * @returns Array of type identifier names
+   * @deprecated For backward compatibility only. Use parseImportToStructured for new code.
+   *
+   * @example
+   * ```typescript
+   * ImportParsingUtils.extractImportedTypes('import {User, type Config, API} from "m";');
+   * // returns: ['User', 'Config', 'API'] (all PascalCase or explicitly typed)
+   * ```
    */
   static extractImportedTypes(
     importStatement: string,
     validateTypeName?: (name: string) => boolean,
   ): string[] {
-    const types: string[] = [];
-
-    const typeOnlyMatch = importStatement.match(/import\s+type\s+\{\s*([^}]+)\s*\}/);
-    if (typeOnlyMatch?.[1]) {
-      const typeList = typeOnlyMatch[1].split(',').map(t => t.trim());
-      types.push(...typeList);
-    }
-
-    const mixedMatch = importStatement.match(/import\s+(?:\w+\s*,\s*)?\{\s*([^}]+)\s*\}/);
-    if (mixedMatch?.[1]) {
-      const items = mixedMatch[1].split(',');
-      for (const item of items) {
-        const trimmed = item.trim();
-        const typeMatch = trimmed.match(/^type\s+(\w+)$/);
-        if (typeMatch?.[1]) {
-          types.push(typeMatch[1]);
-        } else if (/^[A-Z]\w*$/.test(trimmed)) {
-          types.push(trimmed);
-        }
-      }
-    }
-
+    const types = this.extractNamesFromBracedImports(importStatement, name =>
+      /^[A-Z]\w*$/.test(name),
+    );
     return validateTypeName ? types.filter(validateTypeName) : types;
   }
 
   /**
-   * Parse a single import statement into a StructuredImport
+   * Parses a single import statement into a structured object.
+   *
+   * Handles all import syntax forms:
+   * - Named: `import {A, B} from "m"`
+   * - Default: `import X from "m"`
+   * - Namespace: `import * as X from "m"`
+   * - Mixed: `import X, {A, B} from "m"`
+   * - Side-effect: `import "m"`
+   * - Type-only: `import type {A} from "m"`
+   * - Mixed types: `import {A, type B} from "m"`
+   *
+   * @param importStatement - The import statement to parse
+   * @returns Structured representation of the import
+   * @throws {Error} If the import statement is invalid or malformed
+   *
+   * @example
+   * ```typescript
+   * const result = ImportParsingUtils.parseImportToStructured(
+   *   'import React, {useState, type FC} from "react";'
+   * );
+   * // result = {
+   * //   source: 'react',
+   * //   defaultImport: 'React',
+   * //   namedImports: [{name: 'useState'}, {name: 'FC', isTypeOnly: true}],
+   * //   isTypeOnly: false,
+   * //   isSideEffect: false
+   * // }
+   * ```
    */
   static parseImportToStructured(importStatement: string): StructuredImport {
     const trimmed = importStatement.trim();
@@ -254,7 +398,23 @@ export class ImportParsingUtils {
   }
 
   /**
-   * Parse multiple import statements, handling concatenated statements
+   * Parses multiple import statements into structured objects.
+   *
+   * Automatically splits concatenated import statements before parsing.
+   * Filters out empty or whitespace-only statements.
+   *
+   * @param importStatements - Array of import statement strings (may be concatenated)
+   * @returns Array of structured import objects
+   * @throws {Error} If any import statement is invalid
+   *
+   * @example
+   * ```typescript
+   * const result = ImportParsingUtils.parseImportsToStructured([
+   *   'import {A} from "a";',
+   *   'import {B} from "b"; import {C} from "c";' // concatenated
+   * ]);
+   * // result has 3 structured imports for A, B, and C
+   * ```
    */
   static parseImportsToStructured(importStatements: readonly string[]): StructuredImport[] {
     const allStatements: string[] = [];

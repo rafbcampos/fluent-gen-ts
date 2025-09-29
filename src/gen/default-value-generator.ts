@@ -1,23 +1,11 @@
-/**
- * Default value generation utilities
- * Generates appropriate default values for TypeScript types
- */
-
-import type { TypeInfo } from '../core/types.js';
+import type { PropertyInfo, TypeInfo } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
 import { PrimitiveType } from './types.js';
 
-/**
- * Configuration for default value generation
- */
 export interface DefaultGeneratorConfig {
-  /** Whether to use default values */
   readonly useDefaults: boolean;
-  /** Custom default generators by type */
   readonly customDefaults?: Map<string, () => string>;
-  /** Maximum depth for recursive default generation */
   readonly maxDepth?: number;
-  /** Track visited types to prevent infinite recursion */
   readonly visitedTypes?: Set<string>;
 }
 
@@ -27,12 +15,13 @@ interface GenerationContext {
   readonly visited: Set<string>;
 }
 
-/**
- * Generates default values for TypeScript types
- */
 export class DefaultValueGenerator {
   /**
-   * Generates a defaults object for a type
+   * Generates a defaults object for object types with required properties.
+   * @param params.typeInfo - The type to generate defaults for
+   * @param params.config - Configuration for default generation
+   * @param params.depth - Current recursion depth (default: 0)
+   * @returns A string representation of the defaults object, or null if not applicable
    */
   generateDefaultsObject(params: {
     readonly typeInfo: TypeInfo;
@@ -65,7 +54,12 @@ export class DefaultValueGenerator {
   }
 
   /**
-   * Generates default value for a specific type
+   * Generates a default value for any TypeScript type.
+   * @param params.typeInfo - The type to generate a default for
+   * @param params.config - Optional configuration for custom defaults and depth limits
+   * @param params.depth - Current recursion depth (default: 0)
+   * @param params.contextPath - Optional path for tracking nested properties
+   * @returns A string representation of the default value
    */
   getDefaultValueForType(params: {
     readonly typeInfo: TypeInfo;
@@ -75,31 +69,25 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth = 0, contextPath } = params;
 
-    // Check for custom defaults first
     const customDefault = this.getCustomDefault(typeInfo, config);
     if (customDefault !== null) {
       return customDefault;
     }
 
-    // Check max depth
     const maxDepth = config?.maxDepth ?? 5;
     if (depth > maxDepth) {
       return this.getMaxDepthDefault(typeInfo.kind);
     }
 
-    // Generate defaults based on type kind
     return this.generateDefaultByKind({
       typeInfo,
-      ...(config && { config }),
+      ...(config !== undefined && { config }),
       depth,
       maxDepth,
       ...(contextPath !== undefined && { contextPath }),
     });
   }
 
-  /**
-   * Gets custom default if configured
-   */
   private getCustomDefault(typeInfo: TypeInfo, config?: DefaultGeneratorConfig): string | null {
     if (config?.customDefaults && typeInfo.kind === TypeKind.Primitive) {
       const customDefault = config.customDefaults.get(typeInfo.name);
@@ -110,9 +98,6 @@ export class DefaultValueGenerator {
     return null;
   }
 
-  /**
-   * Gets default value when max depth is exceeded
-   */
   private getMaxDepthDefault(kind: TypeKind): string {
     switch (kind) {
       case TypeKind.Object:
@@ -127,9 +112,6 @@ export class DefaultValueGenerator {
     }
   }
 
-  /**
-   * Generates default value based on type kind
-   */
   private generateDefaultByKind(params: {
     readonly typeInfo: TypeInfo;
     readonly config?: DefaultGeneratorConfig;
@@ -146,7 +128,7 @@ export class DefaultValueGenerator {
       case TypeKind.Array:
         return this.getArrayDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
           maxDepth,
         });
@@ -160,35 +142,32 @@ export class DefaultValueGenerator {
       case TypeKind.Union:
         return this.getUnionDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
         });
 
       case TypeKind.Object:
         return this.getObjectDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
           ...(contextPath !== undefined && { contextPath }),
         });
 
       case TypeKind.Reference:
-        // For references, try to generate a minimal valid object
-        // This would need access to the referenced type definition
-        // For now, return empty object
         return '{}';
 
       case TypeKind.Generic:
         return this.getGenericDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
         });
 
       case TypeKind.Tuple:
         return this.getTupleDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
           maxDepth,
         });
@@ -196,7 +175,7 @@ export class DefaultValueGenerator {
       case TypeKind.Intersection:
         return this.getIntersectionDefault({
           typeInfo,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
         });
 
@@ -214,9 +193,19 @@ export class DefaultValueGenerator {
     }
   }
 
-  /**
-   * Gets default value for array types
-   */
+  private escapeString(str: string): string {
+    return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  private shouldGenerateNonEmptyArray(elementDefault: string, elementType: TypeInfo): boolean {
+    return (
+      elementDefault !== 'undefined' &&
+      elementDefault !== '{}' &&
+      elementDefault !== '[]' &&
+      (elementType.kind === TypeKind.Primitive || elementType.kind === TypeKind.Literal)
+    );
+  }
+
   private getArrayDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Array }>;
     readonly config?: DefaultGeneratorConfig;
@@ -225,30 +214,19 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth, maxDepth } = params;
 
-    // Generate array with default element if possible
-    if (depth < maxDepth - 1) {
+    if (depth < maxDepth) {
       const elementDefault = this.getDefaultValueForType({
         typeInfo: typeInfo.elementType,
-        ...(config && { config }),
+        ...(config !== undefined && { config }),
         depth: depth + 1,
       });
-      // Only generate non-empty array for primitives and literals
-      if (
-        elementDefault !== 'undefined' &&
-        elementDefault !== '{}' &&
-        elementDefault !== '[]' &&
-        (typeInfo.elementType.kind === TypeKind.Primitive ||
-          typeInfo.elementType.kind === TypeKind.Literal)
-      ) {
+      if (this.shouldGenerateNonEmptyArray(elementDefault, typeInfo.elementType)) {
         return `[${elementDefault}]`;
       }
     }
     return '[]';
   }
 
-  /**
-   * Gets default value for object types
-   */
   private getObjectDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>;
     readonly config?: DefaultGeneratorConfig;
@@ -257,14 +235,12 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth, contextPath } = params;
 
-    // Check if this object type represents a global constructor
     if ('name' in typeInfo && typeof typeInfo.name === 'string') {
       if (this.isGlobalTypeConstructor(typeInfo.name)) {
         return this.getGlobalTypeDefault(typeInfo.name);
       }
     }
 
-    // Generate nested object defaults
     if (this.isObjectType(typeInfo) && typeInfo.properties.length > 0) {
       const context: GenerationContext = {
         config: config ?? { useDefaults: true },
@@ -282,9 +258,6 @@ export class DefaultValueGenerator {
     return '{}';
   }
 
-  /**
-   * Gets default value for tuple types
-   */
   private getTupleDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Tuple }>;
     readonly config?: DefaultGeneratorConfig;
@@ -293,12 +266,11 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth, maxDepth } = params;
 
-    // Generate tuple with default elements
-    if (depth < maxDepth - 1 && this.isTupleType(typeInfo)) {
+    if (depth < maxDepth && this.isTupleType(typeInfo)) {
       const defaults = typeInfo.elements.map(element =>
         this.getDefaultValueForType({
           typeInfo: element,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth: depth + 1,
         }),
       );
@@ -307,9 +279,6 @@ export class DefaultValueGenerator {
     return '[]';
   }
 
-  /**
-   * Gets default value for intersection types
-   */
   private getIntersectionDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Intersection }>;
     readonly config?: DefaultGeneratorConfig;
@@ -317,11 +286,10 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth } = params;
 
-    // For intersections, merge defaults from all types
     if (this.isIntersectionType(typeInfo) && typeInfo.intersectionTypes) {
       const merged = this.mergeIntersectionDefaults({
         types: typeInfo.intersectionTypes,
-        ...(config && { config }),
+        ...(config !== undefined && { config }),
         depth: depth + 1,
       });
       return merged || '{}';
@@ -329,9 +297,6 @@ export class DefaultValueGenerator {
     return '{}';
   }
 
-  /**
-   * Gets default value for generic types
-   */
   private getGenericDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Generic }>;
     readonly config?: DefaultGeneratorConfig;
@@ -339,17 +304,15 @@ export class DefaultValueGenerator {
   }): string {
     const { typeInfo, config, depth } = params;
 
-    // Handle specific generic types
     if (this.isGenericType(typeInfo)) {
       switch (typeInfo.name) {
         case 'Promise':
-          // Generate Promise.resolve with appropriate type argument default
           if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
             const firstTypeArg = typeInfo.typeArguments[0];
             if (firstTypeArg) {
               const innerDefault = this.getDefaultValueForType({
                 typeInfo: firstTypeArg,
-                ...(config && { config }),
+                ...(config !== undefined && { config }),
                 depth: depth + 1,
               });
               return `Promise.resolve(${innerDefault})`;
@@ -358,22 +321,15 @@ export class DefaultValueGenerator {
           return 'Promise.resolve(undefined)';
 
         case 'Array':
-          // Handle Array<T> generic
           if (typeInfo.typeArguments && typeInfo.typeArguments.length > 0) {
             const firstTypeArg = typeInfo.typeArguments[0];
             if (firstTypeArg) {
               const elementDefault = this.getDefaultValueForType({
                 typeInfo: firstTypeArg,
-                ...(config && { config }),
+                ...(config !== undefined && { config }),
                 depth: depth + 1,
               });
-              // Only generate non-empty array for primitives and literals
-              if (
-                elementDefault !== 'undefined' &&
-                elementDefault !== '{}' &&
-                elementDefault !== '[]' &&
-                (firstTypeArg.kind === TypeKind.Primitive || firstTypeArg.kind === TypeKind.Literal)
-              ) {
+              if (this.shouldGenerateNonEmptyArray(elementDefault, firstTypeArg)) {
                 return `[${elementDefault}]`;
               }
             }
@@ -392,16 +348,13 @@ export class DefaultValueGenerator {
         case 'WeakSet':
           return 'new WeakSet()';
 
-        // Node.js built-in generic types
         case 'EventEmitter':
           return 'new EventEmitter()';
 
         default:
-          // For other generics, check if it's a Node.js built-in type
           if (this.isNodeBuiltInType(typeInfo.name)) {
             return this.getNodeBuiltInDefault(typeInfo.name);
           }
-          // For other generics, check if it's a global constructor
           if (this.isGlobalTypeConstructor(typeInfo.name)) {
             return this.getGlobalTypeDefault(typeInfo.name);
           }
@@ -412,28 +365,22 @@ export class DefaultValueGenerator {
     return 'undefined';
   }
 
-  /**
-   * Gets default value for enum types
-   */
   private getEnumDefault(typeInfo: Extract<TypeInfo, { kind: TypeKind.Enum }>): string {
-    // Return first enum value if available
     if (this.isEnumType(typeInfo) && typeInfo.values && typeInfo.values.length > 0) {
       const firstValue = typeInfo.values[0];
-      return typeof firstValue === 'string' ? `"${firstValue}"` : String(firstValue);
+      if (typeof firstValue === 'string') {
+        return `"${this.escapeString(firstValue)}"`;
+      }
+      return String(firstValue);
     }
     return 'undefined';
   }
 
-  /**
-   * Gets default value for primitive types
-   */
   private getPrimitiveDefault(name: string): string {
-    // Check if this is a Node.js built-in type first (priority over global types)
     if (this.isNodeBuiltInType(name)) {
       return this.getNodeBuiltInDefault(name);
     }
 
-    // Check if this is a global type constructor
     if (this.isGlobalTypeConstructor(name)) {
       return this.getGlobalTypeDefault(name);
     }
@@ -465,20 +412,15 @@ export class DefaultValueGenerator {
     }
   }
 
-  /**
-   * Checks if a type name is a Node.js built-in type
-   */
   private isNodeBuiltInType(typeName: string): boolean {
     if (typeof typeName !== 'string' || typeName.trim() === '') {
       return false;
     }
 
-    // Handle NodeJS namespace types
     if (typeName.startsWith('NodeJS.')) {
       return this.isNodeJSNamespaceType(typeName);
     }
 
-    // Node.js built-in types that need special handling
     const nodeBuiltInTypes = [
       'EventEmitter',
       'Readable',
@@ -493,9 +435,6 @@ export class DefaultValueGenerator {
     return nodeBuiltInTypes.includes(typeName);
   }
 
-  /**
-   * Checks if a type is a NodeJS namespace type
-   */
   private isNodeJSNamespaceType(typeName: string): boolean {
     const nodeJSNamespaceTypes = [
       'NodeJS.ProcessEnv',
@@ -506,11 +445,7 @@ export class DefaultValueGenerator {
     return nodeJSNamespaceTypes.includes(typeName);
   }
 
-  /**
-   * Gets appropriate default value for Node.js built-in types
-   */
   private getNodeBuiltInDefault(typeName: string): string {
-    // Handle NodeJS namespace types
     if (typeName.startsWith('NodeJS.')) {
       switch (typeName) {
         case 'NodeJS.ProcessEnv':
@@ -522,7 +457,6 @@ export class DefaultValueGenerator {
       }
     }
 
-    // Handle regular Node.js types
     switch (typeName) {
       case 'EventEmitter':
         return 'new EventEmitter()';
@@ -545,26 +479,23 @@ export class DefaultValueGenerator {
     }
   }
 
-  /**
-   * Checks if a type name is a global constructor that doesn't need importing
-   */
   private isGlobalTypeConstructor(typeName: string): boolean {
     if (typeof typeName !== 'string' || typeName.trim() === '') {
       return false;
     }
 
     try {
-      return typeName in globalThis && typeof (globalThis as any)[typeName] === 'function';
+      if (!(typeName in globalThis)) {
+        return false;
+      }
+      const value = globalThis[typeName as keyof typeof globalThis];
+      return typeof value === 'function';
     } catch {
       return false;
     }
   }
 
-  /**
-   * Gets appropriate default value for global types
-   */
   private getGlobalTypeDefault(typeName: string): string {
-    // For Date and other global constructors, use constructor call with appropriate parameters
     switch (typeName) {
       case 'Date':
         return 'new Date()';
@@ -587,34 +518,37 @@ export class DefaultValueGenerator {
       case 'Promise':
         return 'Promise.resolve(undefined)';
       default:
-        // For other global constructors, try a basic constructor call
         try {
-          // Check if it exists in globalThis and is a constructor
           if (typeName in globalThis) {
-            const globalType = (globalThis as any)[typeName];
+            const globalType = globalThis[typeName as keyof typeof globalThis];
             if (typeof globalType === 'function') {
               return `new ${typeName}()`;
             }
           }
+          return 'undefined';
         } catch {
-          // If constructor fails, fall back to undefined
+          return 'undefined';
         }
-        return 'undefined';
     }
   }
 
-  /**
-   * Gets default value for literal types
-   */
   private getLiteralDefault(typeInfo: Extract<TypeInfo, { kind: TypeKind.Literal }>): string {
-    return typeof typeInfo.literal === 'string'
-      ? `"${typeInfo.literal}"`
-      : String(typeInfo.literal);
+    const { literal } = typeInfo;
+    if (typeof literal === 'string') {
+      return `"${this.escapeString(literal)}"`;
+    }
+    if (typeof literal === 'bigint') {
+      return `BigInt(${literal})`;
+    }
+    if (typeof literal === 'boolean' || typeof literal === 'number') {
+      return String(literal);
+    }
+    if (literal === null) {
+      return 'null';
+    }
+    return 'undefined';
   }
 
-  /**
-   * Gets default value for union types
-   */
   private getUnionDefault(params: {
     readonly typeInfo: Extract<TypeInfo, { kind: TypeKind.Union }>;
     readonly config?: DefaultGeneratorConfig;
@@ -638,7 +572,7 @@ export class DefaultValueGenerator {
       if (firstNonUndefined) {
         return this.getDefaultValueForType({
           typeInfo: firstNonUndefined,
-          ...(config && { config }),
+          ...(config !== undefined && { config }),
           depth,
         });
       }
@@ -646,31 +580,20 @@ export class DefaultValueGenerator {
     return 'undefined';
   }
 
-  /**
-   * Formats a property for the defaults object
-   */
   private formatDefaultProperty(params: { readonly name: string; readonly value: string }): string {
     const { name, value } = params;
-    // Use bracket notation for special characters in property names
     if (this.needsBracketNotation(name)) {
-      return `["${name}"]: ${value}`;
+      return `["${this.escapeString(name)}"]: ${value}`;
     }
     return `${name}: ${value}`;
   }
 
-  /**
-   * Checks if a property name needs bracket notation
-   */
   private needsBracketNotation(name: string): boolean {
-    // Check for special characters that require bracket notation
     return /[-.\s]/.test(name) || /^\d/.test(name);
   }
 
-  /**
-   * Generates defaults for object properties (shared logic)
-   */
   private generateObjectPropertiesDefaults(params: {
-    readonly properties: readonly any[];
+    readonly properties: readonly PropertyInfo[];
     readonly context: GenerationContext;
     readonly typeInfo: TypeInfo;
     readonly contextPath?: string;
@@ -679,7 +602,6 @@ export class DefaultValueGenerator {
     const { visited, config, depth } = context;
     const typeKey = this.getTypeKey(typeInfo, contextPath);
 
-    // Check for circular references
     if (visited.has(typeKey)) {
       return null;
     }
@@ -688,10 +610,8 @@ export class DefaultValueGenerator {
     const defaults: string[] = [];
 
     for (const prop of properties) {
-      // Only generate defaults for required properties
       if (prop.optional) continue;
 
-      // Build context path for nested properties
       const propContextPath = contextPath ? `${contextPath}.${prop.name}` : prop.name;
 
       const defaultValue = this.getDefaultValueForType({
@@ -716,9 +636,6 @@ export class DefaultValueGenerator {
     return defaults.length > 0 ? defaults.join(', ') : null;
   }
 
-  /**
-   * Merges defaults from intersection types
-   */
   private mergeIntersectionDefaults(params: {
     readonly types: readonly TypeInfo[];
     readonly config?: DefaultGeneratorConfig;
@@ -729,13 +646,12 @@ export class DefaultValueGenerator {
 
     for (const type of types) {
       if (type.kind === TypeKind.Object && this.isObjectType(type)) {
-        // Collect properties directly instead of parsing strings
         for (const prop of type.properties) {
           if (prop.optional) continue;
 
           const defaultValue = this.getDefaultValueForType({
             typeInfo: prop.type,
-            ...(config && { config }),
+            ...(config !== undefined && { config }),
             depth,
           });
 
@@ -755,12 +671,8 @@ export class DefaultValueGenerator {
     return `{ ${props.join(', ')} }`;
   }
 
-  /**
-   * Gets a unique key for a type to track circular references
-   */
   private getTypeKey(typeInfo: TypeInfo, context?: string): string {
     if (typeInfo.kind === TypeKind.Object && 'name' in typeInfo) {
-      // For __type objects (anonymous resolved types), include context to make them unique
       if (typeInfo.name === '__type' && context) {
         return `${typeInfo.kind}:${typeInfo.name}:${context}`;
       }
@@ -772,41 +684,26 @@ export class DefaultValueGenerator {
     return `${typeInfo.kind}:anonymous${context ? `:${context}` : ''}`;
   }
 
-  /**
-   * Type guard to check if typeInfo is an object type
-   */
   private isObjectType(
     typeInfo: TypeInfo,
   ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Object }> {
     return typeInfo.kind === TypeKind.Object;
   }
 
-  /**
-   * Type guard to check if typeInfo is a tuple type
-   */
   private isTupleType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Tuple }> {
     return typeInfo.kind === TypeKind.Tuple;
   }
 
-  /**
-   * Type guard to check if typeInfo is an intersection type
-   */
   private isIntersectionType(
     typeInfo: TypeInfo,
   ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Intersection }> {
     return typeInfo.kind === TypeKind.Intersection;
   }
 
-  /**
-   * Type guard to check if typeInfo is an enum type
-   */
   private isEnumType(typeInfo: TypeInfo): typeInfo is Extract<TypeInfo, { kind: TypeKind.Enum }> {
     return typeInfo.kind === TypeKind.Enum;
   }
 
-  /**
-   * Type guard to check if typeInfo is a generic type
-   */
   private isGenericType(
     typeInfo: TypeInfo,
   ): typeInfo is Extract<TypeInfo, { kind: TypeKind.Generic }> {

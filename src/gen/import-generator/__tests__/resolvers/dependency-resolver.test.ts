@@ -37,6 +37,7 @@ describe('DependencyResolver', () => {
   let resolver: DependencyResolver;
   let mockProject: {
     addSourceFileAtPath: ReturnType<typeof vi.fn>;
+    getSourceFiles: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -44,6 +45,11 @@ describe('DependencyResolver', () => {
 
     mockProject = {
       addSourceFileAtPath: vi.fn(),
+      getSourceFiles: vi.fn(() => [
+        {
+          forget: vi.fn(),
+        },
+      ]),
     };
 
     (Project as any).mockImplementation(() => mockProject);
@@ -120,6 +126,37 @@ describe('DependencyResolver', () => {
       expect(result[0]).toEqual({
         typeName: 'DefaultType',
         sourceFile: '/project/src/types.ts',
+      });
+    });
+
+    test('handles default imports in regular (non-type-only) imports', () => {
+      const resolvedType = createResolvedType('/project/src/index.ts');
+
+      const mockDefaultImport = { getText: () => 'Component' };
+      const mockImportDecl = {
+        getModuleSpecifierValue: () => './component',
+        getNamedImports: () => [],
+        isTypeOnly: () => false, // Regular import, not type-only
+        getDefaultImport: () => mockDefaultImport,
+      };
+
+      const mockIndexSourceFile = {
+        getImportDeclarations: () => [mockImportDecl],
+      };
+
+      const mockEmptySourceFile = createMockSourceFile([]);
+
+      mockProject.addSourceFileAtPath.mockImplementation((path: string) => {
+        if (path === '/project/src/index.ts') return mockIndexSourceFile;
+        return mockEmptySourceFile; // Transitive files have no imports
+      });
+
+      const result = resolver.discoverTransitiveDependencies(resolvedType);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        typeName: 'Component',
+        sourceFile: '/project/src/component.ts',
       });
     });
 

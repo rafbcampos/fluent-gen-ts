@@ -102,7 +102,7 @@ describe('CommonImportsGenerator', () => {
       }
     });
 
-    test('validates common import path', () => {
+    test('validates common import path and includes details in error message', () => {
       const config: ImportGeneratorConfig = {
         isGeneratingMultiple: true,
         hasExistingCommon: false,
@@ -114,7 +114,8 @@ describe('CommonImportsGenerator', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('Invalid common import path');
+        expect(result.error.message).toContain("Invalid common import path ''");
+        expect(result.error.message).toContain('Import path must be a non-empty string');
       }
     });
 
@@ -146,7 +147,8 @@ describe('CommonImportsGenerator', () => {
 
       expect(result.ok).toBe(false);
       if (isErr(result)) {
-        expect(result.error.message).toContain('Invalid common import path');
+        expect(result.error.message).toContain("Invalid common import path '   '");
+        expect(result.error.message).toContain('Import path cannot be empty or whitespace-only');
       }
     });
 
