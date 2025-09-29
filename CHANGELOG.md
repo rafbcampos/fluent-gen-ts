@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.8
+
+### Patch Changes
+
+- 6e8b912: Complete refactor
+
 ## 0.1.7
 
 ### Patch Changes
