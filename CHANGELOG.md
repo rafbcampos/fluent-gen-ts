@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.9
+
+### Patch Changes
+
+- 5251c27: Fix ESM config import
+
 ## 0.1.8
 
 ### Patch Changes
