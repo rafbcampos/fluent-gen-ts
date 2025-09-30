@@ -49,12 +49,15 @@ export type NestedContextGenerator<C extends BaseBuildContext> = (
 /**
  * Base context interface for builder operations
  * Provides information about the builder's position in the object hierarchy
+ *
+ * The __nestedContextGenerator__ uses a type assertion pattern to allow
+ * contexts to carry generators that produce their own extended type.
  */
 export interface BaseBuildContext {
   readonly parentId?: string;
   readonly parameterName?: string;
   readonly index?: number;
-  readonly __nestedContextGenerator__?: NestedContextGenerator<BaseBuildContext>;
+  readonly __nestedContextGenerator__?: NestedContextGenerator<any>;
   readonly [key: string]: unknown;
 }
 
@@ -80,6 +83,19 @@ export interface FluentBuilder<T, C extends BaseBuildContext = BaseBuildContext>
    * @param key - The property key to check
    */
   has<K extends keyof T>(key: K): boolean;
+}
+
+/**
+ * Metadata for mixed arrays containing both builders and static values
+ * Stores array once with indices marking builders and objects-with-builders
+ */
+interface MixedArrayMetadata {
+  /** The actual array with mixed content */
+  readonly array: readonly unknown[];
+  /** Set of indices where builders are located */
+  readonly builderIndices: ReadonlySet<number>;
+  /** Set of indices where objects containing builders are located */
+  readonly objectIndices: ReadonlySet<number>;
 }
 
 /**
@@ -153,51 +169,85 @@ export function createNestedContext<C extends BaseBuildContext>(params: {
   readonly index?: number;
 }): C {
   const { parentContext, parameterName, index } = params;
-  const contextParams = buildContextParams(parentContext, parameterName, index);
 
+  // Use custom generator if provided (runtime check ensures type safety)
   if (parentContext.__nestedContextGenerator__) {
-    return parentContext.__nestedContextGenerator__(contextParams) as C;
+    const contextParams = buildContextParams(parentContext, parameterName, index);
+    const generated = parentContext.__nestedContextGenerator__(contextParams);
+    // The generator is expected to return a context compatible with C
+    return generated as C;
   }
 
-  const baseContext: BaseBuildContext = {
-    ...parentContext,
-    parameterName,
-  };
+  // Default behavior: spread parent context and add new properties
+  // Create new context with all properties at once to avoid readonly assignment issues
+  const newContext: BaseBuildContext =
+    index !== undefined
+      ? {
+          ...parentContext,
+          parameterName,
+          index,
+        }
+      : {
+          ...parentContext,
+          parameterName,
+        };
 
-  if (index !== undefined) {
-    return { ...baseContext, index } as C;
-  }
+  // Type assertion is safe: we're creating an object that extends BaseBuildContext
+  // with all properties from C (via spread) plus our new properties
+  return newContext as C;
+}
 
-  return baseContext as C;
+/**
+ * Checks if value is a plain object (works across realms)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  // Plain objects have Object.prototype or null as prototype
+  return proto === Object.prototype || proto === null;
 }
 
 /**
  * Recursively resolves builders in a value
+ * Handles circular references by tracking visited objects
  * @param value - Value to resolve
  * @param context - Optional build context
+ * @param visited - WeakSet tracking visited objects to prevent infinite recursion
  * @returns Resolved value with all builders built
  */
-export function resolveValue<T, C extends BaseBuildContext>(value: unknown, context?: C): unknown {
+export function resolveValue<T, C extends BaseBuildContext>(
+  value: unknown,
+  context?: C,
+  visited: WeakSet<object> = new WeakSet(),
+): unknown {
   if (isFluentBuilder<T, C>(value)) {
     return value.build(context);
   }
 
   if (Array.isArray(value)) {
+    // Handle circular references
+    if (visited.has(value)) return value;
+    visited.add(value);
+
     return value.map((item, index) => {
       const arrayContext = context
         ? createNestedContext({ parentContext: context, parameterName: 'array', index })
         : undefined;
-      return resolveValue(item, arrayContext);
+      return resolveValue(item, arrayContext, visited);
     });
   }
 
-  if (value && typeof value === 'object' && value.constructor === Object) {
+  if (isPlainObject(value)) {
+    // Handle circular references
+    if (visited.has(value)) return value;
+    visited.add(value);
+
     const resolved: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
       const nestedContext = context
         ? createNestedContext({ parentContext: context, parameterName: key })
         : undefined;
-      resolved[key] = resolveValue(val, nestedContext);
+      resolved[key] = resolveValue(val, nestedContext, visited);
     }
     return resolved;
   }
@@ -212,8 +262,8 @@ export function resolveValue<T, C extends BaseBuildContext>(value: unknown, cont
 export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuildContext> {
   readonly [FLUENT_BUILDER_SYMBOL] = true;
   protected values: Partial<T> = {};
-  protected builders = new Map<string, FluentBuilder<unknown, C> | unknown>();
-  protected mixedArrays = new Map<string, unknown[]>();
+  protected builders = new Map<string, FluentBuilder<unknown, C> | Record<string, unknown>>();
+  protected mixedArrays = new Map<string, MixedArrayMetadata>();
   protected auxiliaryData = new Map<string, unknown>();
   protected context?: C;
 
@@ -237,27 +287,30 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
 
     if (isFluentBuilder(value)) {
       this.builders.set(keyStr, value);
-      // Clear from values if it was there
+      // Clear from values and mixed arrays if they were there
       delete this.values[key];
+      this.mixedArrays.delete(keyStr);
     } else if (Array.isArray(value)) {
       // Handle mixed arrays (builders + static values)
-      const hasBuilders = value.some(
-        item =>
-          isFluentBuilder(item) ||
-          (typeof item === 'object' && item !== null && this.containsBuilder(item)),
-      );
+      const builderIndices = new Set<number>();
+      const objectIndices = new Set<number>();
+
+      value.forEach((item, index) => {
+        if (isFluentBuilder(item)) {
+          builderIndices.add(index);
+        } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
+          objectIndices.add(index);
+        }
+      });
+
+      const hasBuilders = builderIndices.size > 0 || objectIndices.size > 0;
 
       if (hasBuilders) {
-        // Store the array for mixed processing
-        this.mixedArrays.set(keyStr, value);
-        // Store individual builders with indexed keys
-        value.forEach((item, index) => {
-          if (isFluentBuilder(item)) {
-            this.builders.set(`${keyStr}[${index}]`, item);
-          } else if (typeof item === 'object' && item !== null && this.containsBuilder(item)) {
-            // Store objects containing builders for recursive resolution
-            this.builders.set(`${keyStr}[${index}]`, item);
-          }
+        // Store array with metadata - single storage, O(1) lookups during build
+        this.mixedArrays.set(keyStr, {
+          array: value,
+          builderIndices,
+          objectIndices,
         });
         // Clear from values
         delete this.values[key];
@@ -267,14 +320,17 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
         // Clear from mixed arrays if it was there
         this.mixedArrays.delete(keyStr);
       }
+      // Always clear from builders for arrays (using new storage)
+      this.builders.delete(keyStr);
     } else if (typeof value === 'object' && value !== null && this.containsBuilder(value)) {
       // Object containing builders
-      this.builders.set(keyStr, value);
+      this.builders.set(keyStr, value as Record<string, unknown>);
       delete this.values[key];
+      this.mixedArrays.delete(keyStr);
     } else {
       // Static value
       this.values[key] = value as T[K];
-      // Clear from builders if it was there
+      // Clear from builders and mixed arrays if they were there
       this.builders.delete(keyStr);
       this.mixedArrays.delete(keyStr);
     }
@@ -283,22 +339,28 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
 
   /**
    * Checks if an object contains any builders recursively
+   * Handles circular references gracefully
    */
   private containsBuilder(obj: unknown, visited: WeakSet<object> = new WeakSet()): boolean {
     if (isFluentBuilder(obj)) return true;
 
-    // Handle circular references by tracking visited objects
-    if (obj && typeof obj === 'object') {
-      if (visited.has(obj)) return false; // Already checked this object
-      visited.add(obj);
-    }
+    if (!obj || typeof obj !== 'object') return false;
 
+    // Handle circular references
+    if (visited.has(obj)) return false;
+    visited.add(obj);
+
+    // Check arrays recursively
     if (Array.isArray(obj)) {
       return obj.some(item => this.containsBuilder(item, visited));
     }
-    if (obj && typeof obj === 'object' && obj.constructor === Object) {
+
+    // Only check plain objects (works across realms)
+    const proto = Object.getPrototypeOf(obj);
+    if (proto === Object.prototype || proto === null) {
       return Object.values(obj).some(val => this.containsBuilder(val, visited));
     }
+
     return false;
   }
 
@@ -313,21 +375,26 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
     // Apply explicitly set values
     Object.assign(result, this.values);
 
-    // Process mixed arrays
-    this.mixedArrays.forEach((array, key) => {
-      const resolvedArray: unknown[] = [];
-      array.forEach((item, index) => {
-        const indexedKey = `${key}[${index}]`;
+    // Process mixed arrays with O(1) Set lookups
+    this.mixedArrays.forEach((metadata, key) => {
+      const { array, builderIndices, objectIndices } = metadata;
+      const resolvedArray: unknown[] = Array.from({ length: array.length });
 
-        // Check if this index has a builder stored
-        if (this.builders.has(indexedKey)) {
-          const builderOrObj = this.builders.get(indexedKey);
+      array.forEach((item, index) => {
+        if (builderIndices.has(index)) {
+          // This is a builder - build it with context
           const nestedContext = context
             ? createNestedContext({ parentContext: context, parameterName: key, index })
             : undefined;
-          resolvedArray[index] = resolveValue(builderOrObj, nestedContext);
+          resolvedArray[index] = (item as FluentBuilder<unknown, C>).build(nestedContext);
+        } else if (objectIndices.has(index)) {
+          // This is an object containing builders - resolve recursively
+          const nestedContext = context
+            ? createNestedContext({ parentContext: context, parameterName: key, index })
+            : undefined;
+          resolvedArray[index] = resolveValue(item, nestedContext);
         } else {
-          // Static value
+          // Static value - copy as-is
           resolvedArray[index] = item;
         }
       });
@@ -336,11 +403,6 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
 
     // Process regular builders (non-array)
     this.builders.forEach((value, key) => {
-      // Skip indexed keys (they're handled in mixed arrays)
-      if (key.includes('[')) return;
-      // Skip keys that are in mixed arrays
-      if (this.mixedArrays.has(key)) return;
-
       const nestedContext = context
         ? createNestedContext({ parentContext: context, parameterName: key })
         : undefined;
@@ -410,21 +472,119 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
   /**
    * Get current value without building (useful for conditional logic and context generation)
    * Returns the raw value if static, or undefined if it's a builder (since builders are deferred)
+   * For mixed arrays, returns the array (which may contain unbuilt builders)
    * @param key - The property key
    * @returns The current value or undefined
    */
   public peek<K extends keyof T>(key: K): T[K] | undefined {
     const keyStr = String(key);
 
-    if (this.mixedArrays.has(keyStr)) {
-      return this.mixedArrays.get(keyStr) as T[K];
+    // Check mixed arrays first
+    const mixedArray = this.mixedArrays.get(keyStr);
+    if (mixedArray) {
+      return mixedArray.array as T[K];
     }
 
+    // Check builders - return undefined since they're not built yet
     if (this.builders.has(keyStr)) {
       return undefined;
     }
 
+    // Return static value
     return this.values[key];
+  }
+
+  /**
+   * Get builder for a property if one is set
+   * Returns undefined if the property is not a builder or not set
+   * @param key - The property key
+   * @returns The builder instance or undefined
+   */
+  public peekBuilder<K extends keyof T>(key: K): FluentBuilder<T[K], C> | undefined {
+    const keyStr = String(key);
+    const entry = this.builders.get(keyStr);
+    if (!entry) return undefined;
+
+    // Return only if it's actually a FluentBuilder
+    if (isFluentBuilder<T[K], C>(entry)) {
+      return entry;
+    }
+    return undefined;
+  }
+
+  /**
+   * Get the type of value stored for a property
+   * Useful for determining how to handle the property
+   * @param key - The property key
+   * @returns The value type: 'static', 'builder', 'mixed-array', or 'unset'
+   */
+  public getValueType<K extends keyof T>(key: K): 'static' | 'builder' | 'mixed-array' | 'unset' {
+    const keyStr = String(key);
+
+    if (this.mixedArrays.has(keyStr)) {
+      return 'mixed-array';
+    }
+
+    if (this.builders.has(keyStr)) {
+      return 'builder';
+    }
+
+    if (key in this.values) {
+      return 'static';
+    }
+
+    return 'unset';
+  }
+
+  /**
+   * Clones the builder, creating an independent copy with the same state
+   * Useful for creating variations or branching builder chains
+   * @returns A new builder instance with copied state
+   */
+  public clone(): this {
+    const cloned = new (this.constructor as new () => this)();
+    cloned.values = { ...this.values };
+    cloned.builders = new Map(this.builders);
+    cloned.mixedArrays = new Map(
+      Array.from(this.mixedArrays.entries()).map(([key, metadata]) => [
+        key,
+        {
+          array: metadata.array,
+          builderIndices: new Set(metadata.builderIndices),
+          objectIndices: new Set(metadata.objectIndices),
+        },
+      ]),
+    );
+    cloned.auxiliaryData = new Map(this.auxiliaryData);
+    if (this.context) {
+      cloned.context = this.context;
+    }
+    return cloned;
+  }
+
+  /**
+   * Unsets a property, removing it from the builder
+   * @param key - The property key to unset
+   * @returns The builder instance for chaining
+   */
+  public unset<K extends keyof T>(key: K): this {
+    const keyStr = String(key);
+    delete this.values[key];
+    this.builders.delete(keyStr);
+    this.mixedArrays.delete(keyStr);
+    return this;
+  }
+
+  /**
+   * Clears all properties from the builder, resetting it to initial state
+   * Auxiliary data is preserved
+   * @returns The builder instance for chaining
+   */
+  public clear(): this {
+    this.values = {};
+    this.builders.clear();
+    this.mixedArrays.clear();
+    return this;
   }
 
   /**

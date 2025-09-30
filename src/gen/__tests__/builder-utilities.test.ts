@@ -488,11 +488,17 @@ describe('builder-utilities', () => {
     });
 
     test('handles circular references gracefully', () => {
-      // This test verifies the current behavior (stack overflow) and documents the issue
+      // Circular references are now handled gracefully by tracking visited objects
       const obj: any = { id: 'test' };
       obj.self = obj;
 
-      expect(() => resolveValue(obj)).toThrow();
+      const result = resolveValue(obj);
+      expect(result).toBeDefined();
+      // A new object is created during resolution
+      expect(result).not.toBe(obj);
+      // The circular reference points to the original object (prevents infinite recursion)
+      expect((result as any).self).toBe(obj);
+      expect((result as any).id).toBe('test');
     });
 
     test('resolves without context', () => {
@@ -621,7 +627,8 @@ describe('builder-utilities', () => {
         builder.withMixed(['string', dataBuilder, { data: 100 }]);
 
         expect(builder['mixedArrays'].has('mixed')).toBe(true);
-        expect(builder['builders'].has('mixed[1]')).toBe(true);
+        const metadata = builder['mixedArrays'].get('mixed');
+        expect(metadata?.builderIndices.has(1)).toBe(true);
         expect('mixed' in builder['values']).toBe(false);
       });
 
@@ -1074,7 +1081,9 @@ describe('builder-utilities', () => {
       nullProtoObj.someProperty = 'value';
 
       const result = resolveValue(nullProtoObj);
-      expect(result).toBe(nullProtoObj); // Should return as-is
+      // Null-prototype objects are treated as plain objects and resolved
+      expect(result).toEqual(nullProtoObj);
+      expect(result).not.toBe(nullProtoObj); // A new object is created
     });
 
     test('handles very large arrays', () => {
