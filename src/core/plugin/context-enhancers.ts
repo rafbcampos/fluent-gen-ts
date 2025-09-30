@@ -17,7 +17,12 @@ import type {
   IntersectionTypeMatcher,
   TypeMatcherBuilder,
 } from './plugin-types.js';
-import { createTypeMatcher } from './type-matcher.js';
+import {
+  createTypeMatcher,
+  TypeDeepTransformer,
+  containsTypeDeep,
+  findTypesDeep,
+} from './type-matcher/index.js';
 import {
   isObjectTypeInfo,
   isUnionTypeInfo,
@@ -375,6 +380,18 @@ class TypeMatcherWrapper implements TypeMatcherInterface {
       return this.typeInfo.name;
     }
     return this.typeInfo.kind;
+  }
+
+  transformDeep(): TypeDeepTransformer {
+    return new TypeDeepTransformer(this.typeInfo);
+  }
+
+  containsDeep(matcher: TypeMatcher): boolean {
+    return containsTypeDeep(this.typeInfo, matcher);
+  }
+
+  findDeep(matcher: TypeMatcher): TypeInfo[] {
+    return findTypesDeep(this.typeInfo, matcher);
   }
 }
 

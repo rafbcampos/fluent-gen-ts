@@ -191,6 +191,205 @@ The plugin system provides powerful type matching capabilities:
 )
 ```
 
+### Deep Type Transformation
+
+The plugin system provides powerful APIs for recursively transforming types at
+any depth. This is especially useful when you need to modify types that appear
+nested in arrays, objects, or unions.
+
+#### Basic Deep Transformation
+
+Transform all occurrences of a type at any depth:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+  .setParameter(ctx =>
+    ctx.type
+      .transformDeep()
+      .replace(primitive('string'), 'string | { value: string }')
+      .toString()
+  )
+  .done()
+)
+```
+
+**Example transformations:**
+
+- `Array<string>` → `Array<string | { value: string }>`
+- `{ name: string, tags: Array<string> }` →
+  `{ name: string | { value: string }; tags: Array<string | { value: string }> }`
+- `{ data: { nested: { value: string } } }` →
+  `{ data: { nested: { value: string | { value: string } } } }`
+
+#### Deep Matching Utilities
+
+Check if a type contains another type at any depth:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  // Check if type contains string anywhere in its structure
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+
+  // Check if type contains specific object anywhere
+  .when(ctx => ctx.type.containsDeep(object('User')))
+
+  // Find all occurrences of a type
+  .when(ctx => {
+    const strings = ctx.type.findDeep(primitive('string'));
+    return strings.length > 2; // Only if more than 2 string types
+  })
+)
+```
+
+#### Advanced Deep Transformations
+
+Use `transformTypeDeep` for low-level control:
+
+```typescript
+import { transformTypeDeep } from 'fluent-gen-ts';
+
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+  .setParameter(ctx =>
+    transformTypeDeep(ctx.propertyType, {
+      // Transform primitive types
+      onPrimitive: (type) => {
+        if (type.name === 'string') {
+          return 'string | { value: string }';
+        }
+        if (type.name === 'number') {
+          return 'number | { value: number }';
+        }
+        return null; // null = preserve original
+      },
+
+      // Transform object types before processing properties
+      onObject: (type) => {
+        if (type.name === 'User') {
+          return 'EnhancedUser';
+        }
+        return null; // Continue with recursive transformation
+      },
+
+      // Transform array types
+      onArray: (type) => {
+        // Custom array transformation logic
+        return null;
+      },
+    })
+  )
+  .done()
+)
+```
+
+#### Chaining Multiple Transformations
+
+Chain multiple type replacements:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive('string', 'number')))
+  .setParameter(ctx =>
+    ctx.type
+      .transformDeep()
+      .replace(primitive('string'), 'ValidatedString')
+      .replace(primitive('number'), 'ValidatedNumber')
+      .toString()
+  )
+  .done()
+)
+```
+
+#### Conditional Deep Transformations
+
+Use predicates for fine-grained control:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive()))
+  .setParameter(ctx =>
+    ctx.type
+      .transformDeep()
+      .replaceIf(
+        (type, depth, path) => {
+          // Only transform primitives deeper than 2 levels
+          return depth > 2 && type.kind === TypeKind.Primitive;
+        },
+        'unknown'
+      )
+      .toString()
+  )
+  .done()
+)
+```
+
+#### Real-World Example: Nullable Wrapper Plugin
+
+Transform all types to be nullable at any depth:
+
+```typescript
+const nullablePlugin = createPlugin('nullable-wrapper', '1.0.0')
+  .transformPropertyMethods(builder =>
+    builder
+      .when(ctx =>
+        // Apply to any property containing primitives
+        ctx.type.containsDeep(primitive()),
+      )
+      .setParameter(ctx => {
+        // Wrap all primitive types in a union with null
+        return ctx.type
+          .transformDeep()
+          .replace(primitive(), type => {
+            const typeName = ctx.type.toString();
+            return `${typeName} | null`;
+          })
+          .toString();
+      })
+      .done(),
+  )
+  .build();
+```
+
+**Result:**
+
+```typescript
+// Before
+interface Product {
+  name: string;
+  tags: Array<string>;
+  metadata: { description: string };
+}
+
+// Generated builder accepts:
+withName(name: string | null)
+withTags(tags: Array<string | null>)
+withMetadata(metadata: { description: string | null })
+```
+
+#### Deep Transformation API Reference
+
+**TypeMatcherInterface Methods:**
+
+- `transformDeep()` - Get a fluent transformer for the type
+- `containsDeep(matcher)` - Check if type contains matching type at any depth
+- `findDeep(matcher)` - Find all matching types at any depth
+
+**TypeDeepTransformer Methods:**
+
+- `replace(matcher, replacement)` - Replace matching types
+- `replaceIf(predicate, replacement)` - Replace with custom predicate
+- `hasMatch(matcher)` - Check if contains matching type
+- `findMatches(matcher)` - Find all matching types
+- `toString()` - Execute transformations and return result
+
+**Standalone Functions:**
+
+- `transformTypeDeep(typeInfo, transformer)` - Low-level transformation
+- `containsTypeDeep(typeInfo, matcher)` - Check for nested matches
+- `findTypesDeep(typeInfo, matcher)` - Find all nested matches
+- `typeInfoToString(typeInfo)` - Convert TypeInfo to string
+
 ### Import Management
 
 Plugins can intelligently manage imports:

@@ -14,7 +14,7 @@ import {
   or,
   and,
   not,
-} from '../type-matcher.js';
+} from '../type-matcher/index.js';
 import { TypeKind } from '../../types.js';
 import type { TypeInfo } from '../../types.js';
 
@@ -266,8 +266,8 @@ describe('Type Matchers', () => {
       expect(matcher.match(stringArray)).toBe(false);
     });
 
-    test('should match array with builder function for element type', () => {
-      const matcher = array().of(builder => builder.primitive('string'));
+    test('should match array with chained matcher', () => {
+      const matcher = array().of(primitive('string'));
 
       const stringArray: TypeInfo = {
         kind: TypeKind.Array,
@@ -351,8 +351,8 @@ describe('Type Matchers', () => {
       expect(matcher.match(partialUnion)).toBe(false);
     });
 
-    test('should match union containing type from builder function', () => {
-      const matcher = union().containing(builder => builder.primitive('string'));
+    test('should match union containing type with chained matcher', () => {
+      const matcher = union().containing(primitive('string'));
 
       const unionType: TypeInfo = {
         kind: TypeKind.Union,

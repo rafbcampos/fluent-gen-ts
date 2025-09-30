@@ -1,6 +1,7 @@
 import type { Result } from '../result.js';
 import type { TypeInfo, PropertyInfo, ResolvedType, GeneratorOptions } from '../types.js';
 import type { Type, Symbol } from 'ts-morph';
+import type { TypeDeepTransformer } from './type-matcher/index.js';
 
 /**
  * Generic type for values that can be static or dynamically generated from context
@@ -153,6 +154,12 @@ export interface TypeMatcherInterface {
   matches(matcher: TypeMatcher): boolean;
   /** Get string representation of the type */
   toString(): string;
+  /** Get a deep type transformer for recursive type transformations */
+  transformDeep(): TypeDeepTransformer;
+  /** Check if type contains a matching type at any depth */
+  containsDeep(matcher: TypeMatcher): boolean;
+  /** Find all types matching the given matcher at any depth */
+  findDeep(matcher: TypeMatcher): import('../types.js').TypeInfo[];
 }
 
 /**

@@ -482,6 +482,9 @@ describe('PluginManager', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
           hasGeneric: () => false,
           getGenericConstraint: () => undefined,
@@ -528,6 +531,9 @@ describe('PluginManager', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
           hasGeneric: () => false,
           getGenericConstraint: () => undefined,
@@ -653,6 +659,9 @@ describe('PluginManager', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
         };
 
@@ -692,6 +701,9 @@ describe('PluginManager', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
         };
 

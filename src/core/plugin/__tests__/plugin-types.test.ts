@@ -223,6 +223,9 @@ describe('Plugin Types', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
           hasGeneric: () => false,
           getGenericConstraint: () => undefined,
@@ -275,6 +278,9 @@ describe('Plugin Types', () => {
             isGeneric: () => false,
             matches: () => false,
             toString: () => 'string',
+            transformDeep: () => ({}) as any,
+            containsDeep: () => false,
+            findDeep: () => [],
           },
         };
 

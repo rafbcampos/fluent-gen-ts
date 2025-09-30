@@ -104,7 +104,7 @@ export {
   or,
   and,
   not,
-} from './type-matcher.js';
+} from './type-matcher/index.js';
 export {
   PropertyMethodTransformBuilder,
   ValueTransformBuilder,

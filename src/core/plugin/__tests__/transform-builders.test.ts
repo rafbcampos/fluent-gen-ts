@@ -798,5 +798,8 @@ function mockTypeMatcher(shouldMatch = false, matchType = 'string') {
     isGeneric: () => false,
     matches: () => false,
     toString: () => matchType,
+    transformDeep: () => ({}) as any,
+    containsDeep: () => false,
+    findDeep: () => [],
   };
 }
