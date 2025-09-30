@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.13
+
+### Patch Changes
+
+- 0a71212: Fix issues with deep transform API
+
 ## 0.1.12
 
 ### Patch Changes
