@@ -429,6 +429,234 @@ not(matcher: TypeMatcher): TypeMatcher
 
 ---
 
+## Deep Type Transformation
+
+Utilities for recursively transforming types at any depth in the type tree.
+
+### typeInfoToString
+
+```typescript
+typeInfoToString(typeInfo: TypeInfo): string
+```
+
+Converts a TypeInfo structure to its string representation.
+
+**Parameters:**
+
+- `typeInfo`: The TypeInfo object to convert
+
+**Returns:** String representation of the type
+
+**Example:**
+
+```typescript
+const stringType: TypeInfo = { kind: TypeKind.Primitive, name: 'string' };
+typeInfoToString(stringType); // "string"
+
+const arrayType: TypeInfo = {
+  kind: TypeKind.Array,
+  elementType: { kind: TypeKind.Primitive, name: 'number' },
+};
+typeInfoToString(arrayType); // "Array<number>"
+```
+
+### transformTypeDeep
+
+```typescript
+transformTypeDeep(typeInfo: TypeInfo, transformer: TypeTransformer): string
+```
+
+Recursively transforms a TypeInfo structure using provided transformation
+handlers.
+
+**Parameters:**
+
+- `typeInfo`: The type to transform
+- `transformer`: Object with transformation handlers for different type kinds
+
+**Returns:** String representation of the transformed type
+
+**Example:**
+
+```typescript
+import { transformTypeDeep, primitive } from 'fluent-gen-ts';
+
+const result = transformTypeDeep(propertyType, {
+  onPrimitive: type => {
+    if (primitive('string').match(type)) {
+      return 'string | { value: string }';
+    }
+    return null; // preserve original
+  },
+});
+```
+
+### TypeTransformer
+
+Interface for type transformation handlers:
+
+```typescript
+interface TypeTransformer {
+  onPrimitive?: (
+    type: TypeInfo & { kind: TypeKind.Primitive },
+  ) => string | TypeInfo | null;
+  onObject?: (
+    type: TypeInfo & { kind: TypeKind.Object },
+  ) => string | TypeInfo | null;
+  onArray?: (
+    type: TypeInfo & { kind: TypeKind.Array },
+  ) => string | TypeInfo | null;
+  onUnion?: (
+    type: TypeInfo & { kind: TypeKind.Union },
+  ) => string | TypeInfo | null;
+  onIntersection?: (
+    type: TypeInfo & { kind: TypeKind.Intersection },
+  ) => string | TypeInfo | null;
+  onGeneric?: (
+    type: TypeInfo & { kind: TypeKind.Generic },
+  ) => string | TypeInfo | null;
+  onLiteral?: (
+    type: TypeInfo & { kind: TypeKind.Literal },
+  ) => string | TypeInfo | null;
+  onReference?: (
+    type: TypeInfo & { kind: TypeKind.Reference },
+  ) => string | TypeInfo | null;
+  onTuple?: (
+    type: TypeInfo & { kind: TypeKind.Tuple },
+  ) => string | TypeInfo | null;
+  onAny?: (type: TypeInfo) => string | TypeInfo | null;
+}
+```
+
+### containsTypeDeep
+
+```typescript
+containsTypeDeep(typeInfo: TypeInfo, matcher: TypeMatcher): boolean
+```
+
+Checks if a type contains a matching type at any depth.
+
+**Parameters:**
+
+- `typeInfo`: The type to search
+- `matcher`: Type matcher to search for
+
+**Returns:** `true` if any nested type matches
+
+**Example:**
+
+```typescript
+import { containsTypeDeep, primitive } from 'fluent-gen-ts';
+
+const hasString = containsTypeDeep(complexType, primitive('string'));
+if (hasString) {
+  // Type contains string somewhere in its structure
+}
+```
+
+### findTypesDeep
+
+```typescript
+findTypesDeep(typeInfo: TypeInfo, matcher: TypeMatcher): TypeInfo[]
+```
+
+Finds all types matching the given matcher at any depth.
+
+**Parameters:**
+
+- `typeInfo`: The type to search
+- `matcher`: Type matcher to search for
+
+**Returns:** Array of all matching TypeInfo objects
+
+**Example:**
+
+```typescript
+import { findTypesDeep, primitive } from 'fluent-gen-ts';
+
+const allStrings = findTypesDeep(complexType, primitive('string'));
+console.log(`Found ${allStrings.length} string types`);
+```
+
+### TypeDeepTransformer
+
+Fluent API for chained type transformations.
+
+#### Constructor
+
+```typescript
+new TypeDeepTransformer(typeInfo: TypeInfo)
+```
+
+#### Methods
+
+##### replace
+
+```typescript
+replace(
+  matcher: TypeMatcher,
+  replacement: string | ((type: TypeInfo) => string)
+): TypeDeepTransformer
+```
+
+Replaces all occurrences of types matching the given matcher.
+
+**Example:**
+
+```typescript
+const transformer = new TypeDeepTransformer(propertyType);
+const result = transformer
+  .replace(primitive('string'), 'string | { value: string }')
+  .replace(primitive('number'), 'number | { value: number }')
+  .toString();
+```
+
+##### replaceIf
+
+```typescript
+replaceIf(
+  predicate: (type: TypeInfo, depth: number, path: readonly string[]) => boolean,
+  replacement: string | ((type: TypeInfo) => string)
+): TypeDeepTransformer
+```
+
+Replaces types matching a custom predicate.
+
+**Example:**
+
+```typescript
+transformer.replaceIf(
+  (type, depth) => depth > 2 && type.kind === TypeKind.Primitive,
+  'unknown',
+);
+```
+
+##### hasMatch
+
+```typescript
+hasMatch(matcher: TypeMatcher): boolean
+```
+
+Checks if the type contains a match for the given matcher.
+
+##### findMatches
+
+```typescript
+findMatches(matcher: TypeMatcher): TypeInfo[]
+```
+
+Finds all types matching the given matcher.
+
+##### toString
+
+```typescript
+toString(): string
+```
+
+Executes transformations and returns the resulting type string.
+
+---
+
 ## Transform Builders
 
 ### PropertyMethodTransformBuilder

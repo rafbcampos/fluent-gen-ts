@@ -76,6 +76,10 @@ export type {
   UnionTypeMatcher,
   IntersectionTypeMatcher,
 
+  // Type Transformation Types
+  TypeTransformer,
+  TypeTransformContext,
+
   // Transform Builder Types
   PropertyMethodTransformRule,
   ValueTransformRule,
@@ -104,6 +108,12 @@ export {
   or,
   and,
   not,
+  // Deep transformation utilities
+  typeInfoToString,
+  transformTypeDeep,
+  containsTypeDeep,
+  findTypesDeep,
+  TypeDeepTransformer,
 } from './type-matcher/index.js';
 export {
   PropertyMethodTransformBuilder,

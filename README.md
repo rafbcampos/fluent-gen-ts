@@ -21,8 +21,8 @@ provide full IntelliSense support and type safety at every step.
 - **🔄 Nested Builder Support** - Seamless composition of complex objects with
   deferred builds
 - **🧩 Sophisticated Plugin System** - Fluent API for creating powerful,
-  type-safe plugins with advanced matching, custom methods, and auxiliary data
-  storage
+  type-safe plugins with advanced matching, deep type transformation, custom
+  methods, and auxiliary data storage
 - **🎨 Flexible Naming Strategies** - Configurable filename generation with
   predefined conventions or custom transform functions
 - **⚡ CLI & Programmatic API** - Use via command line or integrate into your
@@ -336,11 +336,64 @@ export default plugin;
 }
 ```
 
+### Deep Type Transformation
+
+Transform types recursively at any depth with powerful utilities:
+
+```typescript
+import {
+  createPlugin,
+  primitive,
+  transformTypeDeep,
+  containsTypeDeep,
+  TypeDeepTransformer,
+} from 'fluent-gen-ts';
+
+const deepTransformPlugin = createPlugin('deep-transform', '1.0.0')
+  .transformPropertyMethods(builder =>
+    builder
+      // Use fluent transformer API
+      .when(ctx => ctx.type.containsDeep(primitive('string')))
+      .setParameter(ctx =>
+        ctx.type
+          .transformDeep()
+          .replace(primitive('string'), 'string | { value: string }')
+          .replace(primitive('number'), 'number | { value: number }')
+          .toString(),
+      )
+      .done()
+
+      // Or use low-level API for advanced control
+      .when(ctx => ctx.type.containsDeep(primitive('Date')))
+      .setParameter(ctx =>
+        transformTypeDeep(ctx.propertyType, {
+          onPrimitive: type => {
+            if (primitive('Date').match(type)) {
+              return 'Date | string | number';
+            }
+            return null;
+          },
+        }),
+      )
+      .done(),
+  )
+  .build();
+```
+
+**Transformation Examples:**
+
+- `Array<string>` → `Array<string | { value: string }>`
+- `{ name: string, tags: Array<string> }` →
+  `{ name: string | { value: string }; tags: Array<string | { value: string }> }`
+- `{ data: { nested: { value: string } } }` →
+  `{ data: { nested: { value: string | { value: string } } } }`
+
 **Key Plugin Features:**
 
 - 🎯 **Fluent Plugin Builder API** - Chainable, type-safe plugin creation
 - 🔍 **Advanced Type Matching** - Match primitives, objects, unions, arrays,
   generics
+- 🔄 **Deep Type Transformation** - Recursively transform types at any depth
 - 📦 **Auxiliary Data Storage** - Store templates, functions, and custom data
 - 🏗️ **Build Method Transformation** - Insert custom logic before/after build
 - 📝 **Custom Method Generation** - Add domain-specific methods to builders

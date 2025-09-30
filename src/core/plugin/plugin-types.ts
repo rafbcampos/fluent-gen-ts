@@ -1,7 +1,11 @@
 import type { Result } from '../result.js';
 import type { TypeInfo, PropertyInfo, ResolvedType, GeneratorOptions } from '../types.js';
 import type { Type, Symbol } from 'ts-morph';
-import type { TypeDeepTransformer } from './type-matcher/index.js';
+import type {
+  TypeDeepTransformer,
+  TypeTransformer as TypeTransformerImport,
+  TypeTransformContext as TypeTransformContextImport,
+} from './type-matcher/index.js';
 
 /**
  * Generic type for values that can be static or dynamically generated from context
@@ -554,3 +558,9 @@ export interface CustomMethodDefinition {
   readonly implementation: StaticOrDynamic<string, BuilderContext>;
   readonly jsDoc?: string;
 }
+
+/**
+ * Re-export type transformation types from type-matcher
+ */
+export type TypeTransformer = TypeTransformerImport;
+export type TypeTransformContext = TypeTransformContextImport;

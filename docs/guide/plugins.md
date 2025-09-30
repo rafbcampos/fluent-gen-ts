@@ -247,18 +247,18 @@ Check if a type contains another type at any depth:
 Use `transformTypeDeep` for low-level control:
 
 ```typescript
-import { transformTypeDeep } from 'fluent-gen-ts';
+import { transformTypeDeep, primitive, object } from 'fluent-gen-ts';
 
 .transformPropertyMethods(builder => builder
   .when(ctx => ctx.type.containsDeep(primitive('string')))
   .setParameter(ctx =>
     transformTypeDeep(ctx.propertyType, {
-      // Transform primitive types
+      // Transform primitive types - use matchers instead of string checks
       onPrimitive: (type) => {
-        if (type.name === 'string') {
+        if (primitive('string').match(type)) {
           return 'string | { value: string }';
         }
-        if (type.name === 'number') {
+        if (primitive('number').match(type)) {
           return 'number | { value: number }';
         }
         return null; // null = preserve original
@@ -266,7 +266,7 @@ import { transformTypeDeep } from 'fluent-gen-ts';
 
       // Transform object types before processing properties
       onObject: (type) => {
-        if (type.name === 'User') {
+        if (object('User').match(type)) {
           return 'EnhancedUser';
         }
         return null; // Continue with recursive transformation

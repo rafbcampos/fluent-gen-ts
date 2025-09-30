@@ -20,9 +20,11 @@ import { typeInfoToString } from './type-to-string.js';
  *
  * @example
  * ```typescript
+ * import { primitive } from './matchers/primitive-matcher.js';
+ *
  * const transformer: TypeTransformer = {
  *   onPrimitive: (type) => {
- *     if (type.name === 'string') {
+ *     if (primitive('string').match(type)) {
  *       return 'string | { value: string }';
  *     }
  *     return null; // preserve other primitives
@@ -76,10 +78,12 @@ export interface TypeTransformer {
  *
  * @example
  * ```typescript
+ * import { primitive } from './matchers/primitive-matcher.js';
+ *
  * // Transform all string types to include a union with { value: string }
  * const result = transformTypeDeep(propertyType, {
  *   onPrimitive: (type) => {
- *     if (type.name === 'string') {
+ *     if (primitive('string').match(type)) {
  *       return 'string | { value: string }';
  *     }
  *     return null;
