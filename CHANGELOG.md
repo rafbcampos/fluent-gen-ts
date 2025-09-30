@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.12
+
+### Patch Changes
+
+- 5183453: Missing plugin exports
+
 ## 0.1.11
 
 ### Patch Changes
