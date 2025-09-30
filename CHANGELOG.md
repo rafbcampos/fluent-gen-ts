@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.11
+
+### Patch Changes
+
+- 3cbb2f8: Deep transformers
+
 ## 0.1.10
 
 ### Patch Changes
