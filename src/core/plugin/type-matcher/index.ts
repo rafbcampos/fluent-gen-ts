@@ -32,7 +32,11 @@ export { createTypeMatcher } from './matcher-builder.js';
 
 // Transformation utilities
 export { typeInfoToString } from './transformation/type-to-string.js';
-export { transformTypeDeep, type TypeTransformer } from './transformation/transform-deep.js';
+export {
+  transformTypeDeep,
+  type TypeTransformer,
+  type TransformTypeDeepOptions,
+} from './transformation/transform-deep.js';
 export { containsTypeDeep, findTypesDeep } from './transformation/deep-matching.js';
 export {
   TypeDeepTransformer,

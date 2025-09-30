@@ -11,6 +11,18 @@ import {
 import { typeInfoToString } from './type-to-string.js';
 
 /**
+ * Options for transformTypeDeep function
+ */
+export interface TransformTypeDeepOptions {
+  /** Whether to include FluentBuilder unions for named object types */
+  readonly includeBuilderTypes?: boolean;
+  /** Name of the FluentBuilder type (default: 'FluentBuilder') */
+  readonly builderTypeName?: string;
+  /** Name of the context type (default: 'BaseBuildContext') */
+  readonly contextTypeName?: string;
+}
+
+/**
  * Transformer interface for deep type transformations
  *
  * Each handler receives a type of specific kind and can return:
@@ -74,6 +86,7 @@ export interface TypeTransformer {
  *
  * @param typeInfo - The type to transform
  * @param transformer - Transformation handlers for different type kinds
+ * @param options - Options for transformation (builder types, etc.)
  * @returns String representation of the transformed type
  *
  * @example
@@ -88,14 +101,42 @@ export interface TypeTransformer {
  *     }
  *     return null;
  *   }
- * });
+ * }, { includeBuilderTypes: true });
  *
  * // For Array<string>, this produces: Array<string | { value: string }>
  * // For { a: string, b: { c: string } }, this produces:
  * // { a: string | { value: string }; b: { c: string | { value: string } } }
  * ```
  */
-export function transformTypeDeep(typeInfo: TypeInfo, transformer: TypeTransformer): string {
+export function transformTypeDeep(
+  typeInfo: TypeInfo,
+  transformer: TypeTransformer,
+  options?: TransformTypeDeepOptions,
+): string {
+  const builderTypeName = options?.builderTypeName ?? 'FluentBuilder';
+  const contextTypeName = options?.contextTypeName ?? 'BaseBuildContext';
+  const includeBuilderTypes = options?.includeBuilderTypes ?? false;
+
+  /**
+   * Checks if a type name is valid for importing (not __type or unknown)
+   */
+  function isValidImportableTypeName(name: string | undefined): boolean {
+    if (!name) return false;
+    return name !== '__type' && name !== 'unknown' && name.trim() !== '';
+  }
+
+  /**
+   * Checks if a type is eligible for builder generation
+   */
+  function isTypeBuilderEligible(type: TypeInfo): boolean {
+    return (
+      type.kind === TypeKind.Object &&
+      hasName(type) &&
+      type.name !== undefined &&
+      isValidImportableTypeName(type.name)
+    );
+  }
+
   function processType(type: TypeInfo): string {
     // Try fallback transformer first if defined
     if (transformer.onAny) {
@@ -142,13 +183,22 @@ export function transformTypeDeep(typeInfo: TypeInfo, transformer: TypeTransform
 
         // Named object with generics
         if (hasName(type) && type.name) {
+          let result: string;
           if (hasGenericParams(type) && type.genericParams.length > 0) {
             const params = type.genericParams
               .map(p => ('name' in p && typeof p.name === 'string' ? p.name : 'unknown'))
               .join(', ');
-            return `${type.name}<${params}>`;
+            result = `${type.name}<${params}>`;
+          } else {
+            result = type.name;
           }
-          return type.name;
+
+          // Add FluentBuilder union for eligible named types
+          if (includeBuilderTypes && isTypeBuilderEligible(type)) {
+            result = `${result} | ${builderTypeName}<${type.name}, ${contextTypeName}>`;
+          }
+
+          return result;
         }
 
         // Anonymous object - recursively process properties
@@ -160,7 +210,18 @@ export function transformTypeDeep(typeInfo: TypeInfo, transformer: TypeTransform
           .map(prop => {
             const optional = prop.optional ? '?' : '';
             const readonly = prop.readonly ? 'readonly ' : '';
-            const propType = processType(prop.type);
+            let propType = processType(prop.type);
+
+            // Add FluentBuilder union for named object types if enabled and not already added
+            if (includeBuilderTypes && isTypeBuilderEligible(prop.type)) {
+              const typeName = (prop.type as { name?: string }).name;
+              const builderUnion = `${builderTypeName}<${typeName}, ${contextTypeName}>`;
+              // Only add if not already present (avoid duplicates)
+              if (typeName && !propType.includes(builderUnion)) {
+                propType = `${propType} | ${builderUnion}`;
+              }
+            }
+
             return `${readonly}${prop.name}${optional}: ${propType}`;
           })
           .join('; ');

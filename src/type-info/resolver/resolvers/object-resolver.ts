@@ -72,7 +72,9 @@ export class ObjectResolver {
 
     return ok({
       kind: TypeKind.Object,
-      ...(objectName && objectName !== '__type' && { name: objectName }),
+      ...(objectName &&
+        objectName !== '__type' &&
+        objectName !== 'unknown' && { name: objectName }),
       properties: properties.value,
       ...(typeArguments && typeArguments.length > 0 && { typeArguments }),
       ...(genericParams.length > 0 && { genericParams }),

@@ -1,6 +1,10 @@
 import type { TypeInfo } from '../../../types.js';
 import type { TypeMatcher } from '../matcher-base.js';
-import { type TypeTransformer, transformTypeDeep } from './transform-deep.js';
+import {
+  type TypeTransformer,
+  type TransformTypeDeepOptions,
+  transformTypeDeep,
+} from './transform-deep.js';
 import { containsTypeDeep, findTypesDeep } from './deep-matching.js';
 
 /**
@@ -23,6 +27,7 @@ export interface TypeTransformContext {
  * const transformer = new TypeDeepTransformer(propertyType)
  *   .replace(primitive('string'), 'string | { value: string }')
  *   .replace(primitive('number'), 'number | { value: number }')
+ *   .withBuilderTypes() // Enable FluentBuilder unions
  *   .toString();
  * ```
  */
@@ -31,6 +36,7 @@ export class TypeDeepTransformer {
     predicate: (ctx: TypeTransformContext) => boolean;
     replacement: string | ((type: TypeInfo) => string);
   }> = [];
+  private options: TransformTypeDeepOptions = { includeBuilderTypes: true };
 
   constructor(private readonly typeInfo: TypeInfo) {}
 
@@ -85,6 +91,17 @@ export class TypeDeepTransformer {
   }
 
   /**
+   * Configure builder type generation options
+   *
+   * @param options - Options for builder type generation
+   * @returns This transformer for chaining
+   */
+  withOptions(options: TransformTypeDeepOptions): TypeDeepTransformer {
+    this.options = { ...this.options, ...options };
+    return this;
+  }
+
+  /**
    * Execute transformations and return the resulting type string
    *
    * @returns Transformed type as a string
@@ -111,7 +128,7 @@ export class TypeDeepTransformer {
       },
     };
 
-    return transformTypeDeep(this.typeInfo, transformer);
+    return transformTypeDeep(this.typeInfo, transformer, this.options);
   }
 
   /**
