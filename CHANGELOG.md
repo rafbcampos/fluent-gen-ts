@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.14
+
+### Patch Changes
+
+- ab101c3: Fix nested builder detection on plugins
+
 ## 0.1.13
 
 ### Patch Changes
