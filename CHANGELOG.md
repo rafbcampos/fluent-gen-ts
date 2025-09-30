@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.10
+
+### Patch Changes
+
+- aedf3ad: Builder-utilities refactor
+
 ## 0.1.9
 
 ### Patch Changes
