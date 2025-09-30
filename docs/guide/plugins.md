@@ -35,7 +35,7 @@ const plugin = createPlugin('my-awesome-plugin', '1.0.0')
   .addMethod(method =>
     method
       .name('withRandomId')
-      .param('prefix', 'string', { defaultValue: '"user"' })
+      .parameter('prefix', 'string', { defaultValue: '"user"' })
       .returns('this')
       .implementation(
         `
@@ -107,8 +107,10 @@ const plugin = createPlugin('comprehensive-plugin', '1.0.0')
 
   // Add multiple custom methods
   .addMethod(method =>
-    method.name('withValidatedEmail').param('email', 'string').returns('this')
-      .implementation(`
+    method
+      .name('withValidatedEmail')
+      .parameter('email', 'string')
+      .returns('this').implementation(`
       if (!isEmail(email)) {
         throw new Error('Invalid email format');
       }
@@ -197,30 +199,61 @@ The plugin system provides powerful APIs for recursively transforming types at
 any depth. This is especially useful when you need to modify types that appear
 nested in arrays, objects, or unions.
 
-#### Basic Deep Transformation
+#### Understanding Function-Based Parameter Transformations
 
-Transform all occurrences of a type at any depth:
+The `setParameter` method accepts either a static string OR a function that
+receives the `PropertyMethodContext` and returns a transformed type string:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  // Static string parameter type
+  .when(ctx => ctx.property.name === 'email')
+  .setParameter('string | null')
+  .done()
+
+  // Dynamic function-based parameter type
+  .when(ctx => ctx.property.name === 'name')
+  .setParameter(ctx => {
+    // Access full context including type utilities
+    return `${ctx.originalTypeString} | TaggedValue<${ctx.originalTypeString}>`;
+  })
+  .done()
+)
+```
+
+#### Basic Deep Transformation with TypeDeepTransformer
+
+Transform all occurrences of a type at any depth using the fluent
+`transformDeep()` API:
 
 ```typescript
 .transformPropertyMethods(builder => builder
   .when(ctx => ctx.type.containsDeep(primitive('string')))
   .setParameter(ctx =>
+    // Use ctx.type.transformDeep() to get a TypeDeepTransformer
     ctx.type
       .transformDeep()
       .replace(primitive('string'), 'string | { value: string }')
-      .toString()
+      .toString() // Execute transformations and return result string
   )
   .done()
 )
 ```
 
+**How it works:**
+
+1. `ctx.type.transformDeep()` returns a `TypeDeepTransformer` instance
+2. Chain `.replace()` calls to define transformations
+3. Call `.toString()` to execute transformations and get the result string
+
 **Example transformations:**
 
-- `Array<string>` → `Array<string | { value: string }>`
-- `{ name: string, tags: Array<string> }` →
-  `{ name: string | { value: string }; tags: Array<string | { value: string }> }`
-- `{ data: { nested: { value: string } } }` →
-  `{ data: { nested: { value: string | { value: string } } } }`
+| Input Type                                | Transformed Output                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------- |
+| `string`                                  | `string \| { value: string }`                                                     |
+| `Array<string>`                           | `Array<string \| { value: string }>`                                              |
+| `{ name: string, tags: Array<string> }`   | `{ name: string \| { value: string }; tags: Array<string \| { value: string }> }` |
+| `{ data: { nested: { value: string } } }` | `{ data: { nested: { value: string \| { value: string } } } }`                    |
 
 #### Deep Matching Utilities
 
@@ -242,47 +275,6 @@ Check if a type contains another type at any depth:
 )
 ```
 
-#### Advanced Deep Transformations
-
-Use `transformTypeDeep` for low-level control:
-
-```typescript
-import { transformTypeDeep, primitive, object } from 'fluent-gen-ts';
-
-.transformPropertyMethods(builder => builder
-  .when(ctx => ctx.type.containsDeep(primitive('string')))
-  .setParameter(ctx =>
-    transformTypeDeep(ctx.propertyType, {
-      // Transform primitive types - use matchers instead of string checks
-      onPrimitive: (type) => {
-        if (primitive('string').match(type)) {
-          return 'string | { value: string }';
-        }
-        if (primitive('number').match(type)) {
-          return 'number | { value: number }';
-        }
-        return null; // null = preserve original
-      },
-
-      // Transform object types before processing properties
-      onObject: (type) => {
-        if (object('User').match(type)) {
-          return 'EnhancedUser';
-        }
-        return null; // Continue with recursive transformation
-      },
-
-      // Transform array types
-      onArray: (type) => {
-        // Custom array transformation logic
-        return null;
-      },
-    })
-  )
-  .done()
-)
-```
-
 #### Chaining Multiple Transformations
 
 Chain multiple type replacements:
@@ -301,11 +293,19 @@ Chain multiple type replacements:
 )
 ```
 
-#### Conditional Deep Transformations
+**Example:**
+
+- Input: `{ name: string, age: number, data: Array<string> }`
+- Output:
+  `{ name: ValidatedString; age: ValidatedNumber; data: Array<ValidatedString> }`
+
+#### Conditional Deep Transformations with replaceIf
 
 Use predicates for fine-grained control:
 
 ```typescript
+import { TypeKind } from 'fluent-gen-ts';
+
 .transformPropertyMethods(builder => builder
   .when(ctx => ctx.type.containsDeep(primitive()))
   .setParameter(ctx =>
@@ -324,9 +324,92 @@ Use predicates for fine-grained control:
 )
 ```
 
+#### Dynamic Type-Based Transformations
+
+Transform based on the actual type information:
+
+```typescript
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive()))
+  .setParameter(ctx =>
+    ctx.type
+      .transformDeep()
+      .replace(primitive('string'), type => {
+        // Access the actual TypeInfo to make dynamic decisions
+        return 'string | { value: string }';
+      })
+      .replace(primitive('number'), type => {
+        return 'number | { value: number }';
+      })
+      .toString()
+  )
+  .done()
+)
+```
+
+#### Advanced: Using transformTypeDeep for Low-Level Control
+
+For maximum control, use the standalone `transformTypeDeep` function with custom
+handlers:
+
+```typescript
+import { transformTypeDeep, primitive, object, TypeKind } from 'fluent-gen-ts';
+
+.transformPropertyMethods(builder => builder
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+  .setParameter(ctx =>
+    transformTypeDeep(ctx.propertyType, {
+      // Transform any type with onAny callback
+      onAny: (type) => {
+        // Runs for every type before kind-specific handlers
+        return null; // Return null to continue with kind-specific handlers
+      },
+
+      // Transform primitive types
+      onPrimitive: (type) => {
+        if (primitive('string').match(type)) {
+          return 'string | { value: string }';
+        }
+        if (primitive('number').match(type)) {
+          return 'number | { value: number }';
+        }
+        return null; // null = preserve original and continue recursive transformation
+      },
+
+      // Transform object types before processing properties
+      onObject: (type) => {
+        if (object('User').match(type)) {
+          return 'EnhancedUser'; // String = replace entire type
+        }
+        return null; // null = continue with recursive property transformation
+      },
+
+      // Transform array element types
+      onArray: (type) => {
+        // Return null to recursively transform the element type
+        return null;
+      },
+
+      // Transform union types
+      onUnion: (type) => {
+        // Return null to recursively transform union members
+        return null;
+      },
+    })
+  )
+  .done()
+)
+```
+
+**Handler return types:**
+
+- `string` - Use this as the final transformed type
+- `TypeInfo` - Continue transforming this new TypeInfo
+- `null` or `undefined` - Use default recursive transformation
+
 #### Real-World Example: Nullable Wrapper Plugin
 
-Transform all types to be nullable at any depth:
+Transform all primitive types to be nullable at any depth:
 
 ```typescript
 const nullablePlugin = createPlugin('nullable-wrapper', '1.0.0')
@@ -341,7 +424,8 @@ const nullablePlugin = createPlugin('nullable-wrapper', '1.0.0')
         return ctx.type
           .transformDeep()
           .replace(primitive(), type => {
-            const typeName = ctx.type.toString();
+            // Get the type's name for creating the union
+            const typeName = type.name || 'unknown';
             return `${typeName} | null`;
           })
           .toString();
@@ -354,41 +438,124 @@ const nullablePlugin = createPlugin('nullable-wrapper', '1.0.0')
 **Result:**
 
 ```typescript
-// Before
+// Input type
 interface Product {
   name: string;
   tags: Array<string>;
   metadata: { description: string };
 }
 
-// Generated builder accepts:
+// Generated builder methods accept:
 withName(name: string | null)
 withTags(tags: Array<string | null>)
 withMetadata(metadata: { description: string | null })
+```
+
+#### Real-World Example: Branded Types Plugin
+
+Transform types to use branded types for stronger type safety:
+
+```typescript
+import { createPlugin, primitive } from 'fluent-gen-ts';
+
+const brandedTypesPlugin = createPlugin('branded-types', '1.0.0')
+  .requireImports(imports =>
+    imports.addInternalTypes('./branded-types.js', ['Branded']),
+  )
+  .transformPropertyMethods(builder =>
+    builder
+      // Brand string IDs
+      .when(
+        ctx =>
+          ctx.property.name.endsWith('Id') && ctx.type.isPrimitive('string'),
+      )
+      .setParameter(ctx => {
+        const brandName =
+          ctx.property.name.charAt(0).toUpperCase() +
+          ctx.property.name.slice(1);
+        return `Branded<string, '${brandName}'>`;
+      })
+      .done()
+
+      // Brand nested types
+      .when(ctx => ctx.type.containsDeep(primitive('string')))
+      .setParameter(ctx =>
+        ctx.type
+          .transformDeep()
+          .replaceIf(
+            (type, depth, path) => {
+              // Only brand string IDs, not all strings
+              const propertyName = path[path.length - 1];
+              return (
+                type.kind === TypeKind.Primitive &&
+                type.name === 'string' &&
+                propertyName?.endsWith('Id')
+              );
+            },
+            type => {
+              const path = type.path || [];
+              const propertyName = path[path.length - 1];
+              return `Branded<string, '${propertyName}'>`;
+            },
+          )
+          .toString(),
+      )
+      .done(),
+  )
+  .build();
 ```
 
 #### Deep Transformation API Reference
 
 **TypeMatcherInterface Methods:**
 
-- `transformDeep()` - Get a fluent transformer for the type
-- `containsDeep(matcher)` - Check if type contains matching type at any depth
-- `findDeep(matcher)` - Find all matching types at any depth
+- **`transformDeep(): TypeDeepTransformer`** - Get a fluent transformer for
+  recursively modifying the type
+- **`containsDeep(matcher: TypeMatcher): boolean`** - Check if type contains
+  matching type at any depth
+- **`findDeep(matcher: TypeMatcher): TypeInfo[]`** - Find all matching types at
+  any depth
 
-**TypeDeepTransformer Methods:**
+**TypeDeepTransformer Methods (Fluent API):**
 
-- `replace(matcher, replacement)` - Replace matching types
-- `replaceIf(predicate, replacement)` - Replace with custom predicate
-- `hasMatch(matcher)` - Check if contains matching type
-- `findMatches(matcher)` - Find all matching types
-- `toString()` - Execute transformations and return result
+- **`replace(matcher: TypeMatcher, replacement: string | ((type: TypeInfo) => string)): this`**
+  - Replace all types matching the given matcher
+  - Can use string or function for replacement
+  - Returns `this` for chaining
+
+- **`replaceIf(predicate: (type, depth, path) => boolean, replacement: string | ((type: TypeInfo) => string)): this`**
+  - Replace types based on custom predicate
+  - Predicate receives type, depth (0 = root), and path (array of property
+    names)
+  - Returns `this` for chaining
+
+- **`hasMatch(matcher: TypeMatcher): boolean`** - Check if contains matching
+  type (same as `containsDeep`)
+
+- **`findMatches(matcher: TypeMatcher): TypeInfo[]`** - Find all matching types
+  (same as `findDeep`)
+
+- **`toString(): string`** - Execute all transformations and return the
+  resulting type string
 
 **Standalone Functions:**
 
-- `transformTypeDeep(typeInfo, transformer)` - Low-level transformation
-- `containsTypeDeep(typeInfo, matcher)` - Check for nested matches
-- `findTypesDeep(typeInfo, matcher)` - Find all nested matches
-- `typeInfoToString(typeInfo)` - Convert TypeInfo to string
+- **`transformTypeDeep(typeInfo: TypeInfo, transformer: TypeTransformer): string`**
+  - Low-level transformation with fine-grained callbacks
+  - `TypeTransformer` has optional callbacks: `onPrimitive`, `onObject`,
+    `onArray`, `onUnion`, `onIntersection`, `onGeneric`, `onLiteral`,
+    `onReference`, `onTuple`, `onAny`
+  - Each callback can return `string` (final type), `TypeInfo` (continue
+    transforming), or `null` (use default)
+
+- **`containsTypeDeep(typeInfo: TypeInfo, matcher: TypeMatcher): boolean`** -
+  Check for nested matches
+
+- **`findTypesDeep(typeInfo: TypeInfo, matcher: TypeMatcher): TypeInfo[]`** -
+  Find all nested matches
+
+- **`typeInfoToString(typeInfo: TypeInfo): string`** - Convert TypeInfo to type
+  string without transformation
 
 ### Import Management
 
@@ -419,7 +586,7 @@ Plugins can store and retrieve auxiliary data for advanced functionality:
 // Store templates and deferred functions
 .addMethod(method => method
   .name('withTemplate')
-  .param('template', '(ctx: BaseBuildContext) => string')
+  .parameter('template', '(ctx: BaseBuildContext) => string')
   .returns('this')
   .implementation(`
     // Store template function in auxiliary data
@@ -650,8 +817,10 @@ const namingPlugin = createPlugin('advanced-naming', '1.0.0')
   )
 
   .addMethod(method =>
-    method.name('withNormalizedName').param('name', 'string').returns('this')
-      .implementation(`
+    method
+      .name('withNormalizedName')
+      .parameter('name', 'string')
+      .returns('this').implementation(`
       const normalized = name
         .trim()
         .toLowerCase()
@@ -699,7 +868,7 @@ const dbPlugin = createPlugin('database-integration', '1.0.0')
   .addMethod(method =>
     method
       .name('save')
-      .param('prisma', 'PrismaClient')
+      .parameter('prisma', 'PrismaClient')
       .returns(`Promise<${method.typeName}>`)
       .implementation(
         `
@@ -714,8 +883,8 @@ const dbPlugin = createPlugin('database-integration', '1.0.0')
   .addMethod(method =>
     method
       .name('saveOrUpdate')
-      .param('prisma', 'PrismaClient')
-      .param('where', 'object')
+      .parameter('prisma', 'PrismaClient')
+      .parameter('where', 'object')
       .returns(`Promise<${method.typeName}>`).implementation(`
       const data = this.build();
       const tableName = '${method.typeName.toLowerCase()}';
@@ -771,7 +940,7 @@ const testingPlugin = createPlugin('testing-utilities', '1.0.0')
   .addMethod(method =>
     method
       .name('buildMany')
-      .param('count', 'number', { defaultValue: '5' })
+      .parameter('count', 'number', { defaultValue: '5' })
       .returns(`${method.typeName}[]`).implementation(`
       return Array.from({ length: count }, () =>
         this.withFakeData().build()
@@ -1247,9 +1416,16 @@ Adds type-only imports from external package.
 
 Starts a new transformation rule with a condition.
 
-##### `.setParameter(type: string | ((original: string) => string)): this`
+##### `.setParameter(type: string | ((context: PropertyMethodContext) => string)): this`
 
-Sets the parameter type for the method.
+Sets the parameter type for the method. Accepts either:
+
+- A static string for the new parameter type
+- A function that receives the full `PropertyMethodContext` and returns a type
+  string
+
+The function form is particularly powerful when combined with
+`ctx.type.transformDeep()` for recursive type transformations.
 
 ##### `.setExtractor(code: string): this`
 
@@ -1305,7 +1481,7 @@ Wraps the entire method with before and after code.
 
 Sets the method name.
 
-##### `.param(name: string, type: string, options?: { optional?: boolean; defaultValue?: string }): this`
+##### `.parameter(name: string, type: string, options?: { optional?: boolean; defaultValue?: string }): this`
 
 Adds a parameter to the method.
 
@@ -1456,8 +1632,8 @@ const reactPropsPlugin = createPlugin('react-component-props', '1.0.0')
   .addMethod(method =>
     method
       .name('withConditionalProps')
-      .param('condition', 'boolean | (() => boolean)')
-      .param('props', 'Partial<T> | ((current: Partial<T>) => Partial<T>)')
+      .parameter('condition', 'boolean | (() => boolean)')
+      .parameter('props', 'Partial<T> | ((current: Partial<T>) => Partial<T>)')
       .returns('this')
       .implementation(
         `
@@ -1475,8 +1651,8 @@ const reactPropsPlugin = createPlugin('react-component-props', '1.0.0')
   .addMethod(method =>
     method
       .name('withVariant')
-      .param('variant', 'string')
-      .param('variantMap', 'Record<string, Partial<T>>')
+      .parameter('variant', 'string')
+      .parameter('variantMap', 'Record<string, Partial<T>>')
       .returns('this')
       .implementation(
         `
@@ -1586,7 +1762,7 @@ const apiTransformPlugin = createPlugin('api-response-transform', '2.0.0')
   .addMethod(method =>
     method
       .name('withApiValidation')
-      .param('schema', 'z.ZodSchema<T>')
+      .parameter('schema', 'z.ZodSchema<T>')
       .returns('this')
       .implementation(
         `
@@ -1607,7 +1783,7 @@ const apiTransformPlugin = createPlugin('api-response-transform', '2.0.0')
   .addMethod(method =>
     method
       .name('withApiDefaults')
-      .param('apiVersion', 'string', { defaultValue: '"v1"' })
+      .parameter('apiVersion', 'string', { defaultValue: '"v1"' })
       .returns('this').implementation(`
       const defaults = {
         apiVersion,
@@ -1760,7 +1936,7 @@ const formValidationPlugin = createPlugin('form-validation', '1.5.0')
   .addMethod(method =>
     method
       .name('validateField')
-      .param('fieldName', 'keyof T')
+      .parameter('fieldName', 'keyof T')
       .returns('{ isValid: boolean; error?: string }')
       .implementation(
         `
@@ -1813,8 +1989,8 @@ const formValidationPlugin = createPlugin('form-validation', '1.5.0')
   .addMethod(method =>
     method
       .name('withFieldError')
-      .param('fieldName', 'keyof T')
-      .param('error', 'string')
+      .parameter('fieldName', 'keyof T')
+      .parameter('error', 'string')
       .returns('this').implementation(`
       // Store field errors in auxiliary data
       return this.pushAuxiliary('fieldErrors', { field: fieldName, error });
@@ -1822,8 +1998,10 @@ const formValidationPlugin = createPlugin('form-validation', '1.5.0')
   )
 
   .addMethod(method =>
-    method.name('clearFieldError').param('fieldName', 'keyof T').returns('this')
-      .implementation(`
+    method
+      .name('clearFieldError')
+      .parameter('fieldName', 'keyof T')
+      .returns('this').implementation(`
       const errors = this.getAuxiliaryArray('fieldErrors') || [];
       const filtered = errors.filter(e => e.field !== fieldName);
       this.setAuxiliary('fieldErrors', filtered);

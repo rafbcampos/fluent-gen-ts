@@ -202,7 +202,7 @@ const validationPlugin = createPlugin('validation-plugin', '1.0.0')
   .addMethod(method =>
     method
       .name('withRandomId')
-      .param('prefix', 'string', { defaultValue: '"user"' })
+      .parameter('prefix', 'string', { defaultValue: '"user"' })
       .returns('this')
       .implementation(
         `

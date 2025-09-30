@@ -198,9 +198,9 @@ Ideal for generating multiple builders:
 - ✅ Consistent across all builders
 
 ```javascript
-// fluent.config.js
+// fluentgen.config.js
 export default {
-  types: [
+  targets: [
     { file: './src/user.ts', types: ['User', 'UserProfile'] },
     { file: './src/product.ts', types: ['Product', 'Category'] },
   ],
@@ -265,7 +265,7 @@ const plugin = createPlugin('comprehensive-plugin', '1.0.0')
   .addMethod(method =>
     method
       .name('withTemplate')
-      .param('template', '(ctx: BaseBuildContext) => string')
+      .parameter('template', '(ctx: BaseBuildContext) => string')
       .returns('this')
       .implementation(
         `
@@ -279,7 +279,7 @@ const plugin = createPlugin('comprehensive-plugin', '1.0.0')
   .addMethod(method =>
     method
       .name('withRandomId')
-      .param('prefix', 'string', { defaultValue: '"item"' })
+      .parameter('prefix', 'string', { defaultValue: '"item"' })
       .returns('this').implementation(`
       const id = \`\${prefix}-\${Date.now()}-\${Math.random().toString(36).substr(2, 9)}\`;
       return this.withId(id);
@@ -454,16 +454,24 @@ for detailed options.
 
 ### Configuration File
 
+fluent-gen-ts supports multiple configuration file formats:
+
+- `fluentgen.config.js` or `.fluentgenrc.js` (ES modules or CommonJS)
+- `.fluentgenrc.json`, `.fluentgenrc.yaml`, `.fluentgenrc.yml` (JSON/YAML)
+- `package.json` (under `"fluentgen"` key)
+
+**ES Modules (recommended):**
+
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
 export default {
   // Input files and types
-  types: [
+  targets: [
     { file: './src/models/user.ts', types: ['User', 'UserProfile'] },
     { file: './src/models/product.ts', types: ['Product', 'Category'] },
   ],
 
-  // Output configuration
+  // Output configuration (optional, used mainly in batch mode)
   output: {
     dir: './src/builders',
     mode: 'batch', // or 'single'
@@ -473,7 +481,6 @@ export default {
   generator: {
     useDefaults: true, // Generate smart defaults
     addComments: true, // Include JSDoc comments
-    maxDepth: 10, // Max recursion depth
 
     // Advanced naming configuration
     naming: {
@@ -490,6 +497,22 @@ export default {
 
   // Plugins
   plugins: ['./plugins/validation.js', './plugins/custom-methods.js'],
+};
+```
+
+**CommonJS:**
+
+```javascript
+/** @type {import('fluent-gen-ts').Config} */
+module.exports = {
+  targets: [{ file: './src/models/user.ts', types: ['User', 'UserProfile'] }],
+  generator: {
+    naming: {
+      convention: 'camelCase',
+      suffix: 'builder',
+    },
+  },
+  plugins: ['./plugins/validation.js'],
 };
 ```
 

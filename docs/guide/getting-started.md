@@ -42,7 +42,7 @@ This will guide you through:
 1. **Scanning for TypeScript files**: Specify patterns like `src/**/*.ts`
 2. **Selecting interfaces**: Choose which interfaces to generate builders for
 3. **Configuring output**: Set the output directory and naming conventions
-4. **Creating configuration**: Save your choices to `fluent.config.js`
+4. **Creating configuration**: Save your choices to `fluentgen.config.js`
 5. **Generating builders**: Optionally generate builders immediately
 
 ## Your First Builder
@@ -169,12 +169,12 @@ When you have multiple types to generate builders for, use batch generation:
 
 ### 1. Create a Configuration File
 
-Create `fluent.config.js`:
+Create `fluentgen.config.js`:
 
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
 export default {
-  types: [
+  targets: [
     { file: './src/models/user.ts', types: ['User', 'UserProfile'] },
     { file: './src/models/product.ts', types: ['Product', 'Category'] },
     { file: './src/models/order.ts', types: ['Order', 'OrderItem'] },

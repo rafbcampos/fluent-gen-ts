@@ -90,7 +90,7 @@ abstract class BaseRuleBuilder<TRule, TContext, TTransform> {
 interface MutablePropertyMethodTransformRule {
   predicate: (context: PropertyMethodContext) => boolean;
   transform: {
-    parameterType?: string;
+    parameterType?: string | ((context: PropertyMethodContext) => string);
     extractValue?: string;
     validate?: string;
   };
@@ -156,23 +156,14 @@ export class PropertyMethodTransformBuilder extends BaseRuleBuilder<
    * builder.setParameter(original => `${original} | null`)
    * ```
    */
-  setParameter(type: string | ((original: string) => string)): this {
+  setParameter(type: string | ((context: PropertyMethodContext) => string)): this {
     this.validateActiveRule();
 
     const rule = this.currentRule as MutablePropertyMethodTransformRule;
-    if (typeof type === 'function') {
-      // Will be applied to the original type string
-      rule.transform = {
-        ...rule.transform,
-        parameterType: '__FUNCTION__', // Placeholder, will be handled in build
-      };
-      // Store the function separately (would need to enhance the type)
-    } else {
-      rule.transform = {
-        ...rule.transform,
-        parameterType: type,
-      };
-    }
+    rule.transform = {
+      ...rule.transform,
+      parameterType: type,
+    };
     return this;
   }
 

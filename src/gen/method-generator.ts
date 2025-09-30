@@ -254,34 +254,118 @@ class MethodGeneratorUtils {
   }
 
   /**
+   * Type guard for PropertyMethodTransform
+   */
+  private isPropertyMethodTransform(
+    value: unknown,
+  ): value is import('../core/plugin/plugin-types.js').PropertyMethodTransform & {
+    parameterType?: string | ((context: PropertyMethodContext) => string);
+    extractValue?: string;
+    validate?: string;
+  } {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    const obj = value as Record<string, unknown>;
+
+    // Check parameterType: can be string, function, or undefined
+    if (obj.parameterType !== undefined) {
+      if (typeof obj.parameterType !== 'string' && typeof obj.parameterType !== 'function') {
+        return false;
+      }
+    }
+
+    // Check extractValue: must be string or undefined
+    if (obj.extractValue !== undefined && typeof obj.extractValue !== 'string') {
+      return false;
+    }
+
+    // Check validate: must be string or undefined
+    if (obj.validate !== undefined && typeof obj.validate !== 'string') {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Resolves a parameter type that can be either static or dynamic
+   */
+  private resolveParameterType(params: {
+    parameterType: string | ((context: PropertyMethodContext) => string);
+    context: PropertyMethodContext;
+  }): string | null {
+    const { parameterType, context } = params;
+
+    if (typeof parameterType === 'string') {
+      const trimmed = parameterType.trim();
+      return trimmed || null;
+    }
+
+    if (typeof parameterType === 'function') {
+      try {
+        const result = parameterType(context);
+        if (typeof result !== 'string') {
+          console.warn('parameterType function returned non-string value:', typeof result);
+          return null;
+        }
+        const trimmed = result.trim();
+        return trimmed || null;
+      } catch (error) {
+        console.warn('Failed to evaluate parameterType function:', error);
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Safely formats plugin transform result
    */
-  safeFormatPluginTransform(transform: unknown): {
+  safeFormatPluginTransform(params: { transform: unknown; context: PropertyMethodContext }): {
     parameterType?: string;
     extractValue?: string;
     validate?: string;
   } {
-    if (!transform || typeof transform !== 'object') {
+    const { transform, context } = params;
+
+    if (!this.isPropertyMethodTransform(transform)) {
       return {};
     }
 
-    const safeTransform = transform as Record<string, unknown>;
     const result: {
       parameterType?: string;
       extractValue?: string;
       validate?: string;
     } = {};
 
-    if (typeof safeTransform.parameterType === 'string' && safeTransform.parameterType.trim()) {
-      result.parameterType = safeTransform.parameterType.trim();
+    // Resolve parameter type (can be string or function)
+    if (transform.parameterType !== undefined) {
+      const resolved = this.resolveParameterType({
+        parameterType: transform.parameterType,
+        context,
+      });
+      if (resolved) {
+        result.parameterType = resolved;
+      }
     }
 
-    if (typeof safeTransform.extractValue === 'string' && safeTransform.extractValue.trim()) {
-      result.extractValue = safeTransform.extractValue.trim();
+    // Extract value must be string
+    if (typeof transform.extractValue === 'string') {
+      const trimmed = transform.extractValue.trim();
+      if (trimmed) {
+        result.extractValue = trimmed;
+      }
     }
 
-    if (typeof safeTransform.validate === 'string' && safeTransform.validate.trim()) {
-      result.validate = safeTransform.validate.trim();
+    // Validate must be string
+    if (typeof transform.validate === 'string') {
+      const trimmed = transform.validate.trim();
+      if (trimmed) {
+        result.validate = trimmed;
+      }
     }
 
     return result;
@@ -592,7 +676,10 @@ ${methods}
       try {
         const context = this.utils.createPropertyMethodContext(params);
         const transform = params.config.pluginManager.getPropertyMethodTransform(context);
-        const safeTransform = this.utils.safeFormatPluginTransform(transform);
+        const safeTransform = this.utils.safeFormatPluginTransform({
+          transform,
+          context,
+        });
         if (safeTransform.parameterType) {
           paramType = safeTransform.parameterType;
         }
@@ -617,7 +704,10 @@ ${methods}
       try {
         const context = this.utils.createPropertyMethodContext(params);
         const transform = params.config.pluginManager.getPropertyMethodTransform(context);
-        const safeTransform = this.utils.safeFormatPluginTransform(transform);
+        const safeTransform = this.utils.safeFormatPluginTransform({
+          transform,
+          context,
+        });
 
         if (safeTransform.parameterType) {
           paramType = safeTransform.parameterType;

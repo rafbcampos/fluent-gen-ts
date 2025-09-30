@@ -156,7 +156,7 @@ describe('Transform Builders', () => {
       expect(() => {
         builder
           .when(() => true)
-          .setParameter((original: string) => `Tagged<${original}>`)
+          .setParameter(ctx => `Tagged<${ctx.originalTypeString}>`)
           .done()
           .build();
       }).not.toThrow();

@@ -216,7 +216,7 @@ export interface ValueContext {
  * Property method transformation result
  */
 export interface PropertyMethodTransform {
-  readonly parameterType?: string;
+  readonly parameterType?: string | ((context: PropertyMethodContext) => string);
   readonly extractValue?: string;
   readonly validate?: string;
 }
@@ -517,7 +517,9 @@ export interface Plugin {
  */
 export interface PropertyMethodTransformRule {
   readonly predicate: (context: PropertyMethodContext) => boolean;
-  readonly transform: PropertyMethodTransform;
+  readonly transform: PropertyMethodTransform & {
+    parameterType?: string | ((context: PropertyMethodContext) => string);
+  };
 }
 
 /**

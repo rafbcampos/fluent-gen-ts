@@ -22,10 +22,10 @@ npx fluent-gen-ts init [options]
 
 ### Options
 
-| Option            | Description                      | Default            |
-| ----------------- | -------------------------------- | ------------------ |
-| `--config <path>` | Configuration file path          | `fluent.config.js` |
-| `--force`         | Overwrite existing configuration | `false`            |
+| Option            | Description                      | Default               |
+| ----------------- | -------------------------------- | --------------------- |
+| `--config <path>` | Configuration file path          | `fluentgen.config.js` |
+| `--force`         | Overwrite existing configuration | `false`               |
 
 ### Interactive Flow
 
@@ -109,11 +109,11 @@ npx fluent-gen-ts batch [options]
 
 ### Options
 
-| Option                | Description                      | Default            |
-| --------------------- | -------------------------------- | ------------------ |
-| `-c, --config <path>` | Configuration file path          | `fluent.config.js` |
-| `--dry-run`           | Preview without generating files | `false`            |
-| `--verbose`           | Show detailed output             | `false`            |
+| Option                | Description                      | Default               |
+| --------------------- | -------------------------------- | --------------------- |
+| `-c, --config <path>` | Configuration file path          | `fluentgen.config.js` |
+| `--dry-run`           | Preview without generating files | `false`               |
+| `--verbose`           | Show detailed output             | `false`               |
 
 ### Configuration File
 
@@ -270,13 +270,13 @@ export abstract class CustomBuilderBase<T> extends FluentBuilderBase<T> {
 
 ## Configuration File
 
-The configuration file (`fluent.config.js`) controls batch generation:
+The configuration file (`fluentgen.config.js`) controls batch generation:
 
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
 export default {
   // Files and types to process
-  types: [
+  targets: [
     {
       file: string,     // Path to TypeScript file
       types: string[]   // Type names to generate
@@ -309,11 +309,11 @@ export default {
 
 fluent-gen-ts respects these environment variables:
 
-| Variable            | Description              | Default            |
-| ------------------- | ------------------------ | ------------------ |
-| `FLUENT_GEN_CONFIG` | Default config file path | `fluent.config.js` |
-| `FLUENT_GEN_OUTPUT` | Default output directory | `./generated`      |
-| `FLUENT_GEN_DEBUG`  | Enable debug output      | `false`            |
+| Variable            | Description              | Default               |
+| ------------------- | ------------------------ | --------------------- |
+| `FLUENT_GEN_CONFIG` | Default config file path | `fluentgen.config.js` |
+| `FLUENT_GEN_OUTPUT` | Default output directory | `./generated`         |
+| `FLUENT_GEN_DEBUG`  | Enable debug output      | `false`               |
 
 ## Exit Codes
 
@@ -335,9 +335,9 @@ The CLI uses standard exit codes:
 For consistency across team members:
 
 ```javascript
-// fluent.config.js
+// fluentgen.config.js
 export default {
-  types: [
+  targets: [
     /* ... */
   ],
   output: {
@@ -384,7 +384,7 @@ Recommended `.gitignore` entries:
 /src/__generated__/
 
 # Keep config
-!fluent.config.js
+!fluentgen.config.js
 ```
 
 Or commit generated files for:
