@@ -6,7 +6,7 @@ import type {
   TypeCategorizationOptions,
   GenericParamCategorizationOptions,
 } from '../types.js';
-import { validateTypeName, isGlobalType } from '../utils/validation.js';
+import { validateTypeName, isNonImportableType } from '../utils/validation.js';
 import { resolveImportConflicts } from '../utils/deduplication.js';
 import { looksLikePackagePath } from '../utils/path-utils.js';
 import { DependencyResolver } from '../resolvers/dependency-resolver.js';
@@ -321,7 +321,7 @@ export class TypeImportsGenerator {
     mainSourceFile: string,
     categories: TypeImportCategories,
   ): void {
-    if (!typeName || isGlobalType(typeName)) {
+    if (!typeName || isNonImportableType(typeName)) {
       return;
     }
 

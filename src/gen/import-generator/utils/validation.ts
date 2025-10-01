@@ -99,6 +99,77 @@ export const isGlobalType = (typeName: string): boolean => {
 };
 
 /**
+ * TypeScript utility types that are built-in and should not be imported.
+ * These types exist only at compile time and are part of TypeScript's type system.
+ */
+const TYPESCRIPT_UTILITY_TYPES = new Set([
+  'Partial',
+  'Required',
+  'Readonly',
+  'Pick',
+  'Omit',
+  'Record',
+  'Exclude',
+  'Extract',
+  'NonNullable',
+  'Parameters',
+  'ReturnType',
+  'ConstructorParameters',
+  'InstanceType',
+  'Awaited',
+  'ThisParameterType',
+  'OmitThisParameter',
+  'ThisType',
+  'Uppercase',
+  'Lowercase',
+  'Capitalize',
+  'Uncapitalize',
+] as const);
+
+/**
+ * Checks if a type name is a TypeScript built-in utility type.
+ *
+ * TypeScript utility types (like Partial, Pick, Record, etc.) are part of
+ * TypeScript's type system and should never be imported. They exist only at
+ * compile time and are automatically available in all TypeScript code.
+ *
+ * @param typeName - The type name to check
+ * @returns True if the type is a TypeScript utility type, false otherwise
+ *
+ * @example
+ * ```typescript
+ * isTypeScriptUtilityType('Partial'); // true
+ * isTypeScriptUtilityType('Pick'); // true
+ * isTypeScriptUtilityType('UserProfile'); // false
+ * ```
+ */
+export const isTypeScriptUtilityType = (typeName: string): boolean => {
+  if (typeof typeName !== 'string' || typeName.trim() === '') {
+    return false;
+  }
+
+  return TYPESCRIPT_UTILITY_TYPES.has(typeName as any);
+};
+
+/**
+ * Checks if a type should not be imported because it's either a global runtime type
+ * or a TypeScript utility type.
+ *
+ * @param typeName - The type name to check
+ * @returns True if the type should not be imported, false otherwise
+ *
+ * @example
+ * ```typescript
+ * isNonImportableType('Array'); // true (global runtime type)
+ * isNonImportableType('Partial'); // true (TypeScript utility type)
+ * isNonImportableType('UserProfile'); // false (importable custom type)
+ * ```
+ */
+export const isNonImportableType = (typeName: string): boolean => {
+  return isGlobalType(typeName) || isTypeScriptUtilityType(typeName);
+};
+
+/**
  * Validates import statements string for safe processing.
  *
  * Ensures the import statements string is valid and within safe length limits

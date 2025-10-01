@@ -24,6 +24,45 @@ vi.mock('../../resolvers/package-resolver.js', () => ({
 vi.mock('../../utils/validation.js', () => ({
   validateTypeName: vi.fn((name: string) => /^[A-Z]/.test(name)),
   isGlobalType: vi.fn((name: string) => ['Array', 'Date', 'Promise'].includes(name)),
+  isTypeScriptUtilityType: vi.fn((name: string) =>
+    [
+      'Partial',
+      'Required',
+      'Readonly',
+      'Pick',
+      'Omit',
+      'Record',
+      'Exclude',
+      'Extract',
+      'NonNullable',
+      'Parameters',
+      'ReturnType',
+      'ConstructorParameters',
+      'InstanceType',
+      'Awaited',
+    ].includes(name),
+  ),
+  isNonImportableType: vi.fn((name: string) =>
+    [
+      'Array',
+      'Date',
+      'Promise',
+      'Partial',
+      'Required',
+      'Readonly',
+      'Pick',
+      'Omit',
+      'Record',
+      'Exclude',
+      'Extract',
+      'NonNullable',
+      'Parameters',
+      'ReturnType',
+      'ConstructorParameters',
+      'InstanceType',
+      'Awaited',
+    ].includes(name),
+  ),
 }));
 
 vi.mock('../../utils/path-utils.js', () => ({

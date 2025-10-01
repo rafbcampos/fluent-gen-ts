@@ -72,3 +72,36 @@ export function extractTypeName(params: {
 
   return name && name.trim() !== '' ? name : 'unknown';
 }
+
+/**
+ * Extracts the source file path from TypeScript's import() syntax in type text.
+ *
+ * When types reference other modules, TypeScript may include import statements
+ * in the type text like: `import("/path/to/file").TypeName<T>`.
+ * This function extracts the file path from such import statements.
+ *
+ * @param typeText - The type text that may contain an import statement
+ * @returns The extracted file path, or undefined if no import statement found
+ *
+ * @example
+ * ```typescript
+ * extractSourceFileFromImport('import("/home/user/project/src/types").User');
+ * // Returns: '/home/user/project/src/types'
+ *
+ * extractSourceFileFromImport('Partial<import("/path/to/file").TableColumn<T>>');
+ * // Returns: '/path/to/file'
+ *
+ * extractSourceFileFromImport('RegularType');
+ * // Returns: undefined
+ * ```
+ */
+export function extractSourceFileFromImport(typeText: string): string | undefined {
+  // Match import("path/to/file") pattern in type text
+  // This handles cases like: import("/absolute/path").TypeName
+  // or nested: Partial<import("/path").Type>
+  const importMatch = typeText.match(/import\("([^"]+)"\)/);
+  if (importMatch) {
+    return importMatch[1];
+  }
+  return undefined;
+}

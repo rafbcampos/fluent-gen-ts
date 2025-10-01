@@ -7,7 +7,11 @@ import type { GenericContext } from '../../generic-context.js';
 import type { TypeResolverFunction } from '../core/resolver-context.js';
 import { PropertyResolver } from './property-resolver.js';
 import { GenericResolver } from './generic-resolver.js';
-import { isTypeAlias, extractTypeName } from '../utils/type-helpers.js';
+import {
+  isTypeAlias,
+  extractTypeName,
+  extractSourceFileFromImport,
+} from '../utils/type-helpers.js';
 import type { PluginManager } from '../../../core/plugin/index.js';
 
 /**
@@ -56,7 +60,8 @@ export class ObjectResolver {
     });
     if (!indexSignature.ok) return indexSignature;
 
-    const objectName = extractTypeName({ symbol, typeText: type.getText() });
+    const typeText = type.getText();
+    const objectName = extractTypeName({ symbol, typeText });
     const unresolvedGenerics = context.getUnresolvedGenerics();
 
     const typeArguments = await this.resolveTypeArguments({ type, depth, context });
@@ -68,7 +73,23 @@ export class ObjectResolver {
       genericParams = genericParamsResult.value;
     }
 
-    const typeSourceFile = sourceFile?.getFilePath();
+    // Try to extract source file from import statement in type text first
+    // This handles cases like: Partial<import("/path/to/file").TypeName>
+    let typeSourceFile = extractSourceFileFromImport(typeText);
+
+    // Fall back to symbol declaration source file if no import found
+    if (!typeSourceFile) {
+      typeSourceFile = sourceFile?.getFilePath();
+    }
+
+    // Don't use TypeScript lib files as source files
+    if (
+      typeSourceFile &&
+      (typeSourceFile.includes('/typescript/lib/') ||
+        typeSourceFile.includes('\\typescript\\lib\\'))
+    ) {
+      typeSourceFile = undefined;
+    }
 
     return ok({
       kind: TypeKind.Object,
