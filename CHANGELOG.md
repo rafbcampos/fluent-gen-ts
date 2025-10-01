@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.17
+
+### Patch Changes
+
+- 22c3a6e: Improve typescript-only types detection
+
 ## 0.1.16
 
 ### Patch Changes
