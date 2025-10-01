@@ -108,6 +108,25 @@ export interface TypeTransformer {
  * // { a: string | { value: string }; b: { c: string | { value: string } } }
  * ```
  */
+/**
+ * Checks if a property name needs quotes in TypeScript type definitions
+ * @param name - The property name to check
+ * @returns True if the property name needs quotes
+ */
+function needsQuotes(name: string): boolean {
+  // Valid TypeScript identifier: starts with letter/$/_, followed by letter/digit/$/_
+  return !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name);
+}
+
+/**
+ * Formats a property name with quotes if needed
+ * @param name - The property name to format
+ * @returns Formatted property name
+ */
+function formatPropertyName(name: string): string {
+  return needsQuotes(name) ? `"${name}"` : name;
+}
+
 export function transformTypeDeep(
   typeInfo: TypeInfo,
   transformer: TypeTransformer,
@@ -222,7 +241,7 @@ export function transformTypeDeep(
               }
             }
 
-            return `${readonly}${prop.name}${optional}: ${propType}`;
+            return `${readonly}${formatPropertyName(prop.name)}${optional}: ${propType}`;
           })
           .join('; ');
 

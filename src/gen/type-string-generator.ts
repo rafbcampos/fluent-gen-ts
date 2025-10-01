@@ -491,6 +491,25 @@ export class TypeStringGenerator {
    * @param typeInfo - The anonymous object type
    * @returns Type string with builder alternatives for eligible properties
    */
+  /**
+   * Checks if a property name needs quotes in TypeScript type definitions
+   * @param name - The property name to check
+   * @returns True if the property name needs quotes
+   */
+  private needsQuotes(name: string): boolean {
+    // Valid TypeScript identifier: starts with letter/$/_, followed by letter/digit/$/_
+    return !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name);
+  }
+
+  /**
+   * Formats a property name with quotes if needed
+   * @param name - The property name to format
+   * @returns Formatted property name
+   */
+  private formatPropertyName(name: string): string {
+    return this.needsQuotes(name) ? `"${name}"` : name;
+  }
+
   private getAnonymousObjectTypeWithBuilders(
     typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>,
   ): string {
@@ -499,7 +518,7 @@ export class TypeStringGenerator {
     }
 
     const propertyStrings = typeInfo.properties.map(prop => {
-      const propName = prop.name;
+      const propName = this.formatPropertyName(prop.name);
       let propType = this.typeInfoToString(prop.type);
 
       // Add builder alternative for eligible types
