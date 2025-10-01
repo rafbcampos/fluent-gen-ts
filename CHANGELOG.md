@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.15
+
+### Patch Changes
+
+- bf74502: Increate test coverage and docs
+
 ## 0.1.14
 
 ### Patch Changes
