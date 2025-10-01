@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.16
+
+### Patch Changes
+
+- 44688ca: Fix hyphenated property names
+
 ## 0.1.15
 
 ### Patch Changes
