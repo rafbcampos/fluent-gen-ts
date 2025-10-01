@@ -22,11 +22,11 @@ export default defineConfig({
         '.generated/**',
         '**/generated/**',
         '.vitepress/**',
-        'src/cli/**',
         '**/types.ts',
         '.prettierrc.js',
         'test-repo',
         'scripts',
+        'test-temp',
       ],
       thresholds: {
         global: {

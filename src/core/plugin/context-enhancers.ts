@@ -283,20 +283,20 @@ class WrapperIntersectionTypeMatcher implements IntersectionTypeMatcher {
   match(typeInfo: TypeInfo): boolean {
     if (
       !isIntersectionTypeInfo(typeInfo) ||
-      !('types' in typeInfo) ||
-      !Array.isArray(typeInfo.types)
+      !('intersectionTypes' in typeInfo) ||
+      !Array.isArray(typeInfo.intersectionTypes)
     ) {
       return false;
     }
 
     for (const matcher of this.includingMatchers) {
-      if (!typeInfo.types.some((t: TypeInfo) => matcher.match(t))) {
+      if (!typeInfo.intersectionTypes.some((t: TypeInfo) => matcher.match(t))) {
         return false;
       }
     }
 
     if (this.exactMatchers.length > 0) {
-      return exactMatchTypes(typeInfo.types, this.exactMatchers);
+      return exactMatchTypes(typeInfo.intersectionTypes, this.exactMatchers);
     }
 
     return true;

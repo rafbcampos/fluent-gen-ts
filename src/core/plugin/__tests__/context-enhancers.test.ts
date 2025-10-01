@@ -10,6 +10,7 @@ import {
 } from '../context-enhancers.js';
 import { TypeKind } from '../../types.js';
 import type { Type, Symbol } from 'ts-morph';
+import { primitive } from '../type-matcher/index.js';
 
 describe('Context Enhancers', () => {
   describe('enhanceParseContext', () => {
@@ -394,6 +395,530 @@ describe('Context Enhancers', () => {
       );
 
       expect(context.type.toString()).toBe(TypeKind.Object);
+    });
+
+    test('should handle object type matching', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Object as const, name: 'User', properties: [] as const },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Object as const, name: 'User', properties: [] as const },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'User',
+      );
+
+      const objectMatcher = context.type.isObject();
+      expect(objectMatcher.match({ kind: TypeKind.Object, name: 'User', properties: [] })).toBe(
+        true,
+      );
+    });
+
+    test('should handle object type with name matching', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Object as const, name: 'User', properties: [] as const },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Object as const, name: 'User', properties: [] as const },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'User',
+      );
+
+      const objectMatcher = context.type.isObject('User');
+      expect(objectMatcher.match({ kind: TypeKind.Object, name: 'User', properties: [] })).toBe(
+        true,
+      );
+      expect(objectMatcher.match({ kind: TypeKind.Object, name: 'Post', properties: [] })).toBe(
+        false,
+      );
+    });
+
+    test('should handle object with generic parameters', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Object as const,
+          name: 'Result',
+          properties: [] as const,
+          genericParams: [{ name: 'T' }],
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Object as const,
+          name: 'Result',
+          properties: [] as const,
+          genericParams: [{ name: 'T' }],
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Result<T>',
+      );
+
+      const objectMatcher = context.type.isObject().withGeneric('T');
+      expect(
+        objectMatcher.match({
+          kind: TypeKind.Object,
+          name: 'Result',
+          properties: [],
+          genericParams: [{ name: 'T' }],
+        }),
+      ).toBe(true);
+      expect(
+        objectMatcher.match({
+          kind: TypeKind.Object,
+          name: 'Result',
+          properties: [],
+          genericParams: [{ name: 'U' }],
+        }),
+      ).toBe(false);
+      expect(
+        objectMatcher.match({
+          kind: TypeKind.Object,
+          name: 'Result',
+          properties: [],
+          genericParams: [],
+        }),
+      ).toBe(false);
+    });
+
+    test('should handle object with any generic', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Object as const,
+          name: 'Result',
+          properties: [] as const,
+          genericParams: [{ name: 'T' }],
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Object as const,
+          name: 'Result',
+          properties: [] as const,
+          genericParams: [{ name: 'T' }],
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Result<T>',
+      );
+
+      const objectMatcher = context.type.isObject().withGeneric();
+      expect(
+        objectMatcher.match({
+          kind: TypeKind.Object,
+          name: 'Result',
+          properties: [],
+          genericParams: [{ name: 'T' }],
+        }),
+      ).toBe(true);
+    });
+
+    test('should handle object with property matching', () => {
+      const idType = { kind: TypeKind.Primitive as const, name: 'string' };
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Object as const,
+          name: 'User',
+          properties: [{ name: 'id', type: idType, optional: false, readonly: false }] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Object as const,
+          name: 'User',
+          properties: [{ name: 'id', type: idType, optional: false, readonly: false }] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'User',
+      );
+
+      const objectMatcher = context.type.isObject().withProperties('id');
+      expect(
+        objectMatcher.match({
+          kind: TypeKind.Object,
+          name: 'User',
+          properties: [{ name: 'id', type: idType, optional: false, readonly: false }],
+        }),
+      ).toBe(true);
+    });
+
+    test('should handle array type matching', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Array<string>',
+      );
+
+      const arrayMatcher = context.type.isArray();
+      expect(
+        arrayMatcher.match({
+          kind: TypeKind.Array,
+          elementType: { kind: TypeKind.Primitive, name: 'string' },
+        }),
+      ).toBe(true);
+    });
+
+    test('should handle union type matching', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Union as const,
+          unionTypes: [
+            { kind: TypeKind.Primitive as const, name: 'string' },
+            { kind: TypeKind.Primitive as const, name: 'number' },
+          ] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Union as const,
+          unionTypes: [
+            { kind: TypeKind.Primitive as const, name: 'string' },
+            { kind: TypeKind.Primitive as const, name: 'number' },
+          ] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string | number',
+      );
+
+      const unionMatcher = context.type.isUnion();
+      expect(
+        unionMatcher.match({
+          kind: TypeKind.Union,
+          unionTypes: [
+            { kind: TypeKind.Primitive, name: 'string' },
+            { kind: TypeKind.Primitive, name: 'number' },
+          ],
+        }),
+      ).toBe(true);
+    });
+
+    test('should handle intersection type matching', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Intersection as const,
+          intersectionTypes: [
+            { kind: TypeKind.Object as const, name: 'A', properties: [] as const },
+            { kind: TypeKind.Object as const, name: 'B', properties: [] as const },
+          ] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Intersection as const,
+          intersectionTypes: [
+            { kind: TypeKind.Object as const, name: 'A', properties: [] as const },
+            { kind: TypeKind.Object as const, name: 'B', properties: [] as const },
+          ] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'A & B',
+      );
+
+      const intersectionMatcher = context.type.isIntersection();
+      expect(
+        intersectionMatcher.match({
+          kind: TypeKind.Intersection,
+          intersectionTypes: [
+            { kind: TypeKind.Object, name: 'A', properties: [] },
+            { kind: TypeKind.Object, name: 'B', properties: [] },
+          ],
+        }),
+      ).toBe(true);
+    });
+
+    test('should handle transformDeep', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      const transformer = context.type.transformDeep();
+      expect(transformer).toBeDefined();
+    });
+
+    test('should handle containsDeep', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Array<string>',
+      );
+
+      expect(context.type.containsDeep(primitive('string'))).toBe(true);
+      expect(context.type.containsDeep(primitive('number'))).toBe(false);
+    });
+
+    test('should handle findDeep', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Array<string>',
+      );
+
+      const found = context.type.findDeep(primitive('string'));
+      expect(found).toHaveLength(1);
+    });
+
+    test('should handle matches method', () => {
+      const property = {
+        name: 'test',
+        type: { kind: TypeKind.Primitive as const, name: 'string' },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        { kind: TypeKind.Primitive as const, name: 'string' },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string',
+      );
+
+      expect(context.type.matches(primitive('string'))).toBe(true);
+      expect(context.type.matches(primitive('number'))).toBe(false);
+    });
+
+    test('should describe object matcher', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Object as const,
+          name: 'User',
+          properties: [
+            {
+              name: 'id',
+              type: { kind: TypeKind.Primitive as const, name: 'string' },
+              optional: false,
+              readonly: false,
+            },
+          ] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Object as const,
+          name: 'User',
+          properties: [
+            {
+              name: 'id',
+              type: { kind: TypeKind.Primitive as const, name: 'string' },
+              optional: false,
+              readonly: false,
+            },
+          ] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'User',
+      );
+
+      const objectMatcher = context.type.isObject('User').withProperties('id');
+      expect(objectMatcher.describe()).toContain('object');
+      expect(objectMatcher.describe()).toContain('User');
+    });
+
+    test('should describe array matcher', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Array as const,
+          elementType: { kind: TypeKind.Primitive as const, name: 'string' },
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'Array<string>',
+      );
+
+      const arrayMatcher = context.type.isArray();
+      expect(arrayMatcher.describe()).toBe('array');
+    });
+
+    test('should describe union matcher', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Union as const,
+          unionTypes: [
+            { kind: TypeKind.Primitive as const, name: 'string' },
+            { kind: TypeKind.Primitive as const, name: 'number' },
+          ] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Union as const,
+          unionTypes: [
+            { kind: TypeKind.Primitive as const, name: 'string' },
+            { kind: TypeKind.Primitive as const, name: 'number' },
+          ] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'string | number',
+      );
+
+      const unionMatcher = context.type.isUnion();
+      expect(unionMatcher.describe()).toBe('union');
+    });
+
+    test('should describe intersection matcher', () => {
+      const property = {
+        name: 'test',
+        type: {
+          kind: TypeKind.Intersection as const,
+          intersectionTypes: [
+            { kind: TypeKind.Object as const, name: 'A', properties: [] as const },
+            { kind: TypeKind.Object as const, name: 'B', properties: [] as const },
+          ] as const,
+        },
+        optional: false,
+        readonly: false,
+      };
+
+      const context = enhancePropertyMethodContext(
+        property,
+        {
+          kind: TypeKind.Intersection as const,
+          intersectionTypes: [
+            { kind: TypeKind.Object as const, name: 'A', properties: [] as const },
+            { kind: TypeKind.Object as const, name: 'B', properties: [] as const },
+          ] as const,
+        },
+        'TestBuilder',
+        'TestType',
+        { kind: TypeKind.Object as const, properties: [] as const },
+        'A & B',
+      );
+
+      const intersectionMatcher = context.type.isIntersection();
+      expect(intersectionMatcher.describe()).toBe('intersection');
     });
   });
 });

@@ -652,4 +652,340 @@ describe('Deep Type Transformation', () => {
       expect(result).toContain('description: string | { value: string }');
     });
   });
+
+  describe('transformTypeDeep with includeBuilderTypes option', () => {
+    test('should add FluentBuilder union for named object types', () => {
+      const namedObjectType: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'User',
+        properties: [],
+      };
+
+      const result = transformTypeDeep(namedObjectType, {}, { includeBuilderTypes: true });
+      expect(result).toBe('User | FluentBuilder<User, BaseBuildContext>');
+    });
+
+    test('should add FluentBuilder union with custom builder and context type names', () => {
+      const namedObjectType: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'User',
+        properties: [],
+      };
+
+      const result = transformTypeDeep(
+        namedObjectType,
+        {},
+        {
+          includeBuilderTypes: true,
+          builderTypeName: 'MyBuilder',
+          contextTypeName: 'MyContext',
+        },
+      );
+      expect(result).toBe('User | MyBuilder<User, MyContext>');
+    });
+
+    test('should add FluentBuilder union to object properties', () => {
+      const objectType: TypeInfo = {
+        kind: TypeKind.Object,
+        properties: [
+          {
+            name: 'user',
+            type: { kind: TypeKind.Object, name: 'User', properties: [] },
+            optional: false,
+            readonly: false,
+          },
+        ],
+      };
+
+      const result = transformTypeDeep(objectType, {}, { includeBuilderTypes: true });
+      expect(result).toBe('{ user: User | FluentBuilder<User, BaseBuildContext> }');
+    });
+
+    test('should not add FluentBuilder union for __type names', () => {
+      const anonymousType: TypeInfo = {
+        kind: TypeKind.Object,
+        name: '__type',
+        properties: [],
+      };
+
+      const result = transformTypeDeep(anonymousType, {}, { includeBuilderTypes: true });
+      expect(result).toBe('__type');
+    });
+
+    test('should not add FluentBuilder union for unknown names', () => {
+      const unknownType: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'unknown',
+        properties: [],
+      };
+
+      const result = transformTypeDeep(unknownType, {}, { includeBuilderTypes: true });
+      expect(result).toBe('unknown');
+    });
+
+    test('should not add FluentBuilder union for objects without names', () => {
+      const anonymousObject: TypeInfo = {
+        kind: TypeKind.Object,
+        properties: [
+          {
+            name: 'id',
+            type: { kind: TypeKind.Primitive, name: 'string' },
+            optional: false,
+            readonly: false,
+          },
+        ],
+      };
+
+      const result = transformTypeDeep(anonymousObject, {}, { includeBuilderTypes: true });
+      expect(result).toBe('{ id: string }');
+    });
+
+    test('should handle named objects with generic parameters', () => {
+      const genericObject: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'Result',
+        properties: [],
+        genericParams: [{ name: 'T' }, { name: 'E' }],
+      };
+
+      const result = transformTypeDeep(genericObject, {}, { includeBuilderTypes: true });
+      expect(result).toBe('Result<T, E> | FluentBuilder<Result, BaseBuildContext>');
+    });
+
+    test('should not duplicate FluentBuilder union in nested properties', () => {
+      const nestedType: TypeInfo = {
+        kind: TypeKind.Object,
+        properties: [
+          {
+            name: 'data',
+            type: { kind: TypeKind.Object, name: 'Data', properties: [] },
+            optional: false,
+            readonly: false,
+          },
+        ],
+      };
+
+      const result = transformTypeDeep(nestedType, {}, { includeBuilderTypes: true });
+      const builderUnionCount = (result.match(/FluentBuilder/g) || []).length;
+      expect(builderUnionCount).toBe(1);
+    });
+  });
+
+  describe('transformTypeDeep edge cases', () => {
+    test('should handle array with unknown element type', () => {
+      const arrayType: TypeInfo = {
+        kind: TypeKind.Array,
+        elementType: { kind: TypeKind.Primitive, name: 'unknown' },
+      };
+
+      const result = transformTypeDeep(arrayType, {});
+      expect(result).toBe('Array<unknown>');
+    });
+
+    test('should handle empty object', () => {
+      const emptyObject: TypeInfo = {
+        kind: TypeKind.Object,
+        properties: [],
+      };
+
+      const result = transformTypeDeep(emptyObject, {});
+      expect(result).toBe('{}');
+    });
+
+    test('should handle empty union', () => {
+      const emptyUnion: TypeInfo = {
+        kind: TypeKind.Union,
+        unionTypes: [],
+      };
+
+      const result = transformTypeDeep(emptyUnion, {});
+      expect(result).toBe('never');
+    });
+
+    test('should handle empty intersection', () => {
+      const emptyIntersection: TypeInfo = {
+        kind: TypeKind.Intersection,
+        intersectionTypes: [],
+      };
+
+      const result = transformTypeDeep(emptyIntersection, {});
+      expect(result).toBe('unknown');
+    });
+
+    test('should handle tuple with empty elements', () => {
+      const emptyTuple: TypeInfo = {
+        kind: TypeKind.Tuple,
+        elements: [],
+      };
+
+      const result = transformTypeDeep(emptyTuple, {});
+      expect(result).toBe('[]');
+    });
+
+    test('should handle transformer returning TypeInfo instead of string', () => {
+      const stringType: TypeInfo = { kind: TypeKind.Primitive, name: 'string' };
+
+      const result = transformTypeDeep(stringType, {
+        onPrimitive: type => {
+          if (type.name === 'string') {
+            return { kind: TypeKind.Primitive, name: 'number' };
+          }
+          return null;
+        },
+      });
+
+      expect(result).toBe('number');
+    });
+
+    test('should handle onArray returning TypeInfo', () => {
+      const arrayType: TypeInfo = {
+        kind: TypeKind.Array,
+        elementType: { kind: TypeKind.Primitive, name: 'string' },
+      };
+
+      const result = transformTypeDeep(arrayType, {
+        onArray: () => ({ kind: TypeKind.Primitive, name: 'CustomArrayType' }),
+      });
+
+      expect(result).toBe('CustomArrayType');
+    });
+
+    test('should handle onObject returning TypeInfo', () => {
+      const objectType: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'User',
+        properties: [],
+      };
+
+      const result = transformTypeDeep(objectType, {
+        onObject: () => ({ kind: TypeKind.Primitive, name: 'CustomObjectType' }),
+      });
+
+      expect(result).toBe('CustomObjectType');
+    });
+
+    test('should handle onUnion returning TypeInfo', () => {
+      const unionType: TypeInfo = {
+        kind: TypeKind.Union,
+        unionTypes: [
+          { kind: TypeKind.Primitive, name: 'string' },
+          { kind: TypeKind.Primitive, name: 'number' },
+        ],
+      };
+
+      const result = transformTypeDeep(unionType, {
+        onUnion: () => ({ kind: TypeKind.Primitive, name: 'CustomUnionType' }),
+      });
+
+      expect(result).toBe('CustomUnionType');
+    });
+
+    test('should handle onIntersection returning TypeInfo', () => {
+      const intersectionType: TypeInfo = {
+        kind: TypeKind.Intersection,
+        intersectionTypes: [
+          { kind: TypeKind.Object, name: 'A', properties: [] },
+          { kind: TypeKind.Object, name: 'B', properties: [] },
+        ],
+      };
+
+      const result = transformTypeDeep(intersectionType, {
+        onIntersection: () => ({ kind: TypeKind.Primitive, name: 'CustomIntersectionType' }),
+      });
+
+      expect(result).toBe('CustomIntersectionType');
+    });
+
+    test('should handle onGeneric returning TypeInfo', () => {
+      const genericType: TypeInfo = {
+        kind: TypeKind.Generic,
+        name: 'T',
+      };
+
+      const result = transformTypeDeep(genericType, {
+        onGeneric: () => ({ kind: TypeKind.Primitive, name: 'string' }),
+      });
+
+      expect(result).toBe('string');
+    });
+
+    test('should handle onLiteral returning TypeInfo', () => {
+      const literalType: TypeInfo = {
+        kind: TypeKind.Literal,
+        literal: 'hello',
+      };
+
+      const result = transformTypeDeep(literalType, {
+        onLiteral: () => ({ kind: TypeKind.Primitive, name: 'string' }),
+      });
+
+      expect(result).toBe('string');
+    });
+
+    test('should handle onReference returning TypeInfo', () => {
+      const referenceType: TypeInfo = {
+        kind: TypeKind.Reference,
+        name: 'MyType',
+      };
+
+      const result = transformTypeDeep(referenceType, {
+        onReference: () => ({ kind: TypeKind.Primitive, name: 'string' }),
+      });
+
+      expect(result).toBe('string');
+    });
+
+    test('should handle onTuple returning TypeInfo', () => {
+      const tupleType: TypeInfo = {
+        kind: TypeKind.Tuple,
+        elements: [
+          { kind: TypeKind.Primitive, name: 'string' },
+          { kind: TypeKind.Primitive, name: 'number' },
+        ],
+      };
+
+      const result = transformTypeDeep(tupleType, {
+        onTuple: () => ({ kind: TypeKind.Primitive, name: 'CustomTupleType' }),
+      });
+
+      expect(result).toBe('CustomTupleType');
+    });
+
+    test('should handle onAny returning string directly', () => {
+      const stringType: TypeInfo = { kind: TypeKind.Primitive, name: 'string' };
+
+      const result = transformTypeDeep(stringType, {
+        onAny: () => 'AnyType',
+      });
+
+      expect(result).toBe('AnyType');
+    });
+
+    test('should handle generic object with multiple generic parameters', () => {
+      const genericObject: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'Result',
+        properties: [],
+        genericParams: [{ name: 'T' }, { name: 'E' }, { name: 'K' }],
+      };
+
+      const result = transformTypeDeep(genericObject, {});
+      expect(result).toBe('Result<T, E, K>');
+    });
+
+    test('should handle generic object with constrained generic parameters', () => {
+      const genericObject: TypeInfo = {
+        kind: TypeKind.Object,
+        name: 'Result',
+        properties: [],
+        genericParams: [
+          { name: 'T', constraint: { kind: TypeKind.Primitive, name: 'string' } },
+          { name: 'E', constraint: { kind: TypeKind.Primitive, name: 'Error' } },
+        ],
+      };
+
+      const result = transformTypeDeep(genericObject, {});
+      expect(result).toBe('Result<T, E>');
+    });
+  });
 });
