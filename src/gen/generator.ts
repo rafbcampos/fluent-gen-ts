@@ -336,6 +336,14 @@ export class BuilderGenerator {
     switch (typeInfo.kind) {
       case TypeKind.Generic:
         // Generic types are by definition unresolved type parameters
+        // Also check the unresolvedGenerics field
+        if (
+          'unresolvedGenerics' in typeInfo &&
+          typeInfo.unresolvedGenerics &&
+          typeInfo.unresolvedGenerics.length > 0
+        ) {
+          return false;
+        }
         return false;
 
       case TypeKind.Primitive:
@@ -348,9 +356,28 @@ export class BuilderGenerator {
         return true;
 
       case TypeKind.Object:
+        // Check if the object type has unresolved generics marked explicitly
+        if (
+          'unresolvedGenerics' in typeInfo &&
+          typeInfo.unresolvedGenerics &&
+          typeInfo.unresolvedGenerics.length > 0
+        ) {
+          return false;
+        }
         // For object types, check if they have unresolved generics in their properties
         if ('properties' in typeInfo && typeInfo.properties) {
           return this.checkPropertiesForUnresolvedGenerics(typeInfo.properties, depth);
+        }
+        return true;
+
+      case TypeKind.Reference:
+        // Check if reference type has type arguments that contain unresolved generics
+        if (
+          'typeArguments' in typeInfo &&
+          typeInfo.typeArguments &&
+          typeInfo.typeArguments.length > 0
+        ) {
+          return typeInfo.typeArguments.every(arg => this.isTypeFullyResolved(arg, depth + 1));
         }
         return true;
 
