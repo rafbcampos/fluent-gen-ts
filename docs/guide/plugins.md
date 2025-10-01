@@ -1027,6 +1027,128 @@ const result = await gen.generateBuilder('./types.ts', 'UserDTO');
 
 ## Plugin Development Best Practices
 
+### Rule Ordering Matters
+
+**IMPORTANT**: Plugin transformation rules are evaluated in order, and the
+**first matching rule wins**. This means rule order is critical for correct
+behavior.
+
+#### The Problem
+
+When using deep type matching with `containsDeep()`, be aware that generic rules
+may match before specific ones:
+
+```typescript
+// ❌ INCORRECT - Generic rule matches first, blocks AssetWrapper rule
+.transformPropertyMethods(builder => builder
+  // This generic rule matches ANY type containing strings (including AssetWrapper)
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+  .setParameter(ctx => ctx.type.transformDeep()
+    .replace(primitive('string'), 'string | TaggedValue<string>')
+    .toString()
+  )
+  .done()
+
+  // This specific rule NEVER executes because AssetWrapper contains strings
+  .when(ctx => ctx.type.containsDeep(object('AssetWrapper')))
+  .setParameter(ctx => ctx.originalTypeString.replace(/AssetWrapper/g, 'Asset'))
+  .done()
+)
+```
+
+**Why this fails:**
+
+- `AssetWrapper` contains string properties deep in its structure
+- The generic `containsDeep(primitive('string'))` rule matches first
+- The plugin stops evaluating rules after the first match
+- Your `AssetWrapper` transformation never runs
+
+#### The Solution
+
+**Always place specific rules before generic ones:**
+
+```typescript
+// ✅ CORRECT - Specific rules first, generic rules last
+.transformPropertyMethods(builder => builder
+  // Specific transformations FIRST
+  .when(ctx => ctx.type.containsDeep(object('AssetWrapper')))
+  .setParameter(ctx => ctx.originalTypeString.replace(/AssetWrapper/g, 'Asset'))
+  .done()
+
+  .when(ctx => ctx.type.containsDeep(array().of(object('User'))))
+  .setParameter(ctx => 'Array<EnhancedUser>')
+  .done()
+
+  // Generic transformations LAST
+  .when(ctx => ctx.type.containsDeep(primitive('string')))
+  .setParameter(ctx => ctx.type.transformDeep()
+    .replace(primitive('string'), 'string | TaggedValue<string>')
+    .toString()
+  )
+  .done()
+
+  .when(ctx => ctx.type.containsDeep(primitive('number')))
+  .setParameter(ctx => ctx.type.transformDeep()
+    .replace(primitive('number'), 'number | TaggedValue<number>')
+    .toString()
+  )
+  .done()
+)
+```
+
+#### Rule Ordering Best Practices
+
+1. **Most Specific → Most Generic**
+   - Type-specific transformations (e.g., `AssetWrapper`, `User`)
+   - Pattern-specific transformations (e.g., arrays of specific types)
+   - Generic transformations (e.g., all primitives, all objects)
+
+2. **Property-specific → Type-specific → Generic**
+
+   ```typescript
+   .when(ctx => ctx.property.name === 'email')  // Most specific
+   .when(ctx => ctx.type.matches(object('User')))  // Type-specific
+   .when(ctx => ctx.type.containsDeep(primitive()))  // Most generic
+   ```
+
+3. **Exact matches → Pattern matches → Broad matches**
+   ```typescript
+   .when(ctx => ctx.type.matches(object('AssetWrapper')))  // Exact
+   .when(ctx => ctx.property.name.endsWith('Asset'))  // Pattern
+   .when(ctx => ctx.type.containsDeep(primitive('string')))  // Broad
+   ```
+
+#### Debugging Rule Order Issues
+
+If your transformations aren't working as expected:
+
+1. **Check which rule is matching first** - Add logging to your predicates:
+
+   ```typescript
+   .when(ctx => {
+     const matches = ctx.type.containsDeep(primitive('string'));
+     console.log(`[Rule 1] Property ${ctx.property.name} matches:`, matches);
+     return matches;
+   })
+   ```
+
+2. **Verify rule execution order** - Rules execute top-to-bottom, first match
+   wins
+
+3. **Test specificity** - Ensure your specific rules actually match before
+   generic ones:
+
+   ```typescript
+   // This is too broad and will match many types
+   .when(ctx => ctx.type.containsDeep(primitive('string')))
+
+   // This is more specific but may still be too broad
+   .when(ctx => ctx.type.matches(object()))
+
+   // This is appropriately specific
+   .when(ctx => ctx.type.matches(object('AssetWrapper')))
+   ```
+
 ### Error Handling
 
 Always use Result types for proper error handling:
