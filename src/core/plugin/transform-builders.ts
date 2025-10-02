@@ -359,6 +359,21 @@ export class ValueTransformBuilder extends BaseRuleBuilder<
  */
 export class BuildMethodTransformBuilder {
   private transformations: BuildMethodTransformation[] = [];
+  private currentPredicate?: (context: BuildMethodContext) => boolean;
+
+  /**
+   * Set a condition for the next transformation
+   * @param predicate - Function that receives BuildMethodContext and returns true if the transformation should apply
+   * @returns This builder instance for chaining
+   * @example
+   * ```typescript
+   * builder.when(ctx => ctx.builderName === 'UserBuilder').insertBefore('return {', 'this.validate();')
+   * ```
+   */
+  when(predicate: (context: BuildMethodContext) => boolean): this {
+    this.currentPredicate = predicate;
+    return this;
+  }
 
   /**
    * Insert code before a marker
@@ -371,7 +386,9 @@ export class BuildMethodTransformBuilder {
       type: 'insertBefore',
       marker,
       code,
+      ...(this.currentPredicate ? { predicate: this.currentPredicate } : {}),
     });
+    delete this.currentPredicate;
     return this;
   }
 
@@ -386,7 +403,9 @@ export class BuildMethodTransformBuilder {
       type: 'insertAfter',
       marker,
       code,
+      ...(this.currentPredicate ? { predicate: this.currentPredicate } : {}),
     });
+    delete this.currentPredicate;
     return this;
   }
 
@@ -402,7 +421,9 @@ export class BuildMethodTransformBuilder {
       marker: pattern,
       code: '', // Empty code for replace operation
       replacement,
+      ...(this.currentPredicate ? { predicate: this.currentPredicate } : {}),
     });
+    delete this.currentPredicate;
     return this;
   }
 
@@ -417,7 +438,9 @@ export class BuildMethodTransformBuilder {
       type: 'wrap',
       code: before,
       replacement: after,
+      ...(this.currentPredicate ? { predicate: this.currentPredicate } : {}),
     });
+    delete this.currentPredicate;
     return this;
   }
 
@@ -429,6 +452,11 @@ export class BuildMethodTransformBuilder {
       let code = context.buildMethodCode;
 
       for (const transformation of this.transformations) {
+        // Skip transformation if predicate exists and returns false
+        if (transformation.predicate && !transformation.predicate(context)) {
+          continue;
+        }
+
         const insertCode =
           typeof transformation.code === 'function'
             ? transformation.code(context)
@@ -522,7 +550,22 @@ export class CustomMethodBuilder {
     returnType?: string | ((context: BuilderContext) => string);
     implementation?: string | ((context: BuilderContext) => string);
     jsDoc?: string;
+    predicate?: (context: BuilderContext) => boolean;
   } = {};
+
+  /**
+   * Set a condition for when this method should be added
+   * @param predicate - Function that receives BuilderContext and returns true if this method should be added
+   * @returns This builder instance for chaining
+   * @example
+   * ```typescript
+   * builder.when(ctx => ctx.builderName === 'UserBuilder')
+   * ```
+   */
+  when(predicate: (context: BuilderContext) => boolean): this {
+    this.definition = { ...this.definition, predicate };
+    return this;
+  }
 
   /**
    * Set the method name
@@ -601,6 +644,7 @@ export class CustomMethodBuilder {
       returnType: this.definition.returnType || 'this',
       implementation: this.definition.implementation,
       ...(this.definition.jsDoc ? { jsDoc: this.definition.jsDoc } : {}),
+      ...(this.definition.predicate ? { predicate: this.definition.predicate } : {}),
     };
   }
 }

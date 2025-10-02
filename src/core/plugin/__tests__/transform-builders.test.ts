@@ -468,6 +468,182 @@ describe('Transform Builders', () => {
       expect(result).toContain('// Context: TestType');
       expect(result).toContain('return { ...this.values };');
     });
+
+    describe('conditional transformations with when()', () => {
+      test('should apply transformation when predicate returns true', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .insertBefore('return {', 'this.validate();')
+          .build();
+
+        const matchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'build() { return { ...this.values }; }',
+          builderName: 'UserBuilder',
+        });
+
+        const result = transform(matchingContext);
+        expect(result).toContain('this.validate();');
+      });
+
+      test('should skip transformation when predicate returns false', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .insertBefore('return {', 'this.validate();')
+          .build();
+
+        const nonMatchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'build() { return { ...this.values }; }',
+          builderName: 'ProductBuilder',
+        });
+
+        const result = transform(nonMatchingContext);
+        expect(result).not.toContain('this.validate();');
+        expect(result).toBe('build() { return { ...this.values }; }');
+      });
+
+      test('should support multiple conditional transformations', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .insertBefore('return {', '// User validation')
+          .when(ctx => ctx.builderName === 'ProductBuilder')
+          .insertBefore('return {', '// Product validation')
+          .build();
+
+        const userContext = createMockBuildMethodContext({
+          buildMethodCode: 'build() { return { ...this.values }; }',
+          builderName: 'UserBuilder',
+        });
+
+        const productContext = createMockBuildMethodContext({
+          buildMethodCode: 'build() { return { ...this.values }; }',
+          builderName: 'ProductBuilder',
+        });
+
+        expect(transform(userContext)).toContain('// User validation');
+        expect(transform(userContext)).not.toContain('// Product validation');
+
+        expect(transform(productContext)).toContain('// Product validation');
+        expect(transform(productContext)).not.toContain('// User validation');
+      });
+
+      test('should work with insertAfter and predicate', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.typeName === 'User')
+          .insertAfter('return {', '\n  // User-specific logic')
+          .build();
+
+        const matchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          typeName: 'User',
+        });
+
+        const nonMatchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          typeName: 'Product',
+        });
+
+        expect(transform(matchingContext)).toContain('// User-specific logic');
+        expect(transform(nonMatchingContext)).not.toContain('// User-specific logic');
+      });
+
+      test('should work with replace and predicate', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .replace('return {', 'return Object.freeze({')
+          .build();
+
+        const matchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'UserBuilder',
+        });
+
+        const nonMatchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'ProductBuilder',
+        });
+
+        expect(transform(matchingContext)).toContain('Object.freeze');
+        expect(transform(nonMatchingContext)).not.toContain('Object.freeze');
+      });
+
+      test('should work with wrapMethod and predicate', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .wrapMethod('try {', '} catch(e) { console.error(e); }')
+          .build();
+
+        const matchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return this.values;',
+          builderName: 'UserBuilder',
+        });
+
+        const nonMatchingContext = createMockBuildMethodContext({
+          buildMethodCode: 'return this.values;',
+          builderName: 'ProductBuilder',
+        });
+
+        expect(transform(matchingContext)).toContain('try {');
+        expect(transform(matchingContext)).toContain('} catch(e)');
+        expect(transform(nonMatchingContext)).not.toContain('try {');
+      });
+
+      test('should reset predicate after transformation is added', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .insertBefore('return {', '// Step 1')
+          .insertBefore('return {', '// Step 2') // Should not have predicate
+          .build();
+
+        const userContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'UserBuilder',
+        });
+
+        const productContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'ProductBuilder',
+        });
+
+        const userResult = transform(userContext);
+        const productResult = transform(productContext);
+
+        expect(userResult).toContain('// Step 1');
+        expect(userResult).toContain('// Step 2');
+        expect(productResult).not.toContain('// Step 1');
+        expect(productResult).toContain('// Step 2'); // No predicate, should apply
+      });
+
+      test('should mix conditional and unconditional transformations', () => {
+        const builder = new BuildMethodTransformBuilder();
+        const transform = builder
+          .insertBefore('return {', '// Always applied')
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .insertBefore('return {', '// Only for UserBuilder')
+          .build();
+
+        const userContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'UserBuilder',
+        });
+
+        const productContext = createMockBuildMethodContext({
+          buildMethodCode: 'return { ...this.values };',
+          builderName: 'ProductBuilder',
+        });
+
+        expect(transform(userContext)).toContain('// Always applied');
+        expect(transform(userContext)).toContain('// Only for UserBuilder');
+        expect(transform(productContext)).toContain('// Always applied');
+        expect(transform(productContext)).not.toContain('// Only for UserBuilder');
+      });
+    });
   });
 
   describe('CustomMethodBuilder', () => {
@@ -643,6 +819,93 @@ describe('Transform Builders', () => {
 
       expect(typeof method.returnType).toBe('function');
       expect(typeof method.implementation).toBe('function');
+    });
+
+    describe('conditional methods with when()', () => {
+      test('should include predicate when using when()', () => {
+        const builder = new CustomMethodBuilder();
+        const method = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .name('withEmail')
+          .parameters([{ name: 'email', type: 'string' }])
+          .returns('this')
+          .implementation('return this.email(email);')
+          .build();
+
+        expect(method.predicate).toBeDefined();
+        expect(typeof method.predicate).toBe('function');
+      });
+
+      test('should not include predicate when when() is not called', () => {
+        const builder = new CustomMethodBuilder();
+        const method = builder
+          .name('withEmail')
+          .parameters([{ name: 'email', type: 'string' }])
+          .returns('this')
+          .implementation('return this.email(email);')
+          .build();
+
+        expect(method.predicate).toBeUndefined();
+      });
+
+      test('should allow chaining when() with other methods', () => {
+        const builder = new CustomMethodBuilder();
+        const result = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .name('test')
+          .implementation('return this;');
+
+        expect(result).toBe(builder);
+      });
+
+      test('should build method with working predicate', () => {
+        const builder = new CustomMethodBuilder();
+        const method = builder
+          .when(ctx => ctx.builderName === 'UserBuilder')
+          .name('withEmail')
+          .implementation('return this.email(email);')
+          .build();
+
+        const userContext = createMockBuilderContext({ builderName: 'UserBuilder' });
+        const productContext = createMockBuilderContext({ builderName: 'ProductBuilder' });
+
+        expect(method.predicate?.(userContext)).toBe(true);
+        expect(method.predicate?.(productContext)).toBe(false);
+      });
+
+      test('should support complex predicates', () => {
+        const builder = new CustomMethodBuilder();
+        const method = builder
+          .when(ctx => ctx.properties.some(p => p.name === 'email'))
+          .name('validateEmail')
+          .implementation('// validation logic')
+          .build();
+
+        const contextWithEmail = createMockBuilderContext({
+          properties: [
+            {
+              name: 'email',
+              type: { kind: TypeKind.Primitive, name: 'string' },
+              optional: false,
+              readonly: false,
+            },
+          ],
+        });
+
+        const contextWithoutEmail = createMockBuilderContext({
+          properties: [
+            {
+              name: 'username',
+              type: { kind: TypeKind.Primitive, name: 'string' },
+              optional: false,
+              readonly: false,
+            },
+          ],
+        });
+
+        expect(method.predicate?.(contextWithEmail)).toBe(true);
+        expect(method.predicate?.(contextWithoutEmail)).toBe(false);
+      });
     });
   });
 

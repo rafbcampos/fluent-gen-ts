@@ -1,6 +1,8 @@
 import { describe, test, expect, vi } from 'vitest';
 import { PluginBuilder, createPlugin } from '../plugin-builder.js';
 import { ok } from '../../result.js';
+import type { BuilderContext } from '../plugin-types.js';
+import { TypeKind } from '../../types.js';
 
 describe('PluginBuilder', () => {
   describe('createPlugin', () => {
@@ -321,6 +323,162 @@ describe('PluginBuilder', () => {
       expect(plugin.transformBuildMethod).toBeDefined();
       expect(plugin.addCustomMethods).toBeDefined();
       expect(plugin.transformImports).toBeDefined();
+    });
+  });
+
+  describe('conditional custom methods with when()', () => {
+    test('should filter custom methods based on predicate', () => {
+      const plugin = createPlugin('test-plugin', '1.0.0')
+        .addMethod(builder =>
+          builder
+            .when(ctx => ctx.builderName === 'UserBuilder')
+            .name('withEmail')
+            .implementation('return this.email(email);'),
+        )
+        .addMethod(builder =>
+          builder
+            .when(ctx => ctx.builderName === 'ProductBuilder')
+            .name('withPrice')
+            .implementation('return this.price(price);'),
+        )
+        .build();
+
+      expect(plugin.addCustomMethods).toBeDefined();
+
+      if (plugin.addCustomMethods) {
+        const userContext: BuilderContext = {
+          builderName: 'UserBuilder',
+          typeName: 'User',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          genericParams: '',
+          genericConstraints: '',
+          properties: [],
+          hasProperty: () => false,
+          getProperty: () => undefined,
+          getRequiredProperties: () => [],
+          getOptionalProperties: () => [],
+        };
+
+        const productContext: BuilderContext = {
+          builderName: 'ProductBuilder',
+          typeName: 'Product',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          genericParams: '',
+          genericConstraints: '',
+          properties: [],
+          hasProperty: () => false,
+          getProperty: () => undefined,
+          getRequiredProperties: () => [],
+          getOptionalProperties: () => [],
+        };
+
+        const userMethods = plugin.addCustomMethods(userContext);
+        const productMethods = plugin.addCustomMethods(productContext);
+
+        expect(userMethods.ok).toBe(true);
+        if (userMethods.ok) {
+          expect(userMethods.value).toHaveLength(1);
+          expect(userMethods.value[0]!.name).toBe('withEmail');
+        }
+
+        expect(productMethods.ok).toBe(true);
+        if (productMethods.ok) {
+          expect(productMethods.value).toHaveLength(1);
+          expect(productMethods.value[0]!.name).toBe('withPrice');
+        }
+      }
+    });
+
+    test('should include methods without predicate for all contexts', () => {
+      const plugin = createPlugin('test-plugin', '1.0.0')
+        .addMethod(builder =>
+          builder
+            .when(ctx => ctx.builderName === 'UserBuilder')
+            .name('withEmail')
+            .implementation('return this.email(email);'),
+        )
+        .addMethod(builder => builder.name('common').implementation('return this;'))
+        .build();
+
+      expect(plugin.addCustomMethods).toBeDefined();
+
+      if (plugin.addCustomMethods) {
+        const userContext: BuilderContext = {
+          builderName: 'UserBuilder',
+          typeName: 'User',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          genericParams: '',
+          genericConstraints: '',
+          properties: [],
+          hasProperty: () => false,
+          getProperty: () => undefined,
+          getRequiredProperties: () => [],
+          getOptionalProperties: () => [],
+        };
+
+        const productContext: BuilderContext = {
+          builderName: 'ProductBuilder',
+          typeName: 'Product',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          genericParams: '',
+          genericConstraints: '',
+          properties: [],
+          hasProperty: () => false,
+          getProperty: () => undefined,
+          getRequiredProperties: () => [],
+          getOptionalProperties: () => [],
+        };
+
+        const userMethods = plugin.addCustomMethods(userContext);
+        const productMethods = plugin.addCustomMethods(productContext);
+
+        expect(userMethods.ok).toBe(true);
+        if (userMethods.ok) {
+          expect(userMethods.value).toHaveLength(2);
+          expect(userMethods.value.map(m => m.name)).toEqual(['withEmail', 'common']);
+        }
+
+        expect(productMethods.ok).toBe(true);
+        if (productMethods.ok) {
+          expect(productMethods.value).toHaveLength(1);
+          expect(productMethods.value.map(m => m.name)).toEqual(['common']);
+        }
+      }
+    });
+
+    test('should return empty array when no methods match', () => {
+      const plugin = createPlugin('test-plugin', '1.0.0')
+        .addMethod(builder =>
+          builder
+            .when(ctx => ctx.builderName === 'UserBuilder')
+            .name('withEmail')
+            .implementation('return this.email(email);'),
+        )
+        .build();
+
+      expect(plugin.addCustomMethods).toBeDefined();
+
+      if (plugin.addCustomMethods) {
+        const productContext: BuilderContext = {
+          builderName: 'ProductBuilder',
+          typeName: 'Product',
+          typeInfo: { kind: TypeKind.Object, properties: [] },
+          genericParams: '',
+          genericConstraints: '',
+          properties: [],
+          hasProperty: () => false,
+          getProperty: () => undefined,
+          getRequiredProperties: () => [],
+          getOptionalProperties: () => [],
+        };
+
+        const result = plugin.addCustomMethods(productContext);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+          expect(result.value).toHaveLength(0);
+        }
+      }
     });
   });
 });

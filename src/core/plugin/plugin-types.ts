@@ -538,6 +538,7 @@ export interface BuildMethodTransformation {
   readonly marker?: string | RegExp;
   readonly code: StaticOrDynamic<string, BuildMethodContext>;
   readonly replacement?: string | ((match: string, context: BuildMethodContext) => string);
+  readonly predicate?: (context: BuildMethodContext) => boolean;
 }
 
 /**
@@ -559,6 +560,7 @@ export interface CustomMethodDefinition {
   readonly returnType: StaticOrDynamic<string, BuilderContext>;
   readonly implementation: StaticOrDynamic<string, BuilderContext>;
   readonly jsDoc?: string;
+  readonly predicate?: (context: BuilderContext) => boolean;
 }
 
 /**

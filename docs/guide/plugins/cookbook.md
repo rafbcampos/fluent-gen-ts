@@ -13,8 +13,10 @@ Each recipe is tested and ready to use. :::
 - [API](#api) - Response transforms, error handling
 - [Type Transformations](#type-transformations) - ID normalization, date
   handling
-- [Custom Methods](#custom-methods) - Convenience methods, shortcuts
-- [Build Hooks](#build-hooks) - Pre/post build logic
+- [Custom Methods](#custom-methods) - Conditional methods, convenience methods,
+  shortcuts
+- [Build Hooks](#build-hooks) - Conditional transformations, pre/post build
+  logic
 
 ## Validation {#validation}
 
@@ -569,6 +571,71 @@ export default booleanFlags;
 
 ## Custom Methods {#custom-methods}
 
+### Conditional Methods (Builder-Specific)
+
+Add methods only for specific builders using `.when()`:
+
+```typescript
+import { createPlugin } from 'fluent-gen-ts';
+
+const conditionalMethods = createPlugin('conditional-methods', '1.0.0')
+  // Add method only to UserBuilder
+  .addMethod(method =>
+    method
+      .when(ctx => ctx.builderName === 'UserBuilder')
+      .name('asVerifiedUser')
+      .returns('this')
+      .implementation(
+        `
+      return this
+        .withEmailVerified(true)
+        .withStatus('active')
+        .withVerifiedAt(new Date());
+    `,
+      )
+      .jsDoc('/**\\n * Configure as verified user (UserBuilder only)\\n */'),
+  )
+  // Add method only to builders with an 'email' property
+  .addMethod(method =>
+    method
+      .when(ctx => ctx.properties.some(p => p.name === 'email'))
+      .name('withRandomEmail')
+      .returns('this')
+      .implementation(
+        `
+      const randomEmail = \`user\${Date.now()}@example.com\`;
+      return this.withEmail(randomEmail);
+    `,
+      ),
+  )
+  // Add method to all builders (no condition)
+  .addMethod(method =>
+    method
+      .name('clone')
+      .returns('this')
+      .implementation(
+        'return Object.assign(Object.create(Object.getPrototypeOf(this)), this);',
+      ),
+  )
+  .build();
+
+export default conditionalMethods;
+```
+
+**Usage:**
+
+```typescript
+// UserBuilder gets asVerifiedUser() method
+const user = new UserBuilder().asVerifiedUser().build();
+
+// ProductBuilder doesn't have asVerifiedUser() method
+const product = new ProductBuilder().build(); // No asVerifiedUser method
+
+// All builders get clone() method
+const user2 = new UserBuilder().clone();
+const product2 = new ProductBuilder().clone();
+```
+
 ### Role-Based Helpers
 
 ```typescript
@@ -672,6 +739,74 @@ export default fluentConditionals;
 ```
 
 ## Build Hooks {#build-hooks}
+
+### Conditional Build Transformations
+
+Apply build transformations only for specific builders using `.when()`:
+
+```typescript
+import { createPlugin } from 'fluent-gen-ts';
+
+const conditionalBuildHooks = createPlugin('conditional-build-hooks', '1.0.0')
+  .requireImports(imports => imports.addExternal('uuid', ['v4 as uuidv4']))
+  // Only validate UserBuilder
+  .transformBuildMethod(transform =>
+    transform
+      .when(ctx => ctx.builderName === 'UserBuilder')
+      .insertBefore(
+        'return {',
+        `
+      // Validate user-specific fields
+      if (!this.has('email')) {
+        throw new Error('User must have email');
+      }
+      if (!this.has('role')) {
+        this.set('role', 'user'); // Default role
+      }
+    `,
+      ),
+  )
+  // Auto-generate UUID only for entities with 'id' property
+  .transformBuildMethod(transform =>
+    transform
+      .when(ctx => ctx.properties.some(p => p.name === 'id'))
+      .insertBefore(
+        'return {',
+        `
+      if (!this.has('id')) {
+        this.set('id', uuidv4());
+      }
+    `,
+      ),
+  )
+  // Log builds in development (all builders)
+  .transformBuildMethod(transform =>
+    transform.insertBefore(
+      'return {',
+      `
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Building:', this.constructor.name);
+      }
+    `,
+    ),
+  )
+  .build();
+
+export default conditionalBuildHooks;
+```
+
+**Result:**
+
+```typescript
+// UserBuilder gets email validation AND UUID AND logging
+const user = new UserBuilder().build(); // Throws if no email
+
+// ProductBuilder gets UUID AND logging (no email validation)
+const product = new ProductBuilder().build(); // OK without email
+
+// CommentBuilder (no id property) gets only logging
+const comment = new CommentBuilder().build(); // No UUID, just logging
+```
 
 ### Validation Before Build
 

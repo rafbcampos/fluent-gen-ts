@@ -65,29 +65,62 @@ const plugin = createPlugin(name: string, version: string)
 
 ### Custom Methods
 
-| Method                  | Parameters                             | Description       |
-| ----------------------- | -------------------------------------- | ----------------- |
-| `.addMethod`            | `configurator: (method) => method`     | Add custom method |
-| `method.name`           | `name: string`                         | Set method name   |
-| `method.parameter`      | `name: string, type: string, options?` | Add parameter     |
-| `method.returns`        | `type: string \| function`             | Set return type   |
-| `method.implementation` | `code: string \| function`             | Set method body   |
-| `method.jsDoc`          | `doc: string`                          | Add JSDoc comment |
+| Method                  | Parameters                             | Description          |
+| ----------------------- | -------------------------------------- | -------------------- |
+| `.addMethod`            | `configurator: (method) => method`     | Add custom method    |
+| `method.when`           | `predicate: (ctx) => boolean`          | Condition for method |
+| `method.name`           | `name: string`                         | Set method name      |
+| `method.parameter`      | `name: string, type: string, options?` | Add parameter        |
+| `method.returns`        | `type: string \| function`             | Set return type      |
+| `method.implementation` | `code: string \| function`             | Set method body      |
+| `method.jsDoc`          | `doc: string`                          | Add JSDoc comment    |
+
+**Context Object (`ctx`):**
+
+```typescript
+{
+  builderName: string;           // Builder class name
+  typeName: string;              // Type being built
+  properties: PropertyInfo[];    // All properties
+  typeInfo: TypeInfo;            // Type information
+  genericParams: string;         // Generic parameters
+  genericConstraints: string;    // Generic constraints
+  hasProperty(name: string): boolean;
+  getProperty(name: string): PropertyInfo | undefined;
+  getRequiredProperties(): PropertyInfo[];
+  getOptionalProperties(): PropertyInfo[];
+}
+```
 
 ### Build Method Transformation
 
-| Method                   | Parameters                               | Description            |
-| ------------------------ | ---------------------------------------- | ---------------------- |
-| `.transformBuildMethod`  | `configurator: (transform) => transform` | Transform build method |
-| `transform.insertBefore` | `marker: string, code: string`           | Insert before marker   |
-| `transform.insertAfter`  | `marker: string, code: string`           | Insert after marker    |
-| `transform.replace`      | `marker: string, code: string`           | Replace marker         |
-| `transform.wrap`         | `before: string, after: string`          | Wrap method            |
+| Method                   | Parameters                               | Description             |
+| ------------------------ | ---------------------------------------- | ----------------------- |
+| `.transformBuildMethod`  | `configurator: (transform) => transform` | Transform build method  |
+| `transform.when`         | `predicate: (ctx) => boolean`            | Condition for transform |
+| `transform.insertBefore` | `marker: string, code: string`           | Insert before marker    |
+| `transform.insertAfter`  | `marker: string, code: string`           | Insert after marker     |
+| `transform.replace`      | `marker: string, code: string`           | Replace marker          |
+| `transform.wrapMethod`   | `before: string, after: string`          | Wrap method             |
+
+**Context Object (`ctx`):**
+
+```typescript
+{
+  buildMethodCode: string;       // Current build method code
+  builderName: string;           // Builder class name
+  typeName: string;              // Type being built
+  properties: PropertyInfo[];    // All properties
+  options: GeneratorOptions;     // Generator options
+  resolvedType: ResolvedType;    // Resolved type info
+}
+```
 
 **Common markers:**
 
 - `'return this.buildWithDefaults'` - Before final return
 - `'const result ='` - After build completes
+- `'return {'` - Start of return statement
 
 ## Type Matcher API
 
@@ -302,21 +335,34 @@ interface PropertyInfo {
 .setExtractor('String(value)')
 ```
 
-### Custom Method
+### Conditional Custom Method
 
 ```typescript
 .addMethod(method => method
-  .name('withFakeData')
+  .when(ctx => ctx.builderName === 'UserBuilder')
+  .name('withFakeEmail')
   .returns('this')
-  .implementation('/* code */')
+  .implementation('return this.email("fake@example.com");')
 )
 ```
 
-### Build Hook
+### Conditional Build Hook
 
 ```typescript
 .transformBuildMethod(transform =>
-  transform.insertBefore('return this.buildWithDefaults', '/* code */')
+  transform
+    .when(ctx => ctx.builderName === 'UserBuilder')
+    .insertBefore('return {', 'this.validate();')
+)
+```
+
+### Custom Method (unconditional)
+
+```typescript
+.addMethod(method => method
+  .name('withDefaults')
+  .returns('this')
+  .implementation('/* set default values */')
 )
 ```
 

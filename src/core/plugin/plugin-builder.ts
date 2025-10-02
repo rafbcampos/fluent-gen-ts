@@ -52,7 +52,7 @@ export class PluginBuilder {
   private propertyMethodTransformBuilder?: PropertyMethodTransformBuilder;
   private valueTransformBuilder?: ValueTransformBuilder;
   private buildMethodTransformBuilder?: BuildMethodTransformBuilder;
-  private customMethods: CustomMethod[] = [];
+  private customMethodDefinitions: CustomMethodDefinition[] = [];
 
   constructor(name: string, version: string) {
     this.name = name;
@@ -212,16 +212,8 @@ export class PluginBuilder {
    */
   addMethod(configurator: (builder: CustomMethodBuilder) => CustomMethodBuilder): this {
     const builder = configurator(new CustomMethodBuilder());
-    const method = builder.build();
-
-    const customMethod: CustomMethod = {
-      name: method.name,
-      signature: this.buildMethodSignature(method),
-      implementation: this.buildMethodImplementation(method),
-      ...(method.jsDoc ? { jsDoc: method.jsDoc } : {}),
-    };
-
-    this.customMethods.push(customMethod);
+    const methodDefinition = builder.build();
+    this.customMethodDefinitions.push(methodDefinition);
     return this;
   }
 
@@ -283,9 +275,20 @@ export class PluginBuilder {
       : undefined;
 
     const addCustomMethods =
-      this.customMethods.length > 0
-        ? (_context: BuilderContext): Result<readonly CustomMethod[]> => {
-            return ok(this.customMethods);
+      this.customMethodDefinitions.length > 0
+        ? (context: BuilderContext): Result<readonly CustomMethod[]> => {
+            const methods = this.customMethodDefinitions
+              .filter(def => !def.predicate || def.predicate(context))
+              .map(def => {
+                const customMethod: CustomMethod = {
+                  name: def.name,
+                  signature: this.buildMethodSignature(def),
+                  implementation: this.buildMethodImplementation(def),
+                  ...(def.jsDoc ? { jsDoc: def.jsDoc } : {}),
+                };
+                return customMethod;
+              });
+            return ok(methods);
           }
         : undefined;
 
