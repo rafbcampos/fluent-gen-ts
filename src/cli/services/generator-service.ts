@@ -166,6 +166,21 @@ export class GeneratorService {
       fluentGenOptions.monorepoConfig = this.buildMonorepoConfig(config.monorepo);
     }
 
+    // Convert factoryTransform string to namingStrategy function
+    if (config.generator?.naming?.factoryTransform) {
+      try {
+        const transformStr = config.generator.naming.factoryTransform;
+        const namingStrategy = new Function('typeName', `return (${transformStr})(typeName)`) as (
+          typeName: string,
+        ) => string;
+        fluentGenOptions.namingStrategy = namingStrategy;
+      } catch (error) {
+        console.warn(
+          `Warning: Invalid factoryTransform function, ignoring: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     return new FluentGen(fluentGenOptions);
   }
 

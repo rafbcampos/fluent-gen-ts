@@ -211,6 +211,26 @@ describe('ConfigLoader', () => {
       }
     });
 
+    test('validates config with naming.factoryTransform string expression', () => {
+      const validConfig = {
+        generator: {
+          naming: {
+            factoryTransform: "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()",
+          },
+        },
+        targets: [{ file: 'test.ts' }],
+      };
+
+      const result = loader.validate(validConfig);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.generator?.naming?.factoryTransform).toBe(
+          validConfig.generator.naming.factoryTransform,
+        );
+      }
+    });
+
     test('validates config with all naming options', () => {
       const validConfig = {
         generator: {
@@ -218,6 +238,7 @@ describe('ConfigLoader', () => {
             convention: 'camelCase' as const,
             suffix: '.builder',
             transform: '(typeName) => typeName.toLowerCase()',
+            factoryTransform: "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()",
           },
         },
         targets: [{ file: 'test.ts' }],

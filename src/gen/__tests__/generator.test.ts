@@ -394,6 +394,40 @@ describe('BuilderGenerator', () => {
         expect(result.value).not.toContain('Creates a new Doc builder');
       }
     });
+
+    test('uses custom namingStrategy for factory function', async () => {
+      const genWithNaming = new BuilderGenerator({
+        namingStrategy: (typeName: string) => typeName.replace(/Asset$/, '').toLowerCase(),
+      });
+      const resolvedType: ResolvedType = {
+        name: 'ActionAsset',
+        sourceFile: '/test/action-asset.ts',
+        imports: [],
+        dependencies: [],
+        typeInfo: {
+          kind: TypeKind.Object,
+          name: 'ActionAsset',
+          properties: [
+            {
+              name: 'id',
+              type: { kind: TypeKind.Primitive, name: 'string' },
+              optional: false,
+              readonly: false,
+            },
+          ],
+          genericParams: [],
+        },
+      };
+
+      const result = await genWithNaming.generate(resolvedType);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('ActionAssetBuilder');
+        expect(result.value).toContain('function action(');
+        expect(result.value).not.toContain('function actionAsset(');
+      }
+    });
   });
 
   describe('multiple file generation', () => {

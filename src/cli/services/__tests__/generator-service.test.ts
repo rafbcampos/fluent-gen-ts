@@ -236,5 +236,38 @@ describe('GeneratorService', () => {
 
       expect(generator).toBeDefined();
     });
+
+    it('should convert factoryTransform string to namingStrategy function', () => {
+      const config: Config = {
+        generator: {
+          outputDir: './gen',
+          naming: {
+            factoryTransform: "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()",
+          },
+        },
+      };
+
+      const generator = service.createGenerator({ config });
+
+      expect(generator).toBeDefined();
+      // The generator should have been created with a namingStrategy
+      // We can't directly test the private config, but we can verify it was created successfully
+    });
+
+    it('should handle invalid factoryTransform gracefully', () => {
+      const config: Config = {
+        generator: {
+          outputDir: './gen',
+          naming: {
+            factoryTransform: 'invalid syntax ((',
+          },
+        },
+      };
+
+      // Should not throw, but log a warning
+      const generator = service.createGenerator({ config });
+
+      expect(generator).toBeDefined();
+    });
   });
 });

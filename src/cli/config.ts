@@ -29,6 +29,8 @@ export const GeneratorConfigSchema = z
         suffix: z.string().optional(),
         /** Custom transformation function as a string (e.g., "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()") */
         transform: z.string().optional(),
+        /** Custom transformation function for factory function names as a string (e.g., "(typeName) => typeName.replace(/Asset$/, '').toLowerCase()") */
+        factoryTransform: z.string().optional(),
       })
       .strict()
       .optional(),

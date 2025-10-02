@@ -106,6 +106,7 @@ function extractGeneratorConfig(options: FluentGenOptions): GeneratorConfig {
     'importPath',
     'addComments',
     'tsConfigPath',
+    'namingStrategy',
   ]);
   return result;
 }
