@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.18
+
+### Patch Changes
+
+- 8d68973: Factory naming config
+
 ## 0.1.17
 
 ### Patch Changes
