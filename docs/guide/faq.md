@@ -1,0 +1,420 @@
+# Frequently Asked Questions
+
+## General
+
+### What is fluent-gen-ts?
+
+A code generator that creates type-safe fluent builders from TypeScript
+interfaces and types, eliminating boilerplate and reducing testing complexity.
+
+### Why use builders instead of plain objects?
+
+**Benefits:**
+
+- **Type safety** - Catch errors at compile time
+- **Discoverability** - IDE autocomplete shows available methods
+- **Testability** - Easier to create test data
+- **Maintainability** - Interface changes automatically update builders
+- **Readability** - Fluent API is self-documenting
+
+### Do I commit generated files to Git?
+
+**Recommended: Yes**
+
+**Pros:**
+
+- Better IDE support (no generation needed)
+- Faster CI builds
+- Historical tracking of changes
+- Works without fluent-gen-ts installed
+
+**Cons:**
+
+- Larger repository size
+- Merge conflicts (rare)
+
+**Alternative: No (regenerate on demand)**
+
+Add to `.gitignore`:
+
+```txt
+/src/builders/
+```
+
+Add to `package.json`:
+
+```json
+{
+  "scripts": {
+    "prebuild": "fluent-gen-ts batch",
+    "pretest": "fluent-gen-ts batch"
+  }
+}
+```
+
+## Usage
+
+### How do I handle nested objects?
+
+Nested builders are automatically generated:
+
+```typescript
+interface User {
+  name: string;
+  address: Address;
+}
+
+interface Address {
+  street: string;
+  city: string;
+}
+
+// Usage - nested builders are auto-imported
+const user1 = user()
+  .withName('Alice')
+  .withAddress(address().withStreet('123 Main St').withCity('NYC'))
+  .build();
+```
+
+### Can I extend generated builders?
+
+Yes, but **plugins are recommended** for reusable logic:
+
+**Option 1: Plugins (Recommended)**
+
+```typescript
+const plugin = createPlugin('my-plugin', '1.0.0')
+  .addMethod(method =>
+    method
+      .name('asAdmin')
+      .returns('this')
+      .implementation('return this.withRole("admin")'),
+  )
+  .build();
+```
+
+**Option 2: Manual Extension (One-off)**
+
+```typescript
+class CustomUserBuilder extends UserBuilder {
+  asAdmin(): this {
+    return this.withRole('admin').withIsActive(true);
+  }
+}
+```
+
+### How do I handle optional vs required fields?
+
+Optional fields in TypeScript remain optional in builders:
+
+```typescript
+interface User {
+  id: string; // Required
+  email?: string; // Optional
+}
+
+// Both valid:
+user().withId('123').build();
+user().withId('123').withEmail('test@example.com').build();
+```
+
+### Can I set multiple properties at once?
+
+Yes, pass initial data to the builder:
+
+```typescript
+const baseUser = {
+  createdAt: new Date(),
+  isActive: true,
+};
+
+const user1 = user(baseUser).withId('123').withName('Alice').build();
+```
+
+## Configuration
+
+### What's the difference between `single` and `batch` mode?
+
+**Single Mode** - One builder per file:
+
+```
+src/builders/
+  ├── user.builder.ts
+  ├── product.builder.ts
+  └── common.ts
+```
+
+**Batch Mode** - All builders in one file:
+
+```
+src/builders/
+  ├── index.ts       (all builders)
+  └── common.ts
+```
+
+Configure in `fluentgen.config.js`:
+
+```javascript
+{
+  output: {
+    mode: 'single'; // or 'batch'
+  }
+}
+```
+
+### How do I customize file naming?
+
+Use naming strategies:
+
+```javascript
+{
+  generator: {
+    naming: {
+      convention: 'kebab-case',  // user-builder.ts
+      suffix: 'builder'
+    }
+  }
+}
+```
+
+Available conventions:
+
+- `camelCase` - userBuilder.ts
+- `kebab-case` - user-builder.ts
+- `snake_case` - user_builder.ts
+- `PascalCase` - UserBuilder.ts
+
+### How do monorepo configurations work?
+
+fluent-gen-ts auto-detects pnpm, yarn, and npm workspaces:
+
+```javascript
+{
+  monorepo: {
+    enabled: true,
+    dependencyResolutionStrategy: 'auto' // Recommended
+  }
+}
+```
+
+See [Monorepo Configuration](/guide/advanced-usage#monorepo-configuration) for
+details.
+
+## Plugins
+
+### When should I use plugins vs manual extension?
+
+**Use Plugins When:**
+
+- Logic applies to multiple builders
+- You want to share across projects
+- Need automatic application on all types
+- Validation, transformation, or import management
+
+**Use Manual Extension When:**
+
+- One-off customization
+- Specific to single builder
+- Quick prototype
+
+### Why isn't my plugin working?
+
+Common issues:
+
+1. **Missing `.done()`**
+
+   ```typescript
+   // ❌ Wrong
+   .when(ctx => true)
+   .setValidator('code')
+   .when(ctx => true) // New rule, forgot .done()
+
+   // ✅ Correct
+   .when(ctx => true)
+   .setValidator('code')
+   .done() // Complete rule
+   .when(ctx => true)
+   ```
+
+2. **Rule order** - Specific before generic
+
+   ```typescript
+   // ❌ Wrong - generic first
+   .when(ctx => ctx.type.isPrimitive())      // Matches everything
+   .when(ctx => ctx.property.name === 'id')  // Never reached
+
+   // ✅ Correct - specific first
+   .when(ctx => ctx.property.name === 'id')
+   .when(ctx => ctx.type.isPrimitive())
+   ```
+
+3. **Incorrect import paths** - Must include `.js` for ESM
+
+   ```typescript
+   // ❌ Wrong
+   .addInternalTypes('../types', ['User'])
+
+   // ✅ Correct
+   .addInternalTypes('../types.js', ['User'])
+   ```
+
+See [Best Practices](/guide/plugins/best-practices) for more.
+
+### Can plugins access runtime values?
+
+**No.** Plugins work at **code generation time**, not runtime.
+
+```typescript
+// ❌ Wrong - Can't access builder state during generation
+.addMethod(method => method
+  .implementation(`
+    if (this.peek('name') === 'admin') { ... }
+  `)
+)
+
+// ✅ Correct - Use parameters
+.addMethod(method => method
+  .parameter('name', 'string')
+  .implementation(`
+    if (name === 'admin') { ... }
+  `)
+)
+```
+
+## Performance
+
+### Are builders slower than plain objects?
+
+Minimal overhead. Builders add ~1-5% overhead compared to object literals. In
+practice, this is negligible.
+
+**Benchmarks:**
+
+- Plain object: ~0.01ms per creation
+- Builder: ~0.011ms per creation
+- Difference: Unmeasurable in real apps
+
+### Should I use builders in production code?
+
+**Yes**, builders are production-ready:
+
+- Type-safe
+- No runtime dependencies
+- Minimal overhead
+- Used in enterprise applications
+
+### How do I optimize large object trees?
+
+Use partial initialization:
+
+```typescript
+// Instead of building everything:
+const full = order()
+  .withCustomer(customer().with...().with...())
+  .withItems([item().with...(), ...])
+  .build();
+
+// Build parts separately:
+const customer1 = customer().with...().build();
+const items = [...]; // Reuse items
+
+const order1 = order()
+  .withCustomer(customer1)
+  .withItems(items)
+  .build();
+```
+
+## Troubleshooting
+
+### "Cannot find module" errors
+
+Ensure ESM imports use `.js` extension:
+
+```typescript
+// ❌ Wrong
+import { user } from './builders/user.builder';
+
+// ✅ Correct
+import { user } from './builders/user.builder.js';
+```
+
+### Generated code has TypeScript errors
+
+Common causes:
+
+1. **Circular dependencies** - Use type imports
+2. **Missing dependencies** - Install required packages
+3. **Wrong tsconfig** - Ensure `moduleResolution: "bundler"` or `"node16"`
+
+Run with verbose output:
+
+```bash
+npx fluent-gen-ts batch --verbose
+```
+
+### Types are not found during generation
+
+Check:
+
+1. File path is correct
+2. Type is exported
+3. tsconfig.json is valid
+
+Use scan to verify:
+
+```bash
+npx fluent-gen-ts scan "src/**/*.ts"
+```
+
+## Integration
+
+### How do I integrate with testing frameworks?
+
+```typescript
+// Vitest/Jest
+import { user } from '../builders/user.builder.js';
+
+test('should create user', () => {
+  const testUser = user().withId('test-id').withName('Test').build();
+
+  expect(testUser.id).toBe('test-id');
+});
+```
+
+### Can I use with Prisma/TypeORM/Drizzle?
+
+Yes! Generate builders from your schema types:
+
+**Prisma:**
+
+```typescript
+import type { User } from '@prisma/client';
+// Generate builder for Prisma types
+```
+
+**TypeORM:**
+
+```typescript
+import { User } from './entities/user.entity.ts';
+// Generate builder for entity
+```
+
+### Does it work with React/Vue/Angular?
+
+Yes! Builders are framework-agnostic. Use them anywhere:
+
+```typescript
+// React
+const [user, setUser] = useState(user().withName('Alice').build());
+
+// Vue
+const user = ref(user().withName('Bob').build());
+```
+
+## Still Have Questions?
+
+- **[Troubleshooting Guide](/guide/troubleshooting)** - Common issues
+- **[GitHub Discussions](https://github.com/rafbcampos/fluent-gen-ts/discussions)** -
+  Ask the community
+- **[GitHub Issues](https://github.com/rafbcampos/fluent-gen-ts/issues)** -
+  Report bugs

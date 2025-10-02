@@ -378,7 +378,7 @@ export default {
 
 Recommended `.gitignore` entries:
 
-```gitignore
+```txt
 # Generated builders (if not committing)
 /generated/
 /src/__generated__/

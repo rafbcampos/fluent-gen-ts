@@ -26,22 +26,49 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: 'Guide',
+        text: 'Getting Started',
         items: [
-          { text: 'Getting Started', link: '/guide/getting-started' },
+          { text: 'Quick Start', link: '/guide/quick-start' },
+          { text: 'Installation & Setup', link: '/guide/getting-started' },
           { text: 'Core Concepts', link: '/guide/core-concepts' },
-          { text: 'CLI Commands', link: '/guide/cli-commands' },
-          { text: 'Advanced Usage', link: '/guide/advanced-usage' },
-          { text: 'Plugins', link: '/guide/plugins' },
         ],
       },
       {
-        text: 'Examples',
-        items: [{ text: 'Examples', link: '/examples/' }],
+        text: 'CLI & Configuration',
+        collapsed: false,
+        items: [
+          { text: 'CLI Commands', link: '/guide/cli-commands' },
+          { text: 'CLI Cheat Sheet', link: '/guide/cli-cheat-sheet' },
+          { text: 'Configuration', link: '/guide/configuration' },
+          { text: 'Config Recipes', link: '/guide/config-recipes' },
+          { text: 'Workflows', link: '/guide/workflows' },
+        ],
       },
       {
-        text: 'API Reference',
-        items: [{ text: 'API Reference', link: '/api/reference' }],
+        text: 'Plugin System',
+        collapsed: false,
+        items: [
+          { text: 'Overview', link: '/guide/plugins/' },
+          { text: 'Getting Started', link: '/guide/plugins/getting-started' },
+          { text: 'Best Practices ⚠️', link: '/guide/plugins/best-practices' },
+          { text: 'Cookbook', link: '/guide/plugins/cookbook' },
+          { text: 'API Reference', link: '/guide/plugins/api-reference' },
+        ],
+      },
+      {
+        text: 'Advanced',
+        items: [
+          { text: 'Advanced Usage', link: '/guide/advanced-usage' },
+          { text: 'Examples', link: '/examples/' },
+        ],
+      },
+      {
+        text: 'Help',
+        items: [
+          { text: 'FAQ', link: '/guide/faq' },
+          { text: 'Troubleshooting', link: '/guide/troubleshooting' },
+          { text: 'API Reference', link: '/api/reference' },
+        ],
       },
     ],
 

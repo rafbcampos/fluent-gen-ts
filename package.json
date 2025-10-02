@@ -68,6 +68,9 @@
   "engines": {
     "node": ">=18.0.0"
   },
+  "publishConfig": {
+    "provenance": true
+  },
   "devDependencies": {
     "@changesets/cli": "2.29.7",
     "@commitlint/cli": "20.0.0",
