@@ -771,10 +771,15 @@ ${methods}
     const context = this.utils.createBuilderContext(params);
     const customMethods = this.utils.getCustomMethodsSafely(context, params.config.pluginManager);
 
-    const validMethods = customMethods.filter(this.utils.validateCustomMethod).map(method => {
-      const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
-      return `${jsDoc}  ${method.name.trim()}${method.signature.trim()}: ${params.builderName}${params.genericConstraints};`;
-    });
+    const validMethods = customMethods
+      .filter(method => this.utils.validateCustomMethod(method))
+      .map(method => {
+        const jsDocComment =
+          typeof method.jsDoc === 'string' && method.jsDoc.trim()
+            ? `  /** ${method.jsDoc.trim()} */\n`
+            : '';
+        return `${jsDocComment}  ${method.name.trim()}${method.signature.trim()}: ${params.builderName}${params.genericConstraints};`;
+      });
 
     return validMethods.join('\n');
   }
@@ -791,13 +796,16 @@ ${methods}
     const customMethods = this.utils.getCustomMethodsSafely(context, params.config.pluginManager);
 
     const validMethods = customMethods
-      .filter(this.utils.validateCustomMethodWithImplementation)
+      .filter(method => this.utils.validateCustomMethodWithImplementation(method))
       .map(method => {
-        const jsDoc = typeof method.jsDoc === 'string' ? method.jsDoc : '';
+        const jsDocComment =
+          typeof method.jsDoc === 'string' && method.jsDoc.trim()
+            ? `  /** ${method.jsDoc.trim()} */\n`
+            : '';
         const implementation = method.implementation.trim();
 
         // The implementation should already be the complete method definition
-        return `${jsDoc}${implementation}`;
+        return `${jsDocComment}  ${implementation}`;
       });
 
     return validMethods.join('\n\n');

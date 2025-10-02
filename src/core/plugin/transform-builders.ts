@@ -59,7 +59,8 @@ abstract class BaseRuleBuilder<TRule, TContext, TTransform> {
    */
   protected completeCurrentRule(): void {
     this.validateRuleComplete();
-    this.rules.push(this.currentRule as TRule);
+    // validateRuleComplete ensures currentRule is complete and matches TRule
+    this.rules.push(this.currentRule! as TRule);
     this.currentRule = null;
   }
 
@@ -158,8 +159,8 @@ export class PropertyMethodTransformBuilder extends BaseRuleBuilder<
    */
   setParameter(type: string | ((context: PropertyMethodContext) => string)): this {
     this.validateActiveRule();
-
-    const rule = this.currentRule as MutablePropertyMethodTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutablePropertyMethodTransformRule;
     rule.transform = {
       ...rule.transform,
       parameterType: type,
@@ -172,8 +173,8 @@ export class PropertyMethodTransformBuilder extends BaseRuleBuilder<
    */
   setExtractor(code: string): this {
     this.validateActiveRule();
-
-    const rule = this.currentRule as MutablePropertyMethodTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutablePropertyMethodTransformRule;
     rule.transform = {
       ...rule.transform,
       extractValue: code,
@@ -186,8 +187,8 @@ export class PropertyMethodTransformBuilder extends BaseRuleBuilder<
    */
   setValidator(code: string): this {
     this.validateActiveRule();
-
-    const rule = this.currentRule as MutablePropertyMethodTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutablePropertyMethodTransformRule;
     rule.transform = {
       ...rule.transform,
       validate: code,
@@ -278,8 +279,8 @@ export class ValueTransformBuilder extends BaseRuleBuilder<
    */
   condition(code: string): this {
     this.validateActiveRule();
-
-    const rule = this.currentRule as MutableValueTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutableValueTransformRule;
     rule.transform = {
       ...rule.transform,
       condition: code,
@@ -293,8 +294,8 @@ export class ValueTransformBuilder extends BaseRuleBuilder<
    */
   transform(code: string): this {
     this.validateActiveRule();
-
-    const rule = this.currentRule as MutableValueTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutableValueTransformRule;
     rule.transform = {
       ...rule.transform,
       transform: code,
@@ -313,7 +314,8 @@ export class ValueTransformBuilder extends BaseRuleBuilder<
       ? wrapper.replace(/VALUE/g, 'value')
       : `${wrapper}(value)`;
 
-    const rule = this.currentRule as MutableValueTransformRule;
+    // validateActiveRule ensures currentRule is not null and was initialized in when()
+    const rule = this.currentRule! as MutableValueTransformRule;
     rule.transform = {
       ...rule.transform,
       transform: transformCode,
