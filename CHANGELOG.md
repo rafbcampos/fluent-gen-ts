@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.20
+
+### Patch Changes
+
+- e356bae: Expose the when method to addMethod
+
 ## 0.1.19
 
 ### Patch Changes
