@@ -280,6 +280,33 @@ export class ImportTransformUtilsImpl implements ImportTransformUtils {
   }
 
   /**
+   * Normalizes a source path by ensuring relative imports have .js extension.
+   * This prevents issues where "../b" and "../b.js" are treated as different sources.
+   *
+   * @param source - The import source to normalize
+   * @returns Normalized source with .js extension for relative imports
+   */
+  private normalizeImportSource(source: string): string {
+    // Only normalize relative imports (starting with . or ..)
+    if (!source.startsWith('.')) {
+      return source;
+    }
+
+    // If already has .js extension, return as-is
+    if (source.endsWith('.js')) {
+      return source;
+    }
+
+    // If has .ts extension (shouldn't happen in imports but be safe), replace it
+    if (source.endsWith('.ts')) {
+      return source.replace(/\.ts$/, '.js');
+    }
+
+    // Add .js extension
+    return `${source}.js`;
+  }
+
+  /**
    * Merges imports from the same source into single import statements.
    *
    * Combines named imports, preserves default and namespace imports from the first
@@ -304,10 +331,15 @@ export class ImportTransformUtilsImpl implements ImportTransformUtils {
     const merged = new Map<string, StructuredImport>();
 
     for (const imp of imports) {
-      const existing = merged.get(imp.source);
+      // Normalize the source to ensure consistent .js extensions
+      const normalizedSource = this.normalizeImportSource(imp.source);
+      const normalizedImp =
+        imp.source !== normalizedSource ? { ...imp, source: normalizedSource } : imp;
+
+      const existing = merged.get(normalizedSource);
 
       if (!existing) {
-        merged.set(imp.source, { ...imp });
+        merged.set(normalizedSource, { ...normalizedImp });
         continue;
       }
 
@@ -317,7 +349,7 @@ export class ImportTransformUtilsImpl implements ImportTransformUtils {
         existing.namedImports.map(ni => `${ni.name}${ni.alias ? `:${ni.alias}` : ''}`),
       );
 
-      for (const namedImport of imp.namedImports) {
+      for (const namedImport of normalizedImp.namedImports) {
         const key = `${namedImport.name}${namedImport.alias ? `:${namedImport.alias}` : ''}`;
         if (!existingNames.has(key)) {
           mergedNamedImports.push(namedImport);
@@ -326,15 +358,15 @@ export class ImportTransformUtilsImpl implements ImportTransformUtils {
       }
 
       const base: BaseImport = {
-        source: imp.source,
+        source: normalizedSource,
         namedImports: mergedNamedImports,
-        isTypeOnly: existing.isTypeOnly && imp.isTypeOnly,
-        isSideEffect: existing.isSideEffect || imp.isSideEffect,
+        isTypeOnly: existing.isTypeOnly && normalizedImp.isTypeOnly,
+        isSideEffect: existing.isSideEffect || normalizedImp.isSideEffect,
       };
 
       const importOptions: { defaultImport?: string; namespaceImport?: string } = {};
-      const defaultImport = existing.defaultImport || imp.defaultImport;
-      const namespaceImport = existing.namespaceImport || imp.namespaceImport;
+      const defaultImport = existing.defaultImport || normalizedImp.defaultImport;
+      const namespaceImport = existing.namespaceImport || normalizedImp.namespaceImport;
 
       if (defaultImport !== undefined) {
         importOptions.defaultImport = defaultImport;
@@ -345,7 +377,7 @@ export class ImportTransformUtilsImpl implements ImportTransformUtils {
 
       const result = buildStructuredImport(base, importOptions);
 
-      merged.set(imp.source, result);
+      merged.set(normalizedSource, result);
     }
 
     return Array.from(merged.values());

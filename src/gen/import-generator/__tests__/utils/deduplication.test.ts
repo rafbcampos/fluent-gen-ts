@@ -38,7 +38,8 @@ describe('deduplication utilities', () => {
         'import type { Profile } from "./types.js";',
       ];
       const result = deduplicateImports(imports);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe('import type { User, Profile } from "./types.js";');
     });
 
     test('handles mixed type and value imports correctly', () => {
@@ -48,7 +49,8 @@ describe('deduplication utilities', () => {
         'import type { FC } from "react";',
       ];
       const result = deduplicateImports(imports);
-      expect(result).toHaveLength(3); // All should be preserved as they're different types
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe('import { type User, useState, type FC } from "react";');
     });
 
     test('removes whitespace-only and empty imports', () => {
@@ -77,10 +79,9 @@ describe('deduplication utilities', () => {
         'import { api, createUser } from "./api.js";', // Duplicate createUser
       ];
       const result = deduplicateImports(imports);
-      expect(result).toHaveLength(3);
-      expect(result).toContain('import type { User, Profile } from "./types.js";');
+      expect(result).toHaveLength(2);
+      expect(result).toContain('import type { User, Profile, Settings } from "./types.js";');
       expect(result).toContain('import { createUser } from "./utils.js";');
-      expect(result).toContain('import type { Settings } from "./types.js";');
     });
 
     test('handles non-array input gracefully', () => {

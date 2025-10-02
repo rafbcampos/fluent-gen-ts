@@ -1,5 +1,10 @@
 import { validateTypeName } from './validation.js';
 import { ImportParsingUtils } from '../../../core/utils/import-parser-utils.js';
+import {
+  ImportParser,
+  ImportSerializer,
+  ImportTransformUtilsImpl,
+} from '../../../core/plugin/import-transformer.js';
 
 /**
  * Categories for organizing import types during conflict resolution
@@ -14,21 +19,63 @@ export interface ImportCategories {
 }
 
 /**
+ * Normalizes the source in an import statement to have .js extension for relative imports.
+ * This prevents "../b" and "../b.js" from being treated as different sources.
+ *
+ * @param importStatement - The import statement to normalize
+ * @returns Normalized import statement with .js extension
+ */
+const normalizeImportSource = (importStatement: string): string => {
+  // Extract the source from the import statement
+  const sourceMatch = importStatement.match(/from\s+["']([^"']+)["']/);
+  if (!sourceMatch || !sourceMatch[1]) {
+    return importStatement;
+  }
+
+  const source = sourceMatch[1];
+
+  // Only normalize relative imports
+  if (!source.startsWith('.')) {
+    return importStatement;
+  }
+
+  // If already has .js extension, return as-is
+  if (source.endsWith('.js')) {
+    return importStatement;
+  }
+
+  // If has .ts extension, replace it
+  let normalizedSource = source;
+  if (source.endsWith('.ts')) {
+    normalizedSource = source.replace(/\.ts$/, '.js');
+  } else {
+    // Add .js extension
+    normalizedSource = `${source}.js`;
+  }
+
+  // Replace the source in the import statement
+  return importStatement.replace(/from\s+["']([^"']+)["']/, `from "${normalizedSource}"`);
+};
+
+/**
  * Removes duplicate import statements based on imported names.
  * Keeps the first occurrence of each unique import name.
+ * Normalizes relative import sources to have .js extensions before deduplication.
+ * Merges imports from the same source into a single import statement.
  *
  * @param imports - Array of import statements as strings
- * @returns Array of deduplicated import statements
+ * @returns Array of deduplicated and merged import statements with normalized sources
  *
  * @example
  * ```typescript
  * const imports = [
  *   'import type { User } from "./types";',
+ *   'import type { Profile } from "./types";',
  *   'import type { User } from "./other";',  // Duplicate User
  *   'import { api } from "./api";'
  * ];
  * const result = deduplicateImports(imports);
- * // Result: ['import type { User } from "./types";', 'import { api } from "./api";']
+ * // Result: ['import type { User, Profile } from "./types.js";', 'import { api } from "./api.js";']
  * ```
  */
 export const deduplicateImports = (imports: string[]): string[] => {
@@ -36,29 +83,34 @@ export const deduplicateImports = (imports: string[]): string[] => {
     return [];
   }
 
+  // First, normalize all import sources to have .js extensions
+  const normalizedImports = imports
+    .filter(imp => typeof imp === 'string' && imp.trim())
+    .map(imp => normalizeImportSource(imp.trim()));
+
+  // Parse to structured imports
+  const structuredImports = ImportParser.parseImports(normalizedImports);
+
+  // Use ImportTransformUtils to merge imports from the same source
+  const utils = new ImportTransformUtilsImpl();
+  const mergedImports = utils.mergeImports(structuredImports);
+
+  // Serialize back to strings
+  const mergedStrings = ImportSerializer.serializeImports(mergedImports);
+
+  // Deduplicate by tracking seen names
   const seen = new Set<string>();
   const typeToImportMap = new Map<string, string>();
   const deduplicated: string[] = [];
 
-  for (const imp of imports) {
-    // Skip non-string entries
-    if (typeof imp !== 'string') {
-      continue;
-    }
-
-    const normalized = imp.trim();
-    // Skip empty strings
-    if (!normalized) {
-      continue;
-    }
-
+  for (const imp of mergedStrings) {
     // Skip exact duplicates
-    if (seen.has(normalized)) {
+    if (seen.has(imp)) {
       continue;
     }
 
-    // Check for semantic duplicates (same imported names)
-    const importedNames = ImportParsingUtils.extractAllImportedNames(normalized);
+    // Check for semantic duplicates (same imported names from different sources)
+    const importedNames = ImportParsingUtils.extractAllImportedNames(imp);
     const hasConflict = importedNames.some(name => typeToImportMap.has(name));
 
     if (hasConflict) {
@@ -66,8 +118,8 @@ export const deduplicateImports = (imports: string[]): string[] => {
     }
 
     // Add this import and track its names
-    seen.add(normalized);
-    importedNames.forEach(name => typeToImportMap.set(name, normalized));
+    seen.add(imp);
+    importedNames.forEach(name => typeToImportMap.set(name, imp));
     deduplicated.push(imp);
   }
 
