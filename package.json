@@ -1,6 +1,6 @@
 {
   "name": "fluent-gen-ts",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "type": "module",
   "description": "Generate type-safe fluent builders for TypeScript interfaces and types",
   "main": "./dist/lib.js",
