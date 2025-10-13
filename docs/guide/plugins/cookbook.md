@@ -996,9 +996,9 @@ Complete API documentation: **[API Reference →](/guide/plugins/api-reference)*
 
 Learn the basics: **[Getting Started →](/guide/plugins/getting-started)**
 
-### 📖 API Reference
+### 📖 Plugin Overview
 
-Quick lookup: **[API Reference →](/guide/plugins/api-reference)**
+Full system guide: **[Plugin System →](/guide/plugins/)**
 
 </div>
 

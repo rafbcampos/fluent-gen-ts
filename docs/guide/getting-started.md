@@ -179,11 +179,8 @@ export default {
     { file: './src/models/product.ts', types: ['Product', 'Category'] },
     { file: './src/models/order.ts', types: ['Order', 'OrderItem'] },
   ],
-  output: {
-    dir: './src/builders',
-    mode: 'batch', // Creates a shared common.ts file
-  },
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: true,
   },

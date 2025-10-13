@@ -562,13 +562,13 @@ Ready-to-use examples: **[Cookbook →](/guide/plugins/cookbook)**
 
 Complete API documentation: **[API Reference →](/guide/plugins/api-reference)**
 
-### 🛠️ Advanced Examples
+### 🚀 Getting Started
 
-Explore more patterns: **[Cookbook →](/guide/plugins/cookbook)**
+Step-by-step guide: **[Getting Started →](/guide/plugins/getting-started)**
 
-### 📖 API Reference
+### 📖 Plugin System
 
-Quick lookup: **[API Reference →](/guide/plugins/api-reference)**
+Full overview: **[Plugin System →](/guide/plugins/)**
 
 </div>
 

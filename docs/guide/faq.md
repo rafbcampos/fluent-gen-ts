@@ -133,31 +133,25 @@ const user1 = user(baseUser).withId('123').withName('Alice').build();
 
 ## Configuration
 
-### What's the difference between `single` and `batch` mode?
+### How are builders organized in the output directory?
 
-**Single Mode** - One builder per file:
+Generated builders are created as separate files in the configured output
+directory:
 
 ```
 src/builders/
   ├── user.builder.ts
   ├── product.builder.ts
+  ├── order.builder.ts
   └── common.ts
 ```
 
-**Batch Mode** - All builders in one file:
-
-```
-src/builders/
-  ├── index.ts       (all builders)
-  └── common.ts
-```
-
-Configure in `fluentgen.config.js`:
+Configure the output directory in `fluentgen.config.js`:
 
 ```javascript
 {
-  output: {
-    mode: 'single'; // or 'batch'
+  generator: {
+    outputDir: './src/builders';
   }
 }
 ```

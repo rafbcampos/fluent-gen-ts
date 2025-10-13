@@ -75,13 +75,15 @@ npx fluent-gen-ts generate <file> <typeName> [options]
 
 ### Options
 
-| Option                | Description             | Default                         |
-| --------------------- | ----------------------- | ------------------------------- |
-| `-o, --output <path>` | Output file path        | `./generated/<type>.builder.ts` |
-| `--tsconfig <path>`   | Path to tsconfig.json   | Auto-detected                   |
-| `--use-defaults`      | Generate smart defaults | `true`                          |
-| `--add-comments`      | Add JSDoc comments      | `true`                          |
-| `--max-depth <n>`     | Max recursion depth     | `10`                            |
+| Option                  | Description                       | Default                         |
+| ----------------------- | --------------------------------- | ------------------------------- |
+| `-o, --output <path>`   | Output file path                  | `./generated/<type>.builder.ts` |
+| `-c, --config <path>`   | Path to configuration file        | Auto-detected                   |
+| `-t, --tsconfig <path>` | Path to tsconfig.json             | Auto-detected                   |
+| `-p, --plugins <paths>` | Plugin file paths (multiple)      | None                            |
+| `-d, --defaults`        | Use default values for properties | Enabled                         |
+| `--no-comments`         | Don't include JSDoc comments      | Comments enabled by default     |
+| `--dry-run`             | Preview without writing files     | `false`                         |
 
 ### Examples
 
@@ -90,13 +92,19 @@ npx fluent-gen-ts generate <file> <typeName> [options]
 npx fluent-gen-ts generate ./src/types.ts User
 
 # Specify output
-npx fluent-gen-ts generate ./src/types.ts User --output ./src/builders/
+npx fluent-gen-ts generate ./src/types.ts User --output ./src/builders/user.builder.ts
+
+# With plugins
+npx fluent-gen-ts generate ./src/types.ts User --plugins ./plugins/validation.ts
 
 # Custom tsconfig
 npx fluent-gen-ts generate ./src/types.ts User --tsconfig tsconfig.build.json
 
-# Without defaults
-npx fluent-gen-ts generate ./src/types.ts User --no-use-defaults
+# Without comments
+npx fluent-gen-ts generate ./src/types.ts User --no-comments
+
+# Dry run to preview
+npx fluent-gen-ts generate ./src/types.ts User --dry-run
 ```
 
 ## `batch` - Batch Generation
@@ -109,29 +117,26 @@ npx fluent-gen-ts batch [options]
 
 ### Options
 
-| Option                | Description                      | Default               |
-| --------------------- | -------------------------------- | --------------------- |
-| `-c, --config <path>` | Configuration file path          | `fluentgen.config.js` |
-| `--dry-run`           | Preview without generating files | `false`               |
-| `--verbose`           | Show detailed output             | `false`               |
+| Option                  | Description                      | Default               |
+| ----------------------- | -------------------------------- | --------------------- |
+| `-c, --config <path>`   | Configuration file path          | `fluentgen.config.js` |
+| `-p, --plugins <paths>` | Plugin file paths (multiple)     | From config           |
+| `-d, --dry-run`         | Preview without generating files | `false`               |
+| `--parallel`            | Generate builders in parallel    | `false`               |
 
 ### Configuration File
 
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
 export default {
-  types: [
+  targets: [
     { file: './src/user.ts', types: ['User', 'Profile'] },
     { file: './src/product.ts', types: ['Product'] },
   ],
-  output: {
-    dir: './generated/builders',
-    mode: 'batch', // or 'single'
-  },
   generator: {
+    outputDir: './generated/builders',
     useDefaults: true,
     addComments: true,
-    maxDepth: 10,
   },
   tsConfigPath: './tsconfig.json',
   plugins: ['./plugins/validation.js'],
@@ -150,8 +155,11 @@ npx fluent-gen-ts batch --config custom.config.js
 # Dry run to preview
 npx fluent-gen-ts batch --dry-run
 
-# Verbose output
-npx fluent-gen-ts batch --verbose
+# With plugins override
+npx fluent-gen-ts batch --plugins ./plugins/custom.ts
+
+# Parallel generation
+npx fluent-gen-ts batch --parallel
 ```
 
 ## `scan` - Scan for Types
@@ -278,30 +286,45 @@ export default {
   // Files and types to process
   targets: [
     {
-      file: string,     // Path to TypeScript file
-      types: string[]   // Type names to generate
+      file: string,        // Path to TypeScript file (required)
+      types: string[],     // Type names (optional - defaults to all)
+      outputFile: string   // Custom output path (optional)
     }
   ],
 
-  // Output configuration
-  output: {
-    dir: string,        // Output directory
-    mode: 'batch' | 'single', // Generation mode
-  },
+  // Alternative: use patterns to scan files
+  patterns: string[],      // Glob patterns
+  exclude: string[],       // Exclusion patterns
 
   // Generator options
   generator: {
+    outputDir: string,     // Output directory
     useDefaults: boolean,  // Generate smart defaults
     addComments: boolean,  // Include JSDoc comments
-    maxDepth: number,      // Max recursion depth
     contextType: string,   // Custom context type name
+    importPath: string,    // Custom import path for common utilities
+    generateCommonFile: boolean, // Generate common.ts
+    naming: {              // File naming configuration
+      convention: 'camelCase' | 'kebab-case' | 'snake_case' | 'PascalCase',
+      suffix: string,      // File suffix (default: 'builder')
+      transform: string,   // Custom transform function
+      factoryTransform: string // Factory function name transform
+    }
   },
 
   // TypeScript configuration
   tsConfigPath: string,    // Path to tsconfig.json
 
+  // Monorepo support
+  monorepo: {
+    enabled: boolean,
+    dependencyResolutionStrategy: 'auto' | 'workspace-root' | 'hoisted' | 'local-only',
+    workspaceRoot: string,
+    customPaths: string[]
+  },
+
   // Plugins
-  plugins: string[],       // Plugin file paths
+  plugins: string[]        // Plugin file paths
 };
 ```
 
@@ -340,11 +363,8 @@ export default {
   targets: [
     /* ... */
   ],
-  output: {
-    dir: './src/__generated__/builders',
-    mode: 'batch',
-  },
   generator: {
+    outputDir: './src/__generated__/builders',
     useDefaults: true,
     addComments: true,
   },

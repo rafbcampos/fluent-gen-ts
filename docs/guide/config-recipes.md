@@ -24,8 +24,8 @@ Perfect for small projects or getting started.
 // fluentgen.config.js
 export default {
   targets: [{ file: './src/types.ts', types: ['User', 'Product'] }],
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 };
 ```
@@ -49,15 +49,10 @@ export default {
     { file: './src/types/order.ts', types: ['Order', 'OrderItem'] },
   ],
 
-  output: {
-    dir: './src/__generated__/builders',
-    mode: 'single', // One file per builder
-  },
-
   generator: {
+    outputDir: './src/__generated__/builders',
     useDefaults: true,
     addComments: true,
-    maxDepth: 10,
   },
 };
 ```
@@ -75,15 +70,11 @@ Scan entire directory for types.
 ```javascript
 // fluentgen.config.js
 export default {
-  targets: [{ file: './src/models/**/*.ts', types: ['*'] }],
-
-  output: {
-    dir: './src/builders',
-    mode: 'single',
-  },
+  patterns: ['./src/models/**/*.ts'],
+  exclude: ['**/*.test.ts', '**/*.spec.ts'],
 
   generator: {
-    maxDepth: 8, // Limit for performance
+    outputDir: './src/builders',
   },
 };
 ```
@@ -94,8 +85,8 @@ export default {
 - Want to generate for all models
 - Easy to regenerate after schema changes
 
-:::warning Performance Using `types: ['*']` with globs can be slow for large
-codebases. Consider specific types instead. :::
+:::warning Performance Using `patterns` without specific types can be slow for
+large codebases. Consider using `targets` with specific types instead. :::
 
 ## Monorepos {#monorepos}
 
@@ -106,11 +97,10 @@ Configuration for pnpm monorepos.
 ```javascript
 // packages/api/fluentgen.config.js
 export default {
-  targets: [{ file: './src/models/*.ts', types: ['*'] }],
+  patterns: ['./src/models/*.ts'],
 
-  output: {
-    dir: './src/builders',
-    mode: 'single',
+  generator: {
+    outputDir: './src/builders',
   },
 
   monorepo: {
@@ -148,10 +138,10 @@ Configuration for Yarn monorepos.
 ```javascript
 // packages/core/fluentgen.config.js
 export default {
-  targets: [{ file: './src/types/*.ts', types: ['*'] }],
+  patterns: ['./src/types/*.ts'],
 
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 
   monorepo: {
@@ -170,11 +160,10 @@ Configuration for Nx monorepos.
 ```javascript
 // libs/shared/data-models/fluentgen.config.js
 export default {
-  targets: [{ file: './src/lib/models/*.ts', types: ['*'] }],
+  patterns: ['./src/lib/models/*.ts'],
 
-  output: {
-    dir: './src/lib/builders',
-    mode: 'single',
+  generator: {
+    outputDir: './src/lib/builders',
   },
 
   monorepo: {
@@ -194,10 +183,10 @@ Share plugins across monorepo packages.
 ```javascript
 // packages/api/fluentgen.config.js
 export default {
-  targets: [{ file: './src/models/*.ts', types: ['*'] }],
+  patterns: ['./src/models/*.ts'],
 
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 
   plugins: [
@@ -232,17 +221,13 @@ Optimized for test data generation.
 ```javascript
 // fluentgen.config.js
 export default {
-  targets: [{ file: './src/types/**/*.ts', types: ['*'] }],
-
-  output: {
-    dir: './src/__tests__/builders',
-    mode: 'batch', // All in one file for easy imports
-  },
+  patterns: ['./src/types/**/*.ts'],
+  exclude: ['**/*.test.ts', '**/*.spec.ts'],
 
   generator: {
+    outputDir: './src/__tests__/builders',
     useDefaults: true, // Smart defaults for tests
     addComments: false, // Smaller files
-    maxDepth: 5, // Faster generation
   },
 
   plugins: [
@@ -270,17 +255,12 @@ Configuration for continuous integration.
 ```javascript
 // fluentgen.config.js
 export default {
-  targets: [{ file: './src/models/*.ts', types: ['*'] }],
-
-  output: {
-    dir: './src/builders',
-    mode: 'single',
-  },
+  patterns: ['./src/models/*.ts'],
 
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: process.env.CI !== 'true', // Skip comments in CI
-    maxDepth: 10,
   },
 };
 ```
@@ -337,19 +317,12 @@ Different configs for different environments.
 
 ```javascript
 export default {
-  targets: [
-    { file: './src/types/**/*.ts', types: ['*'] }, // All types
-  ],
-
-  output: {
-    dir: './src/builders',
-    mode: 'single',
-  },
+  patterns: ['./src/types/**/*.ts'], // All types
 
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: true, // Full comments
-    maxDepth: 15, // Deep nesting OK
   },
 
   plugins: [
@@ -369,15 +342,10 @@ export default {
     { file: './src/types/product.ts', types: ['Product'] },
   ],
 
-  output: {
-    dir: './src/builders',
-    mode: 'batch', // Smaller bundle
-  },
-
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: false, // Minimize size
-    maxDepth: 8, // Faster generation
   },
 
   plugins: [
@@ -404,10 +372,10 @@ Generate to different locations for different purposes.
 ```javascript
 // Combined config
 export default {
-  targets: [{ file: './src/types/api.ts', types: ['*'] }],
+  targets: [{ file: './src/types/api.ts' }],
 
-  output: {
-    dir: process.env.OUTPUT_DIR || './src/builders',
+  generator: {
+    outputDir: process.env.OUTPUT_DIR || './src/builders',
   },
 };
 ```
@@ -432,17 +400,10 @@ Configuration for Next.js applications.
 ```javascript
 // fluentgen.config.js
 export default {
-  targets: [
-    { file: './types/api.ts', types: ['*'] },
-    { file: './types/models.ts', types: ['*'] },
-  ],
-
-  output: {
-    dir: './lib/builders', // Next.js lib directory
-    mode: 'single',
-  },
+  targets: [{ file: './types/api.ts' }, { file: './types/models.ts' }],
 
   generator: {
+    outputDir: './lib/builders', // Next.js lib directory
     useDefaults: true,
     addComments: true,
   },
@@ -473,18 +434,16 @@ Configuration for NestJS backend.
 // fluentgen.config.js
 export default {
   targets: [
-    { file: './src/entities/*.entity.ts', types: ['*'] },
-    { file: './src/dto/*.dto.ts', types: ['*'] },
+    { file: './src/entities/*.entity.ts' },
+    { file: './src/dto/*.dto.ts' },
   ],
 
-  output: {
-    dir: './src/__generated__/builders',
-    mode: 'single',
-  },
-
-  naming: {
-    convention: 'kebab-case',
-    suffix: 'builder',
+  generator: {
+    outputDir: './src/__generated__/builders',
+    naming: {
+      convention: 'kebab-case',
+      suffix: 'builder',
+    },
   },
 
   plugins: [
@@ -502,14 +461,10 @@ Configuration for React applications.
 ```javascript
 // fluentgen.config.js
 export default {
-  targets: [
-    { file: './src/types/state.ts', types: ['*'] },
-    { file: './src/types/api.ts', types: ['*'] },
-  ],
+  targets: [{ file: './src/types/state.ts' }, { file: './src/types/api.ts' }],
 
-  output: {
-    dir: './src/utils/builders',
-    mode: 'batch', // Easy imports in components
+  generator: {
+    outputDir: './src/utils/builders',
   },
 
   plugins: [
@@ -532,14 +487,9 @@ export default {
     },
   ],
 
-  output: {
-    dir: './src/test-utils/builders',
-    mode: 'single',
-  },
-
   generator: {
+    outputDir: './src/test-utils/builders',
     useDefaults: true,
-    maxDepth: 5, // Prisma types can be deep
   },
 
   plugins: ['./plugins/prisma-integration.ts'],
@@ -558,19 +508,16 @@ const isDev = process.env.NODE_ENV !== 'production';
 const isCi = process.env.CI === 'true';
 
 export default {
-  targets: isDev
-    ? [{ file: './src/types/**/*.ts', types: ['*'] }] // All in dev
-    : [{ file: './src/types/core.ts', types: ['User', 'Product'] }], // Limited in prod
-
-  output: {
-    dir: './src/builders',
-    mode: isDev ? 'single' : 'batch',
-  },
+  ...(isDev
+    ? { patterns: ['./src/types/**/*.ts'] } // All in dev
+    : {
+        targets: [{ file: './src/types/core.ts', types: ['User', 'Product'] }],
+      }), // Limited in prod
 
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: !isCi, // Skip comments in CI
-    maxDepth: isDev ? 15 : 8,
   },
 
   plugins: [
@@ -619,10 +566,10 @@ const enableValidation = process.env.ENABLE_VALIDATION !== 'false';
 const enableTesting = process.env.NODE_ENV === 'test';
 
 export default {
-  targets: [{ file: './src/types/*.ts', types: ['*'] }],
+  patterns: ['./src/types/*.ts'],
 
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 
   plugins: [
@@ -673,15 +620,10 @@ const config: Config = {
     { file: './src/types/product.ts', types: ['Product'] },
   ],
 
-  output: {
-    dir: './src/builders',
-    mode: 'single',
-  },
-
   generator: {
+    outputDir: './src/builders',
     useDefaults: true,
     addComments: true,
-    maxDepth: 10,
   },
 
   plugins: ['./plugins/validation.ts'],
@@ -725,7 +667,6 @@ export const baseConfig = {
   generator: {
     useDefaults: true,
     addComments: true,
-    maxDepth: 10,
   },
   plugins: ['@company/core-plugins'],
 };
@@ -736,8 +677,9 @@ import { baseConfig } from './base.config.js';
 export default {
   ...baseConfig,
   targets: [{ file: './src/types.ts', types: ['User'] }],
-  output: {
-    dir: './src/builders',
+  generator: {
+    ...baseConfig.generator,
+    outputDir: './src/builders',
   },
 };
 ```
@@ -747,7 +689,7 @@ export default {
 Preview what will be generated:
 
 ```bash
-npx fluent-gen-ts batch --dry-run --verbose
+npx fluent-gen-ts batch --dry-run
 ```
 
 ### Tip 4: Validate Config
@@ -759,7 +701,8 @@ Test config without generating:
 import config from './fluentgen.config.js';
 
 console.log('Config valid:', config);
-console.log('Targets:', config.targets.length);
+console.log('Targets:', config.targets?.length || 0);
+console.log('Patterns:', config.patterns?.length || 0);
 console.log('Plugins:', config.plugins?.length || 0);
 ```
 

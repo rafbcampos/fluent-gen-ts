@@ -423,18 +423,14 @@ Check config structure:
 export default {
   targets: [
     {
-      file: string,     // Required
-      types: string[]   // Required
+      file: string,        // Required
+      types: string[]      // Optional
     }
   ],
-  output: {
-    dir: string,        // Required
-    mode: 'single' | 'batch'
-  },
   generator: {
+    outputDir: string,     // Output directory
     useDefaults: boolean,
-    addComments: boolean,
-    maxDepth: number
+    addComments: boolean
   }
 };
 ```
@@ -512,27 +508,26 @@ Error: Cannot resolve symlinked package in node_modules/.pnpm
 
 **Solutions:**
 
-1. **Reduce maxDepth:**
-
-   ```javascript
-   {
-     generator: {
-       maxDepth: 5; // Default is 10
-     }
-   }
-   ```
-
-2. **Use glob patterns efficiently:**
+1. **Use specific targets instead of patterns:**
 
    ```javascript
    // ❌ Slow - scans everything
-   targets: [{ file: '**/*.ts', types: ['*'] }];
+   patterns: ['**/*.ts'];
 
-   // ✅ Fast - specific files
+   // ✅ Fast - specific files and types
    targets: [
      { file: './src/types/user.ts', types: ['User'] },
      { file: './src/types/product.ts', types: ['Product'] },
    ];
+   ```
+
+2. **Exclude unnecessary files:**
+
+   ```javascript
+   {
+     patterns: ['./src/models/**/*.ts'],
+     exclude: ['**/*.test.ts', '**/*.spec.ts', '**/node_modules/**']
+   }
    ```
 
 3. **Enable caching:** Caching is enabled by default. Clear if issues:
@@ -562,14 +557,17 @@ Error: Cannot resolve symlinked package in node_modules/.pnpm
    }
    ```
 
-2. **Use single mode instead of batch:**
+2. **Disable comments for smaller files:**
+
    ```javascript
    {
-     output: {
-       mode: 'single'; // One file per builder
+     generator: {
+       addComments: false; // Smaller files
      }
    }
    ```
+
+3. **Reduce complexity by splitting nested types**
 
 ## Runtime Errors
 

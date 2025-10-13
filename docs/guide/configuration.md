@@ -11,8 +11,8 @@ Create `fluentgen.config.js` in your project root:
 /** @type {import('fluent-gen-ts').Config} */
 export default {
   targets: [{ file: './src/types.ts', types: ['User'] }],
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 };
 ```
@@ -27,39 +27,41 @@ npx fluent-gen-ts batch
 
 ```typescript
 interface Config {
-  // Required: What to generate
-  targets: Target[];
+  // Optional: What to generate (either targets or patterns)
+  targets?: Target[];
 
-  // Required: Where to output
-  output: OutputConfig;
+  // Optional: File patterns to scan
+  patterns?: string[];
 
-  // Optional: Generator settings
+  // Optional: Patterns to exclude
+  exclude?: string[];
+
+  // Optional: Generator settings (includes output dir and naming)
   generator?: GeneratorConfig;
 
   // Optional: TypeScript config
   tsConfigPath?: string;
 
   // Optional: Plugins
-  plugins?: (string | Plugin)[];
+  plugins?: string[];
 
   // Optional: Monorepo support
   monorepo?: MonorepoConfig;
-
-  // Optional: File naming
-  naming?: NamingConfig;
 }
 ```
 
-## targets (Required) {#targets}
+## targets (Optional) {#targets}
 
-Specifies which types to generate builders for.
+Specifies which types to generate builders for. Either `targets` or `patterns`
+must be provided.
 
 ### Schema
 
 ```typescript
 interface Target {
   file: string; // Path to TypeScript file (glob supported)
-  types: string[]; // Type names to generate (or ['*'] for all)
+  types?: string[]; // Type names to generate (optional - defaults to all exported types)
+  outputFile?: string; // Custom output file path for this target
 }
 ```
 
@@ -101,93 +103,59 @@ targets: [{ file: './src/types/models.ts', types: ['*'] }];
 targets: [{ file: './src/models/**/*.ts', types: ['*'] }];
 ```
 
-:::warning Glob Performance Using globs with `types: ['*']` can be slow. Prefer
-specific files and types for faster generation. :::
-
-## output (Required) {#output}
-
-Controls where and how builders are generated.
-
-### Schema
-
-```typescript
-interface OutputConfig {
-  dir: string; // Output directory
-  mode?: 'single' | 'batch'; // Generation mode (default: 'single')
-  fileName?: string; // Custom file name pattern
-}
-```
-
-### mode: 'single' vs 'batch'
-
-**single (default)** - One builder per file:
-
-```
-src/builders/
-  ├── user.builder.ts        // UserBuilder
-  ├── product.builder.ts     // ProductBuilder
-  ├── order.builder.ts       // OrderBuilder
-  └── common.ts              // Shared utilities
-```
-
-**batch** - All builders in one file:
-
-```
-src/builders/
-  ├── index.ts               // All builders exported
-  └── common.ts              // Shared utilities
-```
-
-### When to Use Each Mode
-
-| Use Case                  | Recommended Mode | Reason                             |
-| ------------------------- | ---------------- | ---------------------------------- |
-| Small project (<10 types) | `batch`          | Simpler imports                    |
-| Large project (>10 types) | `single`         | Better organization, smaller files |
-| Tree-shaking important    | `single`         | Better dead code elimination       |
-| Simple imports preferred  | `batch`          | One import for all builders        |
-| Monorepo                  | `single`         | Easier to manage per-package       |
-
-### Examples
-
-**Single mode (recommended):**
-
-```javascript
-output: {
-  dir: './src/builders',
-  mode: 'single'
-}
-```
-
-**Batch mode:**
-
-```javascript
-output: {
-  dir: './src/builders',
-  mode: 'batch'
-}
-```
-
-**Custom directory:**
-
-```javascript
-output: {
-  dir: './src/__generated__/builders';
-}
-```
+:::warning Glob Performance Using globs without specific types can be slow.
+Prefer specific files and types for faster generation. :::
 
 ## generator (Optional) {#generator}
 
-Fine-tune builder generation behavior.
+Fine-tune builder generation behavior, output location, and naming conventions.
 
 ### Schema
 
 ```typescript
 interface GeneratorConfig {
+  outputDir?: string; // Output directory for generated builders
   useDefaults?: boolean; // Generate smart defaults (default: true)
   addComments?: boolean; // Add JSDoc comments (default: true)
-  maxDepth?: number; // Max recursion depth 1-100 (default: 10)
   contextType?: string; // Custom context type name
+  importPath?: string; // Custom import path for common utilities
+  generateCommonFile?: boolean; // Whether to generate common.ts (default: true)
+  naming?: NamingConfig; // File naming configuration
+}
+```
+
+### outputDir
+
+Specifies where generated builders will be written.
+
+```javascript
+generator: {
+  outputDir: './src/builders';
+}
+```
+
+**Default behavior:**
+
+- If not specified, outputs to `./builders` in the current directory
+- Can be absolute or relative path
+- Directory will be created if it doesn't exist
+
+**Examples:**
+
+```javascript
+// Relative path
+generator: {
+  outputDir: './src/__generated__/builders';
+}
+
+// Absolute path
+generator: {
+  outputDir: '/app/generated/builders';
+}
+
+// Custom location
+generator: {
+  outputDir: './dist/factories';
 }
 ```
 
@@ -249,44 +217,6 @@ withEmail(value: string): this {
 - Minimize file size
 - Comments add no value (self-documenting types)
 
-### maxDepth
-
-Limit nested type resolution depth.
-
-**Default: 10**
-
-```typescript
-interface A {
-  b: B;
-}
-interface B {
-  c: C;
-}
-interface C {
-  d: D;
-}
-// ... depth 10
-```
-
-**Lower for performance:**
-
-```javascript
-generator: {
-  maxDepth: 5; // Stop at depth 5
-}
-```
-
-**Higher for complex types:**
-
-```javascript
-generator: {
-  maxDepth: 20; // Rare, only if needed
-}
-```
-
-:::warning Performance Higher maxDepth = slower generation and larger files.
-Only increase if you have deeply nested types. :::
-
 ### contextType
 
 Use custom context type for builders.
@@ -308,33 +238,93 @@ build(context?: MyCustomContext): T {
 See [Custom Context](/guide/advanced-usage#custom-nested-context-generation) for
 details.
 
+### importPath
+
+Custom import path for common utilities.
+
+```javascript
+generator: {
+  importPath: '@/builders/common';
+}
+```
+
+By default, generated builders import from `'./common.js'`. Use this option to
+customize the import path.
+
+**Examples:**
+
+```javascript
+// Use path alias
+generator: {
+  importPath: '@/common';
+}
+
+// Use absolute path
+generator: {
+  importPath: '/app/builders/common';
+}
+
+// Use different relative path
+generator: {
+  importPath: '../shared/common';
+}
+```
+
+### generateCommonFile
+
+Whether to generate the `common.ts` utilities file.
+
+**true (default):**
+
+```javascript
+generator: {
+  generateCommonFile: true;
+}
+```
+
+Generates `common.ts` with shared builder utilities.
+
+**false:**
+
+```javascript
+generator: {
+  generateCommonFile: false;
+}
+```
+
+Useful when you want to provide your own common utilities file.
+
+### naming {#generator-naming}
+
+Configure output file naming conventions. See the
+[naming configuration section](#naming) below for complete details.
+
 ### Examples
 
 **Minimal configuration:**
 
 ```javascript
 generator: {
+  outputDir: './src/builders',
   useDefaults: false,
-  addComments: false,
-  maxDepth: 5
+  addComments: false
 }
 ```
 
-**Maximum documentation:**
+**Full configuration:**
 
 ```javascript
 generator: {
+  outputDir: './src/__generated__/builders',
   useDefaults: true,
   addComments: true,
-  maxDepth: 15
-}
-```
-
-**Custom context:**
-
-```javascript
-generator: {
-  contextType: 'TenantBuildContext';
+  contextType: 'TenantBuildContext',
+  importPath: '@/builders/common',
+  generateCommonFile: true,
+  naming: {
+    convention: 'kebab-case',
+    suffix: 'builder'
+  }
 }
 ```
 
@@ -598,9 +588,45 @@ monorepo: {
 
 See [Monorepo Guide](/guide/advanced-usage#monorepo-configuration) for details.
 
+## patterns & exclude (Optional) {#patterns}
+
+Alternative to `targets` for scanning files with patterns.
+
+### Schema
+
+```typescript
+interface Config {
+  patterns?: string[]; // Glob patterns to scan
+  exclude?: string[]; // Patterns to exclude
+}
+```
+
+### Examples
+
+**Scan all TypeScript files:**
+
+```javascript
+export default {
+  patterns: ['src/**/*.ts'],
+  exclude: ['**/*.test.ts', '**/*.spec.ts'],
+  generator: {
+    outputDir: './src/builders',
+  },
+};
+```
+
+**Multiple patterns:**
+
+```javascript
+export default {
+  patterns: ['src/models/**/*.ts', 'src/types/**/*.ts'],
+  exclude: ['**/*.test.ts', '**/node_modules/**'],
+};
+```
+
 ## naming (Optional) {#naming}
 
-Customize output file naming.
+Customize output file naming. This is configured under `generator.naming`.
 
 ### Schema
 
@@ -609,6 +635,7 @@ interface NamingConfig {
   convention?: 'camelCase' | 'kebab-case' | 'snake_case' | 'PascalCase';
   suffix?: string;
   transform?: string; // JavaScript function as string
+  factoryTransform?: string; // Function name transform
 }
 ```
 
@@ -619,8 +646,10 @@ Predefined naming styles.
 **'camelCase':**
 
 ```javascript
-naming: {
-  convention: 'camelCase';
+generator: {
+  naming: {
+    convention: 'camelCase';
+  }
 }
 // UserProfile → userProfile.builder.ts
 ```
@@ -628,8 +657,10 @@ naming: {
 **'kebab-case' (recommended):**
 
 ```javascript
-naming: {
-  convention: 'kebab-case';
+generator: {
+  naming: {
+    convention: 'kebab-case';
+  }
 }
 // UserProfile → user-profile.builder.ts
 ```
@@ -637,8 +668,10 @@ naming: {
 **'snake_case':**
 
 ```javascript
-naming: {
-  convention: 'snake_case';
+generator: {
+  naming: {
+    convention: 'snake_case';
+  }
 }
 // UserProfile → user_profile.builder.ts
 ```
@@ -646,8 +679,10 @@ naming: {
 **'PascalCase':**
 
 ```javascript
-naming: {
-  convention: 'PascalCase';
+generator: {
+  naming: {
+    convention: 'PascalCase';
+  }
 }
 // UserProfile → UserProfile.builder.ts
 ```
@@ -657,26 +692,45 @@ naming: {
 File suffix (default: 'builder'):
 
 ```javascript
-naming: {
-  convention: 'kebab-case',
-  suffix: 'factory'
+generator: {
+  naming: {
+    convention: 'kebab-case',
+    suffix: 'factory'
+  }
 }
 // UserProfile → user-profile.factory.ts
 ```
 
 ### transform
 
-Custom JavaScript function for naming:
+Custom JavaScript function for file naming:
 
 ```javascript
-naming: {
-  transform: `(typeName) => {
-    return typeName
-      .replace(/DTO$/, '')
-      .toLowerCase() + '.gen';
-  }`;
+generator: {
+  naming: {
+    transform: `(typeName) => {
+      return typeName
+        .replace(/DTO$/, '')
+        .toLowerCase() + '.gen';
+    }`;
+  }
 }
 // UserDTO → user.gen.ts
+```
+
+### factoryTransform
+
+Custom JavaScript function for factory function names:
+
+```javascript
+generator: {
+  naming: {
+    factoryTransform: `(typeName) => {
+      return 'create' + typeName;
+    }`;
+  }
+}
+// User → createUser() factory function
 ```
 
 ### Examples
@@ -684,32 +738,41 @@ naming: {
 **Standard kebab-case:**
 
 ```javascript
-naming: {
-  convention: 'kebab-case',
-  suffix: 'builder'
+generator: {
+  naming: {
+    convention: 'kebab-case',
+    suffix: 'builder'
+  }
 }
 ```
 
 **Custom suffix:**
 
 ```javascript
-naming: {
-  convention: 'camelCase',
-  suffix: 'factory'
+generator: {
+  naming: {
+    convention: 'camelCase',
+    suffix: 'factory'
+  }
 }
 // Result: userProfile.factory.ts
 ```
 
-**Custom transform:**
+**Custom transforms:**
 
 ```javascript
-naming: {
-  transform: `(typeName) => {
-    const base = typeName.replace(/(DTO|Model|Entity)$/, '');
-    return base.toLowerCase() + '.generated';
-  }`;
+generator: {
+  naming: {
+    transform: `(typeName) => {
+      const base = typeName.replace(/(DTO|Model|Entity)$/, '');
+      return base.toLowerCase() + '.generated';
+    }`,
+    factoryTransform: `(typeName) => {
+      return 'make' + typeName;
+    }`
+  }
 }
-// UserDTO → user.generated.ts
+// UserDTO → user.generated.ts with makeUser() function
 ```
 
 ## Complete Examples
@@ -719,8 +782,8 @@ naming: {
 ```javascript
 export default {
   targets: [{ file: './src/types.ts', types: ['User'] }],
-  output: {
-    dir: './src/builders',
+  generator: {
+    outputDir: './src/builders',
   },
 };
 ```
@@ -736,15 +799,15 @@ export default {
     { file: './src/types/order.ts', types: ['Order', 'OrderItem'] },
   ],
 
-  output: {
-    dir: './src/__generated__/builders',
-    mode: 'single',
-  },
-
   generator: {
+    outputDir: './src/__generated__/builders',
     useDefaults: true,
     addComments: true,
-    maxDepth: 10,
+    contextType: 'BuildContext',
+    naming: {
+      convention: 'kebab-case',
+      suffix: 'builder',
+    },
   },
 
   plugins: [
@@ -762,11 +825,11 @@ export default {
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
 export default {
-  targets: [{ file: './src/models/*.ts', types: ['*'] }],
+  patterns: ['./src/models/**/*.ts'],
+  exclude: ['**/*.test.ts'],
 
-  output: {
-    dir: './src/builders',
-    mode: 'single',
+  generator: {
+    outputDir: './src/builders',
   },
 
   monorepo: {
@@ -784,15 +847,15 @@ export default {
 
 ```javascript
 export default {
-  targets: [{ file: './src/dtos/*.ts', types: ['*'] }],
+  targets: [{ file: './src/dtos/*.ts' }],
 
-  output: {
-    dir: './src/factories',
-  },
-
-  naming: {
-    convention: 'kebab-case',
-    suffix: 'factory',
+  generator: {
+    outputDir: './src/factories',
+    naming: {
+      convention: 'kebab-case',
+      suffix: 'factory',
+      factoryTransform: '(name) => "create" + name',
+    },
   },
 };
 ```
