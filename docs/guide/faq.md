@@ -17,6 +17,23 @@ interfaces and types, eliminating boilerplate and reducing testing complexity.
 - **Maintainability** - Interface changes automatically update builders
 - **Readability** - Fluent API is self-documenting
 
+### What's the difference between `generate` and `batch` commands?
+
+**`generate`** - Single builder, one-off usage:
+
+```bash
+npx fluent-gen-ts generate ./types.ts User
+```
+
+**`batch`** - Multiple builders from config file:
+
+```bash
+npx fluent-gen-ts batch  # Uses fluentgen.config.js
+```
+
+Use `batch` for projects with multiple types. Use `generate` for quick
+prototyping or single builders.
+
 ### Do I commit generated files to Git?
 
 **Recommended: Yes**
@@ -51,6 +68,17 @@ Add to `package.json`:
   }
 }
 ```
+
+### Does fluent-gen-ts have runtime dependencies?
+
+**No.** Generated builders are standalone TypeScript code with zero runtime
+dependencies. You can:
+
+- Copy generated files to other projects
+- Remove fluent-gen-ts after generation
+- Use builders without installing anything
+
+The tool is only needed during code generation.
 
 ## Usage
 
@@ -131,6 +159,57 @@ const baseUser = {
 const user1 = user(baseUser).withId('123').withName('Alice').build();
 ```
 
+### How do I handle arrays?
+
+Arrays work automatically:
+
+```typescript
+interface Team {
+  members: User[];
+}
+
+// Usage
+const team = team()
+  .withMembers([
+    user().withName('Alice').build(),
+    user().withName('Bob').build(),
+  ])
+  .build();
+```
+
+### How do I handle union types?
+
+Union types accept any of the union members:
+
+```typescript
+interface Config {
+  value: string | number;
+}
+
+// Both valid:
+config().withValue('text').build();
+config().withValue(123).build();
+```
+
+### Can I use conditional logic in builders?
+
+Yes, use `.if()` or chain conditionally:
+
+```typescript
+// Option 1: .if() method
+user()
+  .withName('Alice')
+  .if(someCondition, 'email', 'alice@example.com')
+  .build();
+
+// Option 2: Conditional chaining
+let builder = user().withName('Alice');
+if (someCondition) {
+  builder = builder.withEmail('alice@example.com');
+}
+const result = builder.build();
+```
+
 ## Configuration
 
 ### How are builders organized in the output directory?
@@ -193,6 +272,43 @@ fluent-gen-ts auto-detects pnpm, yarn, and npm workspaces:
 
 See [Monorepo Configuration](/guide/advanced-usage#monorepo-configuration) for
 details.
+
+### How do I configure TypeScript settings?
+
+Point to your tsconfig:
+
+```javascript
+{
+  tsConfigPath: './tsconfig.build.json',
+}
+```
+
+Or via CLI:
+
+```bash
+npx fluent-gen-ts generate ./types.ts User --tsconfig ./tsconfig.build.json
+```
+
+### Can I disable defaults or comments?
+
+Yes, via config or CLI:
+
+```javascript
+// Config
+{
+  generator: {
+    useDefaults: false,  // No default values
+    addComments: false   // No JSDoc comments
+  }
+}
+```
+
+```bash
+# CLI
+npx fluent-gen-ts generate ./types.ts User \
+  --use-defaults false \
+  --add-comments false
+```
 
 ## Plugins
 
@@ -275,6 +391,37 @@ See [Best Practices](/guide/plugins/best-practices) for more.
 )
 ```
 
+### How do I share plugins across projects?
+
+Publish as npm package:
+
+```typescript
+// my-plugin/index.ts
+import { createPlugin } from 'fluent-gen-ts';
+
+export default createPlugin('my-plugin', '1.0.0').addMethod(/* ... */).build();
+```
+
+```javascript
+// Consumer's fluentgen.config.js
+export default {
+  plugins: ['my-plugin'], // From node_modules
+};
+```
+
+### Can I apply plugins to specific types only?
+
+Yes, use `.when()` conditions:
+
+```typescript
+.transformPropertyMethods(builder =>
+  builder
+    .when(ctx => ctx.typeName === 'User') // Only User type
+    .setValidator('/* validation */')
+    .done(),
+);
+```
+
 ## Performance
 
 ### Are builders slower than plain objects?
@@ -318,6 +465,17 @@ const order1 = order()
   .build();
 ```
 
+### What's the bundle size impact?
+
+Generated builders add ~2-5KB per builder (minified + gzipped). For a typical
+project:
+
+- **Single builder**: ~2KB
+- **10 builders**: ~8KB (shared utilities amortize cost)
+- **100 builders**: ~50KB
+
+Use tree-shaking to eliminate unused builders in production bundles.
+
 ## Troubleshooting
 
 ### "Cannot find module" errors
@@ -351,13 +509,56 @@ npx fluent-gen-ts batch --verbose
 Check:
 
 1. File path is correct
-2. Type is exported
+2. Type is exported (`export interface User` not `interface User`)
 3. tsconfig.json is valid
 
 Use scan to verify:
 
 ```bash
 npx fluent-gen-ts scan "src/**/*.ts"
+```
+
+### Builder methods are missing for some properties
+
+Common causes:
+
+1. **Circular type references** - May require manual intervention
+2. **Depth limit** - Increase `--max-depth` (default: 10)
+3. **Complex mapped types** - Simplify type definition
+
+Generate with higher depth:
+
+```bash
+npx fluent-gen-ts generate ./types.ts User --max-depth 15
+```
+
+### How do I debug generation issues?
+
+Use verbose mode:
+
+```bash
+npx fluent-gen-ts batch --verbose
+```
+
+Or dry-run to preview:
+
+```bash
+npx fluent-gen-ts batch --dry-run
+```
+
+### Builders are out of sync with types
+
+Regenerate after type changes:
+
+```bash
+npm run generate
+```
+
+Automate in CI:
+
+```yaml
+- run: npx fluent-gen-ts batch
+- run: git diff --exit-code src/builders || exit 1
 ```
 
 ## Integration
@@ -403,6 +604,47 @@ const [user, setUser] = useState(user().withName('Alice').build());
 
 // Vue
 const user = ref(user().withName('Bob').build());
+```
+
+### Can I use with GraphQL schemas?
+
+Yes! Generate builders from GraphQL-generated TypeScript types:
+
+```typescript
+import type { User } from './__generated__/graphql.js';
+// Generate builder for GraphQL type
+```
+
+Works with graphql-codegen, GraphQL Code Generator, and similar tools.
+
+### How do I migrate existing tests to builders?
+
+Incrementally replace object literals:
+
+```typescript
+// Before
+const user = {
+  id: '123',
+  name: 'Alice',
+  email: 'alice@example.com',
+};
+
+// After
+const user = user()
+  .withId('123')
+  .withName('Alice')
+  .withEmail('alice@example.com')
+  .build();
+```
+
+Or use partial initialization:
+
+```typescript
+const user = user({
+  id: '123',
+  name: 'Alice',
+  email: 'alice@example.com',
+}).build();
 ```
 
 ## Still Have Questions?

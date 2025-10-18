@@ -5,11 +5,11 @@
 [![npm version](https://badge.fury.io/js/fluent-gen-ts.svg)](https://www.npmjs.com/package/fluent-gen-ts)
 [![Node.js Version](https://img.shields.io/node/v/fluent-gen-ts.svg)](https://nodejs.org/)
 
-> **Generate type-safe fluent builders for TypeScript interfaces and types with
-> zero runtime dependencies**
+> **Generate type-safe fluent builders for TypeScript with zero runtime
+> dependencies**
 
-Transform your TypeScript interfaces into elegant, chainable builders that
-provide full IntelliSense support and type safety at every step.
+Automatically transform TypeScript interfaces into chainable builders with full
+IntelliSense, type safety, and smart defaults.
 
 ## ✨ Features
 
@@ -37,8 +37,23 @@ provide full IntelliSense support and type safety at every step.
 
 ### Installation
 
+Install as a dev dependency:
+
 ```bash
+# npm
 npm install -D fluent-gen-ts
+
+# pnpm
+pnpm add -D fluent-gen-ts
+
+# yarn
+yarn add -D fluent-gen-ts
+```
+
+Or use directly with npx (no installation required):
+
+```bash
+npx fluent-gen-ts init
 ```
 
 ### Basic Usage
@@ -623,6 +638,22 @@ fluent-gen-ts automatically generates builders that:
 - ✅ Generate valid objects with smart defaults
 - 🏗️ Support complex nested objects and arrays
 - 🚫 Require zero runtime dependencies
+
+### When NOT to Use
+
+fluent-gen-ts may not be the best fit if:
+
+- ❌ **Simple DTOs** - Objects with 2-3 properties are easier as plain literals
+- ❌ **Immutable Data Structures** - Libraries like Immer.js are better suited
+- ❌ **Runtime Validation** - Use Zod, io-ts, or class-validator for runtime
+  checks
+- ❌ **Tiny Bundles** - Generated code adds ~2-5KB per builder (tree-shakeable)
+
+**Consider instead:**
+
+- Plain object literals for simple cases
+- Zod schemas for runtime validation
+- Factory functions for one-off test data
 
 ## 🤝 Contributing
 

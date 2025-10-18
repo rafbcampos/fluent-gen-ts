@@ -5,9 +5,8 @@ This guide will help you get up and running with fluent-gen-ts in minutes.
 ## Prerequisites
 
 - Node.js 18 or higher
-- TypeScript 5.0 or higher
-- A TypeScript project with interfaces or types you want to generate builders
-  for
+- TypeScript 4.5 or higher
+- A TypeScript project with interfaces or types
 
 ## Installation
 
@@ -250,11 +249,10 @@ export default {
 
 ## Next Steps
 
-- Learn about [Core Concepts](./core-concepts.md) to understand how builders
-  work
-- Explore [Advanced Usage](./advanced-usage.md) for complex scenarios
-- Check out [Plugin Development](./plugins.md) to extend functionality
-- See [CLI Commands](./cli-commands.md) for all available commands
+- Learn about [Core Concepts](./core-concepts) to understand how builders work
+- Explore [Advanced Usage](./advanced-usage) for complex scenarios
+- Check out [Plugin System](./plugins/) to extend functionality
+- See [CLI Reference](./cli-reference) for all available commands
 - Browse [Examples](/examples/) for real-world usage patterns
 
 ## Troubleshooting

@@ -275,11 +275,40 @@ Learn critical patterns: **[Best Practices →](/guide/plugins/best-practices)**
 
 </div>
 
+## Configuration
+
+### Single Plugin
+
+```javascript
+// fluentgen.config.js
+export default {
+  plugins: ['./plugins/validation.ts'],
+  targets: [{ file: './src/types.ts', types: ['User'] }],
+};
+```
+
+### Multiple Plugins
+
+```javascript
+export default {
+  plugins: [
+    './plugins/validation.ts',
+    './plugins/testing.ts',
+    './plugins/database.ts',
+  ],
+  targets: [{ file: './src/types.ts', types: ['User', 'Product'] }],
+};
+```
+
+**Note:** Plugins execute in order. Order matters when plugins modify the same
+properties!
+
 ## Related Pages
 
 - [Plugin API Reference](/guide/plugins/api-reference) - Quick API lookup
 - [Advanced Usage](/guide/advanced-usage) - Complex scenarios
 - [Examples](/examples/) - Real-world usage patterns
+- [Configuration](/guide/configuration) - Config file setup
 
 <style scoped>
 .next-steps {

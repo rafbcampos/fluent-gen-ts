@@ -5,7 +5,15 @@ Use this as your single source of truth. :::
 
 ## Quick Start
 
-Create `fluentgen.config.js` in your project root:
+**Recommended: Use the interactive wizard:**
+
+```bash
+npx fluent-gen-ts init
+```
+
+This creates `fluentgen.config.js` with guided prompts.
+
+**Or create manually:**
 
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
@@ -17,7 +25,7 @@ export default {
 };
 ```
 
-Run:
+Then run:
 
 ```bash
 npx fluent-gen-ts batch
@@ -126,38 +134,15 @@ interface GeneratorConfig {
 
 ### outputDir
 
-Specifies where generated builders will be written.
+Where generated builders will be written.
 
 ```javascript
 generator: {
-  outputDir: './src/builders';
+  outputDir: './src/builders'; // Default: './builders'
 }
 ```
 
-**Default behavior:**
-
-- If not specified, outputs to `./builders` in the current directory
-- Can be absolute or relative path
-- Directory will be created if it doesn't exist
-
-**Examples:**
-
-```javascript
-// Relative path
-generator: {
-  outputDir: './src/__generated__/builders';
-}
-
-// Absolute path
-generator: {
-  outputDir: '/app/generated/builders';
-}
-
-// Custom location
-generator: {
-  outputDir: './dist/factories';
-}
-```
+Supports absolute or relative paths. Directory is created if it doesn't exist.
 
 ### useDefaults
 
@@ -240,33 +225,11 @@ details.
 
 ### importPath
 
-Custom import path for common utilities.
+Custom import path for common utilities (default: `'./common.js'`).
 
 ```javascript
 generator: {
-  importPath: '@/builders/common';
-}
-```
-
-By default, generated builders import from `'./common.js'`. Use this option to
-customize the import path.
-
-**Examples:**
-
-```javascript
-// Use path alias
-generator: {
-  importPath: '@/common';
-}
-
-// Use absolute path
-generator: {
-  importPath: '/app/builders/common';
-}
-
-// Use different relative path
-generator: {
-  importPath: '../shared/common';
+  importPath: '@/builders/common'; // Use path alias
 }
 ```
 
@@ -296,83 +259,23 @@ Useful when you want to provide your own common utilities file.
 
 ### naming {#generator-naming}
 
-Configure output file naming conventions. See the
-[naming configuration section](#naming) below for complete details.
-
-### Examples
-
-**Minimal configuration:**
-
-```javascript
-generator: {
-  outputDir: './src/builders',
-  useDefaults: false,
-  addComments: false
-}
-```
-
-**Full configuration:**
-
-```javascript
-generator: {
-  outputDir: './src/__generated__/builders',
-  useDefaults: true,
-  addComments: true,
-  contextType: 'TenantBuildContext',
-  importPath: '@/builders/common',
-  generateCommonFile: true,
-  naming: {
-    convention: 'kebab-case',
-    suffix: 'builder'
-  }
-}
-```
+Configure output file naming conventions. See [naming configuration](#naming)
+below for details.
 
 ## tsConfigPath (Optional) {#tsconfig}
 
-Path to `tsconfig.json` for TypeScript compilation.
-
-### Default Behavior
-
-fluent-gen-ts auto-detects `tsconfig.json` in:
-
-1. Project root
-2. Current directory
-3. Parent directories (walks up)
-
-### When to Specify
-
-**Custom tsconfig location:**
+Path to `tsconfig.json` for TypeScript compilation. Auto-detects if not
+specified.
 
 ```javascript
-tsConfigPath: './config/tsconfig.build.json';
-```
-
-**Different tsconfig for generation:**
-
-```javascript
-tsConfigPath: './tsconfig.codegen.json';
-```
-
-**Monorepo with multiple tsconfigs:**
-
-```javascript
-// packages/api/fluentgen.config.js
-tsConfigPath: '../../tsconfig.base.json';
-```
-
-### Examples
-
-```javascript
-// Use build config
 tsConfigPath: './tsconfig.build.json';
-
-// Use specific config
-tsConfigPath: './tsconfig.codegen.json';
-
-// Monorepo shared config
-tsConfigPath: '../../tsconfig.json';
 ```
+
+Useful for:
+
+- Custom tsconfig locations
+- Build-specific configs
+- Monorepo shared configs
 
 ## plugins (Optional) {#plugins}
 
@@ -433,35 +336,7 @@ plugins: [
 :::warning Order Matters Plugin order affects transformations. Specific plugins
 before generic ones! :::
 
-### Examples
-
-**Single plugin:**
-
-```javascript
-plugins: ['./plugins/validation.ts'];
-```
-
-**Multiple plugins:**
-
-```javascript
-plugins: [
-  './plugins/validation.ts',
-  './plugins/timestamps.ts',
-  './plugins/uuid.ts',
-];
-```
-
-**Mix of sources:**
-
-```javascript
-plugins: [
-  '@company/fluent-gen-core', // npm package
-  './plugins/validation.ts', // local file
-  './plugins/domain-specific.ts', // local file
-];
-```
-
-See [Plugin Guide](/guide/plugins/) for creating plugins.
+See [Plugin Guide](/guide/plugins/) for creating custom plugins.
 
 ## monorepo (Optional) {#monorepo}
 
@@ -555,34 +430,12 @@ monorepo: {
 }
 ```
 
-### Examples
-
-**pnpm workspaces (recommended):**
+**Recommended for most monorepos:**
 
 ```javascript
 monorepo: {
   enabled: true,
-  dependencyResolutionStrategy: 'auto'
-}
-```
-
-**Yarn workspaces:**
-
-```javascript
-monorepo: {
-  enabled: true,
-  dependencyResolutionStrategy: 'hoisted'
-}
-```
-
-**Custom setup:**
-
-```javascript
-monorepo: {
-  enabled: true,
-  dependencyResolutionStrategy: 'workspace-root',
-  workspaceRoot: '../../',
-  customPaths: ['./shared']
+  dependencyResolutionStrategy: 'auto'  // Works with pnpm, yarn, npm
 }
 ```
 
@@ -775,20 +628,18 @@ generator: {
 // UserDTO → user.generated.ts with makeUser() function
 ```
 
-## Complete Examples
+## Example Configs
 
-### Minimal Config
+### Minimal
 
 ```javascript
 export default {
   targets: [{ file: './src/types.ts', types: ['User'] }],
-  generator: {
-    outputDir: './src/builders',
-  },
+  generator: { outputDir: './src/builders' },
 };
 ```
 
-### Production Config
+### Production
 
 ```javascript
 /** @type {import('fluent-gen-ts').Config} */
@@ -796,69 +647,31 @@ export default {
   targets: [
     { file: './src/types/user.ts', types: ['User', 'Profile'] },
     { file: './src/types/product.ts', types: ['Product'] },
-    { file: './src/types/order.ts', types: ['Order', 'OrderItem'] },
   ],
-
   generator: {
-    outputDir: './src/__generated__/builders',
-    useDefaults: true,
-    addComments: true,
-    contextType: 'BuildContext',
-    naming: {
-      convention: 'kebab-case',
-      suffix: 'builder',
-    },
+    outputDir: './src/builders',
+    naming: { convention: 'kebab-case' },
   },
-
-  plugins: [
-    './plugins/validation.ts',
-    './plugins/timestamps.ts',
-    './plugins/uuid.ts',
-  ],
-
-  tsConfigPath: './tsconfig.json',
+  plugins: ['./plugins/validation.ts'],
 };
 ```
 
-### Monorepo Config
+### Monorepo
 
 ```javascript
-/** @type {import('fluent-gen-ts').Config} */
 export default {
   patterns: ['./src/models/**/*.ts'],
   exclude: ['**/*.test.ts'],
-
-  generator: {
-    outputDir: './src/builders',
-  },
-
+  generator: { outputDir: './src/builders' },
   monorepo: {
     enabled: true,
     dependencyResolutionStrategy: 'auto',
   },
-
-  plugins: [
-    '@company/fluent-gen-validation', // Shared plugin
-  ],
 };
 ```
 
-### Custom Naming
-
-```javascript
-export default {
-  targets: [{ file: './src/dtos/*.ts' }],
-
-  generator: {
-    outputDir: './src/factories',
-    naming: {
-      convention: 'kebab-case',
-      suffix: 'factory',
-      factoryTransform: '(name) => "create" + name',
-    },
-  },
-};
-```
+:::tip More Examples See [Config Recipes](/guide/config-recipes) for real-world
+configurations. :::
 
 ## TypeScript Types
 
@@ -888,46 +701,18 @@ const config: Config = {
 export default config;
 ```
 
-## Environment Variables
+## Config Validation
 
-Override config with environment variables:
+fluent-gen-ts validates your config automatically. If there are issues, you'll
+see clear error messages pointing to the problem.
 
-| Variable            | Description          | Example            |
-| ------------------- | -------------------- | ------------------ |
-| `FLUENT_GEN_CONFIG` | Config file path     | `custom.config.js` |
-| `FLUENT_GEN_OUTPUT` | Output directory     | `./generated`      |
-| `FLUENT_GEN_DEBUG`  | Enable debug logging | `true`             |
+Use TypeScript autocomplete for validation while editing:
 
-```bash
-FLUENT_GEN_OUTPUT=./dist/builders npx fluent-gen-ts batch
-```
-
-## Validation
-
-The config is validated on load. Common errors:
-
-**Missing required fields:**
-
-```
-Error: Configuration validation failed:
-  - "targets" is required
-  - "output.dir" is required
-```
-
-**Invalid values:**
-
-```
-Error: Configuration validation failed:
-  - "generator.maxDepth" must be between 1 and 100
-  - "output.mode" must be "single" or "batch"
-```
-
-**Invalid types:**
-
-```
-Error: Configuration validation failed:
-  - "targets" must be an array
-  - "plugins" must be an array of strings or plugin objects
+```javascript
+/** @type {import('fluent-gen-ts').Config} */
+export default {
+  // TypeScript will show errors for invalid options
+};
 ```
 
 ## Next Steps
@@ -940,7 +725,7 @@ Real-world examples: **[Configuration Recipes →](/guide/config-recipes)**
 
 ### 🔧 CLI Commands
 
-Learn CLI usage: **[CLI Reference →](/guide/cli-commands)**
+Learn CLI usage: **[CLI Reference →](/guide/cli-reference)**
 
 ### 🔌 Plugins
 
@@ -954,7 +739,7 @@ Complex scenarios: **[Advanced Guide →](/guide/advanced-usage)**
 
 ## Related Resources
 
-- [CLI Commands](/guide/cli-commands) - Command reference
+- [CLI Reference](/guide/cli-reference) - Command reference
 - [Configuration Recipes](/guide/config-recipes) - Real-world configs
 - [Troubleshooting](/guide/troubleshooting) - Common config issues
 - [API Reference](/api/reference) - Programmatic API

@@ -3,6 +3,23 @@
 Understanding these core concepts will help you get the most out of
 fluent-gen-ts.
 
+## When to Use Builders
+
+**✅ Good fit:**
+
+- Test data creation (unit, integration, e2e tests)
+- Complex object initialization (5+ properties)
+- Nested object hierarchies
+- Reusable data fixtures
+- Conditional object construction
+- Domain object creation
+
+**❌ Not recommended:**
+
+- Simple objects (2-3 properties) - plain literals are clearer
+- When runtime validation is needed (use Zod, io-ts instead)
+- Immutable data structures (use Immer.js instead)
+
 ## The Fluent Builder Pattern
 
 The fluent builder pattern provides a chainable API for constructing objects
@@ -415,7 +432,7 @@ For large codebases:
 
 ## Next Steps
 
-- Learn about [Advanced Usage](./advanced-usage.md) for complex scenarios
-- Explore the [Plugin System](./plugins.md) to extend functionality
-- Check out [CLI Commands](./cli-commands.md) for all options
+- Learn about [Advanced Usage](./advanced-usage) for complex scenarios
+- Explore the [Plugin System](./plugins/) to extend functionality
+- Check out [CLI Reference](./cli-reference) for all commands
 - See practical [Examples](/examples/) of real-world usage

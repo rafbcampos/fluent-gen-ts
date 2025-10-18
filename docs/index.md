@@ -232,11 +232,27 @@ ideal for generating multiple builders.
 
 Use `setup-common` to create your own customizable common utilities file.
 
-## Learn More
+## Documentation
+
+### Getting Started
 
 - [Getting Started Guide](/guide/getting-started) - Set up your first builder
 - [Core Concepts](/guide/core-concepts) - Understand the fundamentals
-- [CLI Commands](/guide/cli-commands) - Master the command-line interface
-- [Plugin System](/guide/plugins) - Extend with custom functionality
-- [API Reference](/api/reference) - Complete API documentation
-- [Examples](/examples/) - Real-world usage patterns
+- [Configuration](/guide/configuration) - All configuration options
+
+### Reference
+
+- [CLI Reference](/guide/cli-reference) - Command-line interface
+- [API Reference](/api/reference) - Programmatic API
+- [FAQ](/guide/faq) - Common questions
+
+### Advanced
+
+- [Plugin System](/guide/plugins/) - Extend with custom functionality
+- [Advanced Usage](/guide/advanced-usage) - Complex scenarios
+- [Workflows](/guide/workflows) - CI/CD integration
+
+### Help
+
+- [Troubleshooting](/guide/troubleshooting) - Common issues
+- [Examples](/examples/) - Real-world patterns

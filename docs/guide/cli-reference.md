@@ -1,7 +1,6 @@
-# CLI Cheat Sheet
+# CLI Reference
 
-:::tip Quick Reference All CLI commands in one place. Bookmark this page for
-instant access. :::
+:::tip Quick Reference All CLI commands and options in one place. :::
 
 ## Common Commands
 
@@ -18,8 +17,8 @@ npx fluent-gen-ts generate ./src/types.ts User -o ./src/builders/
 npx fluent-gen-ts generate ./src/types.ts User \
   --output ./src/builders/ \
   --tsconfig ./tsconfig.build.json \
-  --no-use-defaults \
-  --no-add-comments \
+  --use-defaults false \
+  --add-comments false \
   --max-depth 15
 ```
 
@@ -104,11 +103,9 @@ npx fluent-gen-ts setup-common --overwrite
 <typeName>                # Type name to generate (required)
 -o, --output <path>       # Output file path
 --tsconfig <path>         # Path to tsconfig.json
---use-defaults           # Generate smart defaults (default: true)
---no-use-defaults        # Disable defaults
---add-comments           # Add JSDoc comments (default: true)
---no-add-comments        # Disable comments
---max-depth <n>          # Max recursion depth (default: 10)
+--use-defaults <boolean>  # Generate smart defaults (default: true)
+--add-comments <boolean>  # Add JSDoc comments (default: true)
+--max-depth <n>           # Max recursion depth (default: 10)
 ```
 
 ### batch Options
@@ -194,16 +191,8 @@ npm run build
 
 ## Environment Variables
 
-```bash
-# Custom config path
-FLUENT_GEN_CONFIG=custom.config.js npx fluent-gen-ts batch
-
-# Custom output directory
-FLUENT_GEN_OUTPUT=./dist/builders npx fluent-gen-ts batch
-
-# Enable debug logging
-FLUENT_GEN_DEBUG=true npx fluent-gen-ts batch
-```
+Environment variables are not currently supported by the CLI. Use configuration
+files or command-line flags instead.
 
 ## Exit Codes
 
@@ -245,8 +234,8 @@ node -e "console.log(require('./fluentgen.config.js'))"
 ### Debug Generation Issues
 
 ```bash
-# Enable all debugging
-FLUENT_GEN_DEBUG=true npx fluent-gen-ts batch --verbose
+# Enable verbose output
+npx fluent-gen-ts batch --verbose
 ```
 
 ## Integration Examples
@@ -426,10 +415,10 @@ When using `fluent-gen-ts init`:
 
 ## Related Resources
 
-- **[Full CLI Reference](/guide/cli-commands)** - Detailed command docs
-- **[Configuration](/guide/configuration)** - Config options
+- **[Configuration](/guide/configuration)** - All configuration options
 - **[Workflows](/guide/workflows)** - Integration patterns
 - **[Troubleshooting](/guide/troubleshooting)** - Common issues
+- **[Getting Started](/guide/getting-started)** - Quick start guide
 
 <style scoped>
 table {

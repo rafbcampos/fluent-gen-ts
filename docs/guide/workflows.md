@@ -1,15 +1,13 @@
 # Workflows & Integration
 
-:::tip Real-World Patterns How to integrate fluent-gen-ts into your development
-workflow, CI/CD, and toolchain. :::
+Integrate fluent-gen-ts into your development workflow, CI/CD pipeline, and
+toolchain.
 
 ## Development Workflows
 
-### Basic Development Flow
+### Basic Development
 
-The simplest workflow for day-to-day development.
-
-**Setup:**
+The simplest workflow for day-to-day development:
 
 ```json
 // package.json
@@ -17,12 +15,12 @@ The simplest workflow for day-to-day development.
   "scripts": {
     "generate": "fluent-gen-ts batch",
     "dev": "npm run generate && npm run start:dev",
-    "build": "npm run generate && tsc && node dist/index.js"
+    "build": "npm run generate && npm run build:app"
   }
 }
 ```
 
-**Daily Usage:**
+**Usage:**
 
 ```bash
 # 1. Modify types
@@ -31,23 +29,20 @@ vim src/types/user.ts
 # 2. Regenerate builders
 npm run generate
 
-# 3. Use in code
-# Builders are ready in src/builders/
+# 3. Continue development
 ```
 
-### Watch Mode Development
+### Watch Mode
 
-Auto-regenerate on type changes.
-
-**Install dependencies:**
+Auto-regenerate builders when types change:
 
 ```bash
+# Install dependencies
 npm install -D chokidar-cli concurrently
 ```
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "generate": "fluent-gen-ts batch",
@@ -58,45 +53,27 @@ npm install -D chokidar-cli concurrently
 }
 ```
 
-**Usage:**
+Now builders regenerate automatically!
 
-```bash
-npm run dev
-```
+## Git Integration
 
-Now builders regenerate automatically whenever you change types!
-
-### Git Integration
-
-#### Option 1: Commit Generated Files (Recommended)
+### Option 1: Commit Generated Files (Recommended)
 
 **Benefits:**
 
 - Better IDE support
 - Faster CI builds
-- No generation needed for contributors
+- Contributors don't need to generate
 
 **Setup:**
 
 ```bash
-# Generate builders
-npm run generate
-
-# Commit everything
-git add src/builders/
-git commit -m "feat: add user builder"
-```
-
-**.gitignore:**
-
-```txt
-# Don't ignore generated files
+# .gitignore - DO NOT ignore builders
 # !src/builders/
 ```
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "generate": "fluent-gen-ts batch",
@@ -105,12 +82,12 @@ git commit -m "feat: add user builder"
 }
 ```
 
-#### Option 2: Regenerate on Demand
+### Option 2: Generate on Demand
 
 **Benefits:**
 
 - Smaller repository
-- No generated file conflicts
+- No merge conflicts in generated files
 
 **Setup:**
 
@@ -119,9 +96,8 @@ git commit -m "feat: add user builder"
 src/builders/
 ```
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "generate": "fluent-gen-ts batch",
@@ -134,25 +110,21 @@ src/builders/
 
 ### Pre-commit Hooks
 
-Ensure builders are generated before committing.
-
-**Install Husky:**
+Ensure builders are up-to-date before committing:
 
 ```bash
 npm install -D husky lint-staged
 npx husky init
 ```
 
-**.husky/pre-commit:**
-
 ```bash
+# .husky/pre-commit
 #!/bin/sh
 npx lint-staged
 ```
 
-**package.json:**
-
 ```json
+// package.json
 {
   "lint-staged": {
     "src/types/**/*.ts": ["npm run generate", "git add src/builders"]
@@ -160,32 +132,19 @@ npx lint-staged
 }
 ```
 
-**Usage:**
-
-```bash
-# Edit types
-vim src/types/user.ts
-
-# Commit (automatically generates builders)
-git add src/types/user.ts
-git commit -m "Update user types"
-# Builders generated and added automatically!
-```
-
 ## CI/CD Integration
 
 ### GitHub Actions
 
-Complete CI/CD pipeline with builder generation.
-
-**.github/workflows/ci.yml:**
+Complete CI/CD pipeline with builder generation and validation:
 
 ```yaml
+# .github/workflows/ci.yml
 name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -194,10 +153,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
@@ -208,10 +167,10 @@ jobs:
       - name: Generate builders
         run: npx fluent-gen-ts batch
 
-      - name: Check for uncommitted changes
+      - name: Check builders are up-to-date
         run: |
           git diff --exit-code src/builders || \
-          (echo "❌ Builders are out of sync! Run 'npm run generate' locally." && exit 1)
+          (echo "❌ Builders out of sync! Run 'npm run generate' locally." && exit 1)
 
       - name: Type check
         run: npx tsc --noEmit
@@ -221,209 +180,59 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: dist
-          path: dist/
 ```
 
-### GitLab CI
+### Other CI Platforms
 
-**.gitlab-ci.yml:**
+The pattern is the same for all CI platforms:
+
+1. Install dependencies
+2. Generate builders with `npx fluent-gen-ts batch`
+3. Verify they're up-to-date (if committing them)
+4. Run tests and build
+
+**GitLab CI example:**
 
 ```yaml
-stages:
-  - generate
-  - test
-  - build
-  - deploy
-
-variables:
-  NODE_VERSION: '18'
-
-cache:
-  key: ${CI_COMMIT_REF_SLUG}
-  paths:
-    - node_modules/
-    - .npm/
-
-before_script:
-  - npm ci --cache .npm --prefer-offline
-
-generate:builders:
-  stage: generate
-  script:
-    - npx fluent-gen-ts batch
-    - git diff --exit-code src/builders || (echo "Builders out of sync!" && exit
-      1)
-  artifacts:
-    paths:
-      - src/builders/
-    expire_in: 1 hour
-
+# .gitlab-ci.yml
 test:
-  stage: test
-  needs: [generate:builders]
   script:
+    - npm ci
+    - npx fluent-gen-ts batch
+    - git diff --exit-code src/builders || exit 1
     - npm test
-    - npx tsc --noEmit
-
-build:
-  stage: build
-  needs: [generate:builders]
-  script:
-    - npm run build
-  artifacts:
-    paths:
-      - dist/
-    expire_in: 1 week
-
-deploy:production:
-  stage: deploy
-  needs: [build]
-  only:
-    - main
-  script:
-    - npm run deploy
 ```
 
-### CircleCI
-
-**.circleci/config.yml:**
+**CircleCI example:**
 
 ```yaml
-version: 2.1
-
-orbs:
-  node: circleci/node@5.0
-
+# .circleci/config.yml
 jobs:
   build-and-test:
-    docker:
-      - image: cimg/node:18.0
     steps:
       - checkout
-      - node/install-packages
-
-      - run:
-          name: Generate builders
-          command: npx fluent-gen-ts batch
-
-      - run:
-          name: Check builders are up to date
-          command: |
-            git diff --exit-code src/builders || \
-            (echo "Builders out of sync!" && exit 1)
-
-      - run:
-          name: Type check
-          command: npx tsc --noEmit
-
-      - run:
-          name: Run tests
-          command: npm test
-
-      - run:
-          name: Build
-          command: npm run build
-
-      - store_artifacts:
-          path: dist/
-
-workflows:
-  build-test-deploy:
-    jobs:
-      - build-and-test
-```
-
-### Jenkins
-
-**Jenkinsfile:**
-
-```groovy
-pipeline {
-    agent {
-        docker {
-            image 'node:18'
-        }
-    }
-
-    stages {
-        stage('Install') {
-            steps {
-                sh 'npm ci'
-            }
-        }
-
-        stage('Generate Builders') {
-            steps {
-                sh 'npx fluent-gen-ts batch'
-                sh 'git diff --exit-code src/builders || (echo "Builders out of sync!" && exit 1)'
-            }
-        }
-
-        stage('Type Check') {
-            steps {
-                sh 'npx tsc --noEmit'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                sh 'npm test'
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'npm run build'
-            }
-        }
-
-        stage('Archive') {
-            steps {
-                archiveArtifacts artifacts: 'dist/**/*', fingerprint: true
-            }
-        }
-    }
-}
+      - run: npm ci
+      - run: npx fluent-gen-ts batch
+      - run: npm test
 ```
 
 ## Testing Integration
 
 ### Vitest
 
-**vitest.config.ts:**
+Generate builders before running tests:
 
 ```typescript
-import { defineConfig } from 'vitest/config';
-
-export default defineConfig({
-  test: {
-    globals: true,
-    environment: 'node',
-    setupFiles: ['./vitest.setup.ts'],
-  },
-});
-```
-
-**vitest.setup.ts:**
-
-```typescript
+// vitest.setup.ts
 import { execSync } from 'child_process';
 
-// Generate builders before tests
 beforeAll(() => {
-  console.log('Generating builders...');
   execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
 });
 ```
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "test": "npm run generate && vitest run",
@@ -434,32 +243,28 @@ beforeAll(() => {
 
 ### Jest
 
-**jest.config.js:**
-
 ```javascript
-module.exports = {
-  preset: 'ts-jest',
-  testEnvironment: 'node',
-  globalSetup: './jest.global-setup.js',
-};
-```
-
-**jest.global-setup.js:**
-
-```javascript
+// jest.global-setup.js
 const { execSync } = require('child_process');
 
 module.exports = async () => {
-  console.log('Generating builders for tests...');
   execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
 };
 ```
 
-### Playwright E2E Tests
+```javascript
+// jest.config.js
+module.exports = {
+  globalSetup: './jest.global-setup.js',
+};
+```
 
-**tests/fixtures/builders.ts:**
+### Test Fixtures
+
+Use builders to create reusable test data:
 
 ```typescript
+// tests/fixtures/builders.ts
 import { user } from '../../src/builders/user.builder.js';
 import { product } from '../../src/builders/product.builder.js';
 
@@ -474,33 +279,12 @@ export const testProduct = () =>
   product().withName('Test Product').withPrice(99.99).withInStock(true).build();
 ```
 
-**tests/e2e/checkout.spec.ts:**
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { testUser, testProduct } from '../fixtures/builders';
-
-test('user can checkout', async ({ page }) => {
-  const user = testUser();
-  const product = testProduct();
-
-  // Setup test data
-  await setupUser(user);
-  await setupProduct(product);
-
-  // Run test
-  await page.goto('/checkout');
-  // ... test logic
-});
-```
-
 ## Build Tool Integration
 
 ### Vite
 
-**vite.config.ts:**
-
 ```typescript
+// vite.config.ts
 import { defineConfig } from 'vite';
 import { execSync } from 'child_process';
 
@@ -509,7 +293,6 @@ export default defineConfig({
     {
       name: 'fluent-gen',
       buildStart() {
-        console.log('Generating builders...');
         execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
       },
     },
@@ -519,9 +302,8 @@ export default defineConfig({
 
 ### Webpack
 
-**webpack.config.js:**
-
 ```javascript
+// webpack.config.js
 const { execSync } = require('child_process');
 
 class FluentGenPlugin {
@@ -529,7 +311,6 @@ class FluentGenPlugin {
     compiler.hooks.beforeCompile.tapAsync(
       'FluentGenPlugin',
       (params, callback) => {
-        console.log('Generating builders...');
         execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
         callback();
       },
@@ -538,75 +319,34 @@ class FluentGenPlugin {
 }
 
 module.exports = {
-  // ... other config
   plugins: [new FluentGenPlugin()],
 };
 ```
 
 ### esbuild
 
-**build.js:**
-
 ```javascript
+// build.js
 const { execSync } = require('child_process');
 const esbuild = require('esbuild');
 
 // Generate builders first
-console.log('Generating builders...');
 execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
 
 // Then build
-esbuild
-  .build({
-    entryPoints: ['src/index.ts'],
-    bundle: true,
-    outfile: 'dist/bundle.js',
-  })
-  .catch(() => process.exit(1));
+esbuild.build({
+  entryPoints: ['src/index.ts'],
+  bundle: true,
+  outfile: 'dist/bundle.js',
+});
 ```
 
-**package.json:**
-
-```json
-{
-  "scripts": {
-    "build": "node build.js"
-  }
-}
-```
-
-### Rollup
-
-**rollup.config.js:**
-
-```javascript
-import { execSync } from 'child_process';
-
-export default {
-  input: 'src/index.ts',
-  output: {
-    file: 'dist/bundle.js',
-    format: 'es',
-  },
-  plugins: [
-    {
-      name: 'fluent-gen',
-      buildStart() {
-        console.log('Generating builders...');
-        execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
-      },
-    },
-  ],
-};
-```
-
-## Framework-Specific Workflows
+## Framework Integration
 
 ### Next.js
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "dev": "npm run generate && next dev",
@@ -616,28 +356,10 @@ export default {
 }
 ```
 
-**next.config.js:**
-
-```javascript
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      const { execSync } = require('child_process');
-      execSync('npx fluent-gen-ts batch', { stdio: 'inherit' });
-    }
-    return config;
-  },
-};
-
-module.exports = nextConfig;
-```
-
 ### NestJS
 
-**package.json:**
-
 ```json
+// package.json
 {
   "scripts": {
     "prebuild": "npm run generate",
@@ -650,9 +372,8 @@ module.exports = nextConfig;
 
 ### Express
 
-**nodemon.json:**
-
 ```json
+// nodemon.json
 {
   "watch": ["src"],
   "ext": "ts",
@@ -661,24 +382,12 @@ module.exports = nextConfig;
 }
 ```
 
-**package.json:**
-
-```json
-{
-  "scripts": {
-    "dev": "nodemon",
-    "generate": "fluent-gen-ts batch"
-  }
-}
-```
-
 ## Monorepo Workflows
 
 ### Turborepo
 
-**turbo.json:**
-
 ```json
+// turbo.json
 {
   "pipeline": {
     "generate": {
@@ -696,21 +405,8 @@ module.exports = nextConfig;
 }
 ```
 
-**package.json (root):**
-
 ```json
-{
-  "scripts": {
-    "generate": "turbo run generate",
-    "build": "turbo run build",
-    "test": "turbo run test"
-  }
-}
-```
-
-**package.json (workspace):**
-
-```json
+// package.json (workspace)
 {
   "scripts": {
     "generate": "fluent-gen-ts batch"
@@ -720,51 +416,31 @@ module.exports = nextConfig;
 
 ### Nx
 
-**project.json:**
-
 ```json
+// project.json
 {
   "targets": {
     "generate": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "fluent-gen-ts batch",
-        "cwd": "libs/data-models"
+        "command": "fluent-gen-ts batch"
       }
     },
     "build": {
-      "dependsOn": ["generate"],
-      "executor": "@nrwl/js:tsc",
-      "outputs": ["{options.outputPath}"]
+      "dependsOn": ["generate"]
     }
   }
 }
 ```
 
-### Lerna
-
-**lerna.json:**
+### pnpm Workspaces
 
 ```json
-{
-  "version": "independent",
-  "npmClient": "npm",
-  "command": {
-    "run": {
-      "stream": true
-    }
-  }
-}
-```
-
-**package.json (root):**
-
-```json
+// package.json (root)
 {
   "scripts": {
-    "generate": "lerna run generate",
-    "build": "lerna run build",
-    "test": "lerna run test"
+    "generate": "pnpm -r run generate",
+    "build": "pnpm -r run build"
   }
 }
 ```
@@ -773,16 +449,13 @@ module.exports = nextConfig;
 
 ### Multi-stage Build
 
-**Dockerfile:**
-
 ```dockerfile
-# Stage 1: Dependencies
+# Dockerfile
 FROM node:18-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-# Stage 2: Builder
 FROM node:18-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -794,23 +467,20 @@ RUN npx fluent-gen-ts batch
 # Build application
 RUN npm run build
 
-# Stage 3: Runner
 FROM node:18-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV production
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY package*.json ./
 
 CMD ["node", "dist/index.js"]
 ```
 
-### Development Docker
-
-**docker-compose.yml:**
+### Development with Docker Compose
 
 ```yaml
+# docker-compose.yml
 version: '3.8'
 
 services:
@@ -822,22 +492,14 @@ services:
       - .:/app
       - /app/node_modules
     command: npm run dev
-    ports:
-      - '3000:3000'
 ```
 
-**Dockerfile.dev:**
-
 ```dockerfile
+# Dockerfile.dev
 FROM node:18-alpine
-
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
-
-COPY . .
-
-# Generate builders on start
 CMD ["sh", "-c", "npm run generate && npm run dev"]
 ```
 
@@ -845,9 +507,8 @@ CMD ["sh", "-c", "npm run generate && npm run dev"]
 
 ### VS Code Tasks
 
-**.vscode/tasks.json:**
-
 ```json
+// .vscode/tasks.json
 {
   "version": "2.0.0",
   "tasks": [
@@ -855,17 +516,6 @@ CMD ["sh", "-c", "npm run generate && npm run dev"]
       "label": "Generate Builders",
       "type": "npm",
       "script": "generate",
-      "problemMatcher": [],
-      "presentation": {
-        "reveal": "always",
-        "panel": "new"
-      }
-    },
-    {
-      "label": "Watch Types & Generate",
-      "type": "shell",
-      "command": "npm run watch:types",
-      "isBackground": true,
       "problemMatcher": []
     }
   ]
@@ -874,44 +524,24 @@ CMD ["sh", "-c", "npm run generate && npm run dev"]
 
 **Usage:** `Cmd+Shift+P` → "Run Task" → "Generate Builders"
 
-### VS Code Launch Config
-
-**.vscode/launch.json:**
-
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Debug App (Generate First)",
-      "type": "node",
-      "request": "launch",
-      "preLaunchTask": "Generate Builders",
-      "program": "${workspaceFolder}/src/index.ts",
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"]
-    }
-  ]
-}
-```
-
 ## Best Practices
 
 ### ✅ Do
 
-- **Commit generated files** for better IDE support
-- **Generate before build** in CI/CD
-- **Use watch mode** during development
+- **Commit generated files** for better IDE support and faster CI
+- **Generate before build/test** in all environments
+- **Use watch mode** during active development
 - **Validate in CI** that builders are up-to-date
-- **Document the workflow** for team members
+- **Document the workflow** in your team's README
 
 ### ❌ Don't
 
-- **Manually edit** generated files (they'll be overwritten)
+- **Manually edit** generated files (changes will be overwritten)
 - **Skip generation** in CI (causes runtime errors)
-- **Commit broken builders** (run generation first)
-- **Mix manual and generated** builders (confusing)
+- **Commit broken builders** (always test after generating)
+- **Mix manual and generated** code in builder files
 
-## Troubleshooting Workflows
+## Troubleshooting
 
 ### Builders Out of Sync
 
@@ -920,25 +550,24 @@ CMD ["sh", "-c", "npm run generate && npm run dev"]
 **Solution:**
 
 ```bash
-# Locally regenerate
+# Regenerate locally
 npm run generate
 
 # Check what changed
 git diff src/builders
 
-# Commit if intentional
+# Commit updates
 git add src/builders
 git commit -m "Update builders"
 ```
 
-### Slow Generation in Watch Mode
+### Slow Watch Mode
 
-**Problem:** Watch mode is slow
+**Problem:** Generation is slow during development
 
-**Solution:**
+**Solution:** Add debouncing
 
-```javascript
-// Use debouncing
+```json
 {
   "scripts": {
     "watch:types": "chokidar 'src/types/**/*.ts' --debounce=1000 -c 'npm run generate'"
@@ -948,42 +577,17 @@ git commit -m "Update builders"
 
 ### Build Fails After Type Change
 
-**Problem:** Build fails after modifying types
+**Problem:** Build errors after modifying types
 
-**Solution:**
+**Solution:** Always regenerate after type changes
 
 ```bash
-# Always regenerate after type changes
 npm run generate && npm run build
 ```
 
-## Next Steps
+## Related Resources
 
-<div class="next-steps">
-
-### 📖 Configuration
-
-Learn all options: **[Configuration →](/guide/configuration)**
-
-### 🔧 CLI Cheat Sheet
-
-Quick command reference: **[CLI Cheat Sheet →](/guide/cli-cheat-sheet)**
-
-### 📚 Config Recipes
-
-Copy-paste configs: **[Config Recipes →](/guide/config-recipes)**
-
-### ❓ Troubleshooting
-
-Common issues: **[Troubleshooting →](/guide/troubleshooting)**
-
-</div>
-
-<style scoped>
-.next-steps {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-top: 2rem;
-}
-</style>
+- [Configuration](/guide/configuration) - All configuration options
+- [CLI Reference](/guide/cli-reference) - Command-line usage
+- [Config Recipes](/guide/config-recipes) - Copy-paste configurations
+- [Troubleshooting](/guide/troubleshooting) - Common issues and solutions

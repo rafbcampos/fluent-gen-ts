@@ -1,5 +1,21 @@
 # API Reference
 
+Complete API documentation for programmatic usage of fluent-gen-ts.
+
+:::tip Most users will use the [CLI](/guide/cli-reference) for code generation.
+This API reference is for programmatic usage, custom build tools, and advanced
+plugin development. :::
+
+## Quick Links
+
+- **Code Generation**: [FluentGen](#fluentgen)
+- **Plugin System**: [Plugin System](#plugin-system),
+  [Transform Builders](#transform-builders)
+- **Type Utilities**: [Type Matchers](#type-matchers),
+  [Deep Type Transformation](#deep-type-transformation)
+- **Context Types**: [Context Types](#context-types)
+- **Core Types**: [Core Types](#core-types)
+
 ## FluentGen
 
 ### Constructor
