@@ -278,7 +278,18 @@ export abstract class FluentBuilderBase<T, C extends BaseBuildContext = BaseBuil
    */
   constructor(initial?: Partial<T>) {
     if (initial) {
-      this.values = { ...initial };
+      // Filter out undefined values to allow defaults to work correctly
+      // Only explicitly set non-undefined values are stored
+      const filteredValues: Partial<T> = {};
+      for (const key in initial) {
+        if (Object.prototype.hasOwnProperty.call(initial, key)) {
+          const value = initial[key];
+          if (value !== undefined) {
+            filteredValues[key] = value;
+          }
+        }
+      }
+      this.values = filteredValues;
     }
   }
 
