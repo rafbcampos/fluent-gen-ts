@@ -2,9 +2,10 @@
 
 Complete API documentation for programmatic usage of fluent-gen-ts.
 
-:::tip Most users will use the [CLI](/guide/cli-reference) for code generation.
-This API reference is for programmatic usage, custom build tools, and advanced
-plugin development. :::
+<!-- prettier-ignore -->
+::: tip
+Most users will use the [CLI](/guide/cli-reference) for code generation. This API reference is for programmatic usage, custom build tools, and advanced plugin development.
+:::
 
 ## Quick Links
 

@@ -1,7 +1,9 @@
 # Troubleshooting Guide
 
-:::tip Quick Solutions Common issues and their fixes. Use Ctrl+F to find your
-error message. :::
+<!-- prettier-ignore -->
+::: tip Quick Solutions
+Common issues and their fixes. Use Ctrl+F to find your error message.
+:::
 
 ## Installation Issues
 

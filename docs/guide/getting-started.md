@@ -12,6 +12,7 @@ This guide will help you get up and running with fluent-gen-ts in minutes.
 
 Install fluent-gen-ts as a development dependency:
 
+<!-- prettier-ignore -->
 ::: code-group
 
 ```bash [npm]

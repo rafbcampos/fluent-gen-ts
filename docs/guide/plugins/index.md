@@ -1,11 +1,13 @@
 # Plugin System Overview
 
-:::tip What You'll Learn
+<!-- prettier-ignore -->
+::: tip What You'll Learn
 
 - What plugins are and when to use them
 - Plugin capabilities and architecture
 - How to choose between manual builders and plugins
-- Quick decision guide for plugin features :::
+- Quick decision guide for plugin features
+  :::
 
 ## What Are Plugins?
 

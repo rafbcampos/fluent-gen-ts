@@ -1,7 +1,9 @@
 # Plugin API Quick Reference
 
-:::tip Quick Lookup This page is your quick reference. For detailed
-explanations, see the main guide sections. :::
+<!-- prettier-ignore -->
+::: tip Quick Lookup
+This page is your quick reference. For detailed explanations, see the main guide sections.
+:::
 
 ## Plugin Builder API
 
@@ -405,8 +407,9 @@ expect(user.email).toBe('test@example.com');
 
 ## Rule Ordering
 
-:::danger CRITICAL **First matching rule wins!** Always place specific rules
-before generic ones:
+<!-- prettier-ignore -->
+::: danger CRITICAL
+**First matching rule wins!** Always place specific rules before generic ones:
 
 ```typescript
 .when(ctx => ctx.type.matches(object('AssetWrapper')))  // Specific FIRST

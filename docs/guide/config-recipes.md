@@ -1,7 +1,9 @@
 # Configuration Recipes
 
-:::tip Copy-Paste Configs Real-world configuration examples for common
-scenarios. Copy, customize, and use. :::
+<!-- prettier-ignore -->
+::: tip Copy-Paste Configs
+Real-world configuration examples for common scenarios. Copy, customize, and use.
+:::
 
 ## Quick Index
 
@@ -85,8 +87,10 @@ export default {
 - Want to generate for all models
 - Easy to regenerate after schema changes
 
-:::warning Performance Using `patterns` without specific types can be slow for
-large codebases. Consider using `targets` with specific types instead. :::
+<!-- prettier-ignore -->
+::: warning Performance
+Using `patterns` without specific types can be slow for large codebases. Consider using `targets` with specific types instead.
+:::
 
 ## Monorepos {#monorepos}
 
@@ -716,7 +720,7 @@ All options explained: **[Configuration →](/guide/configuration)**
 
 ### 🔧 CLI Commands
 
-Learn CLI usage: **[CLI Reference →](/guide/cli-commands)**
+Learn CLI usage: **[CLI Reference →](/guide/cli-reference)**
 
 ### 🔌 Plugin Recipes
 

@@ -1,7 +1,9 @@
 # Plugin Cookbook
 
-:::tip What You'll Find 20+ production-ready plugins you can copy and paste.
-Each recipe is tested and ready to use. :::
+<!-- prettier-ignore -->
+::: tip What You'll Find
+20+ production-ready plugins you can copy and paste. Each recipe is tested and ready to use.
+:::
 
 ## Quick Index
 

@@ -1,6 +1,9 @@
 # CLI Reference
 
-:::tip Quick Reference All CLI commands and options in one place. :::
+<!-- prettier-ignore -->
+::: tip Quick Reference
+All CLI commands and options in one place.
+:::
 
 ## Common Commands
 

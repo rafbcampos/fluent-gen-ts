@@ -1,7 +1,9 @@
 # Configuration Reference
 
-:::tip Complete Reference Every configuration option explained with examples.
-Use this as your single source of truth. :::
+<!-- prettier-ignore -->
+::: tip Complete Reference
+Every configuration option explained with examples. Use this as your single source of truth.
+:::
 
 ## Quick Start
 
@@ -111,8 +113,10 @@ targets: [{ file: './src/types/models.ts', types: ['*'] }];
 targets: [{ file: './src/models/**/*.ts', types: ['*'] }];
 ```
 
-:::warning Glob Performance Using globs without specific types can be slow.
-Prefer specific files and types for faster generation. :::
+<!-- prettier-ignore -->
+::: warning Glob Performance
+Using globs without specific types can be slow. Prefer specific files and types for faster generation.
+:::
 
 ## generator (Optional) {#generator}
 
@@ -333,8 +337,10 @@ plugins: [
 ];
 ```
 
-:::warning Order Matters Plugin order affects transformations. Specific plugins
-before generic ones! :::
+<!-- prettier-ignore -->
+::: warning Order Matters
+Plugin order affects transformations. Specific plugins before generic ones!
+:::
 
 See [Plugin Guide](/guide/plugins/) for creating custom plugins.
 
@@ -670,8 +676,10 @@ export default {
 };
 ```
 
-:::tip More Examples See [Config Recipes](/guide/config-recipes) for real-world
-configurations. :::
+<!-- prettier-ignore -->
+::: tip More Examples
+See [Config Recipes](/guide/config-recipes) for real-world configurations.
+:::
 
 ## TypeScript Types
 

@@ -28,7 +28,6 @@ export default defineConfig({
       {
         text: 'Getting Started',
         items: [
-          { text: 'Quick Start', link: '/guide/quick-start' },
           { text: 'Installation & Setup', link: '/guide/getting-started' },
           { text: 'Core Concepts', link: '/guide/core-concepts' },
         ],
@@ -37,8 +36,8 @@ export default defineConfig({
         text: 'CLI & Configuration',
         collapsed: false,
         items: [
-          { text: 'CLI Commands', link: '/guide/cli-commands' },
           { text: 'CLI Cheat Sheet', link: '/guide/cli-cheat-sheet' },
+          { text: 'CLI Reference', link: '/guide/cli-reference' },
           { text: 'Configuration', link: '/guide/configuration' },
           { text: 'Config Recipes', link: '/guide/config-recipes' },
           { text: 'Workflows', link: '/guide/workflows' },

@@ -1197,8 +1197,8 @@ const namingPlugin = createPlugin('custom-naming', '1.0.0')
 
 ## Next Steps
 
-- Explore [Plugin Development](./plugins.md) for extending functionality with
+- Explore [Plugin Development](./plugins/) for extending functionality with
   the powerful plugin system
 - Check out [Examples](/examples/) for real-world usage patterns
 - Review the [API Reference](/api/reference) for detailed API information
-- See [CLI Commands](./cli-commands.md) for automation options
+- See [CLI Commands](./cli-reference.md) for automation options

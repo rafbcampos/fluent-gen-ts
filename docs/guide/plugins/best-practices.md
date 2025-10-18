@@ -1,21 +1,23 @@
 # Plugin Best Practices
 
-:::tip What You'll Learn
+<!-- prettier-ignore -->
+::: tip What You'll Learn
 
 - **CRITICAL:** Rule ordering (prevents bugs!)
 - Testing strategies for plugins
 - Performance optimization
 - Error handling patterns
-- Plugin distribution :::
+- Plugin distribution
+  :::
 
 ## 🚨 CRITICAL: Rule Ordering Matters {#rule-ordering}
 
-:::danger Rule Execution Order **The first matching rule wins!** Plugin
-transformation rules execute **top-to-bottom**, and execution stops at the
-**first match**.
+<!-- prettier-ignore -->
+::: danger Rule Execution Order
+**The first matching rule wins!** Plugin transformation rules execute **top-to-bottom**, and execution stops at the **first match**.
 
-This is the **#1 source of plugin bugs**. Always put **specific rules before
-generic rules**. :::
+This is the **#1 source of plugin bugs**. Always put **specific rules before generic rules**.
+:::
 
 ### The Problem
 

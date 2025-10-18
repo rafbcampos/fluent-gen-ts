@@ -1,11 +1,13 @@
 # Getting Started with Plugins
 
-:::tip What You'll Learn
+<!-- prettier-ignore -->
+::: tip What You'll Learn
 
 - Create your first plugin in 5 minutes
 - Use ready-made plugin templates
 - Configure and test plugins
-- Understand plugin structure :::
+- Understand plugin structure
+  :::
 
 ## Your First Plugin
 
