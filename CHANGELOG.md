@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.21
+
+### Patch Changes
+
+- 803fd9b: Fix issue with undefined initial values
+
 ## 0.1.20
 
 ### Patch Changes
