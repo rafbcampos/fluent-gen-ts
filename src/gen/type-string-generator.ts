@@ -181,10 +181,6 @@ export class TypeStringGenerator {
       if (typeArgs) {
         // Reconstruct generic signature: TypeName<Arg1, Arg2, ...>
         builderTypeString = `${typeInfo.name}${typeArgs}`;
-      } else if (typeInfo.unresolvedGenerics && typeInfo.unresolvedGenerics.length > 0) {
-        // If there are unresolved generics, include them as type arguments
-        const genericArgs = typeInfo.unresolvedGenerics.map(g => g.name).join(', ');
-        builderTypeString = `${typeInfo.name}<${genericArgs}>`;
       }
 
       return `${this.options.builderTypeName}<${builderTypeString}, ${this.options.contextTypeName}>`;
@@ -387,13 +383,6 @@ export class TypeStringGenerator {
     const typeArgs = this.formatTypeArguments(typeInfo.typeArguments);
     if (typeArgs) {
       return `${typeInfo.name}${typeArgs}`;
-    }
-
-    // If there are unresolved generics, include them as type arguments
-    // unresolvedGenerics is an array of GenericParam objects
-    if (typeInfo.unresolvedGenerics && typeInfo.unresolvedGenerics.length > 0) {
-      const genericArgs = typeInfo.unresolvedGenerics.map(g => g.name).join(', ');
-      return `${typeInfo.name}<${genericArgs}>`;
     }
 
     return typeInfo.name;

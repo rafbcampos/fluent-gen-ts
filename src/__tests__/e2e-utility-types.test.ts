@@ -627,4 +627,180 @@ export type ReadonlyConfiguration = Readonly<Configuration>;
       project.cleanup();
     }
   }, 30000);
+
+  test('generates builder for interface extending Omit with property overrides', async () => {
+    const project = createTestProject();
+
+    try {
+      const typeDefinitions = `
+export interface Choice {
+  binding: string;
+  choices?: Array<string>;
+  label?: string;
+  metadata: {
+    type: string;
+    position: string;
+  };
+}
+
+export interface MultiSelect extends Omit<Choice, 'choices' | 'metadata'> {
+  choices: Array<{ label: string; value: string }>;
+  metadata: {
+    beacon: string;
+  };
+}
+`;
+
+      project.writeFile('types.ts', typeDefinitions);
+
+      // Generate builder for MultiSelect
+      const result = await project.generateBuilder('types.ts', 'MultiSelect');
+      const builderCode = assertBuilderGenerated(result);
+      project.writeFile('multiselect-builder.ts', builderCode);
+
+      // Create test runner
+      const testRunnerCode = createTestRunner({
+        imports: [
+          'import { multiSelect } from "./multiselect-builder.js";',
+          'import type { MultiSelect } from "./types.js";',
+        ],
+        testCases: [
+          {
+            name: 'MultiSelect with inherited and overridden properties',
+            builderCode: `multiSelect()
+  .withBinding("myField")
+  .withLabel("Select multiple options")
+  .withChoices([
+    { label: "Option 1", value: "opt1" },
+    { label: "Option 2", value: "opt2" }
+  ])
+  .withMetadata({ beacon: "analytics-123" })
+  .build()`,
+            expectedObject: {
+              binding: 'myField',
+              label: 'Select multiple options',
+              choices: [
+                { label: 'Option 1', value: 'opt1' },
+                { label: 'Option 2', value: 'opt2' },
+              ],
+              metadata: { beacon: 'analytics-123' },
+            },
+            typeName: 'MultiSelect',
+          },
+        ],
+      });
+
+      project.writeFile('test-runner.ts', testRunnerCode);
+
+      // Run all checks
+      assertCommandSuccess(await project.install(), 'npm install');
+      assertCommandSuccess(await project.typecheck(), 'typecheck');
+      assertCommandSuccess(await project.lint(), 'lint');
+      assertCommandSuccess(await project.compile(['test-runner.ts']), 'compile');
+
+      const runResult = await project.execute('test-runner.js');
+      assertCommandSuccess(runResult, 'execute');
+      expect(runResult.stdout).toContain('All tests passed!');
+    } finally {
+      project.cleanup();
+    }
+  }, 30000);
+
+  test('generates builder for complex generic interface extending Omit', async () => {
+    const project = createTestProject();
+
+    try {
+      const typeDefinitions = `
+export interface Asset<T extends string = string> {
+  type: T;
+  id: string;
+}
+
+export interface AssetWrapper<T extends Asset = Asset> {
+  asset: T;
+}
+
+export interface Choice<AnyAsset extends Asset = Asset> extends Asset<'choice'> {
+  binding: string;
+  choices?: Array<string>;
+  label?: AssetWrapper<AnyAsset>;
+  help?: AssetWrapper<AnyAsset>;
+  metadata?: {
+    type: string;
+    position: string;
+  };
+}
+
+export interface MultiSelect<AnyAsset extends Asset = Asset>
+  extends Omit<Choice<AnyAsset>, 'choices' | 'metadata' | 'binding'> {
+  choices?: Array<{
+    binding: string;
+    label: AssetWrapper<AnyAsset>;
+  }>;
+  metadata?: {
+    beacon: string;
+  };
+}
+`;
+
+      project.writeFile('types.ts', typeDefinitions);
+
+      // Generate builder for MultiSelect
+      const result = await project.generateBuilder('types.ts', 'MultiSelect');
+      const builderCode = assertBuilderGenerated(result);
+      project.writeFile('multiselect-builder.ts', builderCode);
+
+      // Verify the builder has all expected methods including inherited non-omitted properties
+      expect(builderCode).toContain('withLabel');
+      expect(builderCode).toContain('withHelp');
+      expect(builderCode).toContain('withType');
+      expect(builderCode).toContain('withId');
+      expect(builderCode).toContain('withChoices');
+      expect(builderCode).toContain('withMetadata');
+      // Verify omitted properties are NOT present
+      expect(builderCode).not.toContain('withBinding');
+
+      // Create test runner
+      const testRunnerCode = createTestRunner({
+        imports: [
+          'import { multiSelect } from "./multiselect-builder.js";',
+          'import type { MultiSelect } from "./types.js";',
+        ],
+        testCases: [
+          {
+            name: 'MultiSelect with all inherited and overridden properties',
+            builderCode: `multiSelect()
+  .withType("choice")
+  .withId("ms-123")
+  .withLabel({ asset: { type: "text", id: "label-1" } })
+  .withHelp({ asset: { type: "text", id: "help-1" } })
+  .withMetadata({ beacon: "analytics-456" })
+  .build()`,
+            expectedObject: {
+              type: 'choice',
+              id: 'ms-123',
+              label: { asset: { type: 'text', id: 'label-1' } },
+              help: { asset: { type: 'text', id: 'help-1' } },
+              metadata: { beacon: 'analytics-456' },
+            },
+            typeName: 'MultiSelect',
+          },
+        ],
+      });
+
+      project.writeFile('test-runner.ts', testRunnerCode);
+
+      // Run all checks
+      assertCommandSuccess(await project.install(), 'npm install');
+      assertCommandSuccess(await project.typecheck(), 'typecheck');
+      assertCommandSuccess(await project.lint(), 'lint');
+      assertCommandSuccess(await project.compile(['test-runner.ts']), 'compile');
+
+      const runResult = await project.execute('test-runner.js');
+      assertCommandSuccess(runResult, 'execute');
+      expect(runResult.stdout).toContain('All tests passed!');
+    } finally {
+      project.cleanup();
+    }
+  }, 30000);
 });
