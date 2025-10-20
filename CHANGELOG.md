@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.24
+
+### Patch Changes
+
+- eb6349c: Fix Typescript eager resolution utility type issue
+
 ## 0.1.23
 
 ### Patch Changes
