@@ -181,6 +181,10 @@ export class TypeStringGenerator {
       if (typeArgs) {
         // Reconstruct generic signature: TypeName<Arg1, Arg2, ...>
         builderTypeString = `${typeInfo.name}${typeArgs}`;
+      } else if (typeInfo.unresolvedGenerics && typeInfo.unresolvedGenerics.length > 0) {
+        // If there are unresolved generics, include them as type arguments
+        const genericArgs = typeInfo.unresolvedGenerics.map(g => g.name).join(', ');
+        builderTypeString = `${typeInfo.name}<${genericArgs}>`;
       }
 
       return `${this.options.builderTypeName}<${builderTypeString}, ${this.options.contextTypeName}>`;
@@ -364,8 +368,18 @@ export class TypeStringGenerator {
    * // Internal type: "__type" -> "object"
    */
   private handleObjectType(typeInfo: Extract<TypeInfo, { kind: TypeKind.Object }>): string {
-    // For internal TypeScript types like "__type", use "object" instead
+    // For internal TypeScript types like "__type", check if it's an anonymous object with properties
     if (!typeInfo.name || !isValidImportableTypeName(typeInfo.name)) {
+      // If it has properties, generate inline object type
+      if (typeInfo.properties && typeInfo.properties.length > 0) {
+        const propertyStrings = typeInfo.properties.map(prop => {
+          const propType = this.typeInfoToString(prop.type);
+          const optional = prop.optional ? '?' : '';
+          return `${prop.name}${optional}: ${propType}`;
+        });
+        return `{ ${propertyStrings.join('; ')} }`;
+      }
+      // Otherwise, use generic "object" type
       return 'object';
     }
 
@@ -373,6 +387,13 @@ export class TypeStringGenerator {
     const typeArgs = this.formatTypeArguments(typeInfo.typeArguments);
     if (typeArgs) {
       return `${typeInfo.name}${typeArgs}`;
+    }
+
+    // If there are unresolved generics, include them as type arguments
+    // unresolvedGenerics is an array of GenericParam objects
+    if (typeInfo.unresolvedGenerics && typeInfo.unresolvedGenerics.length > 0) {
+      const genericArgs = typeInfo.unresolvedGenerics.map(g => g.name).join(', ');
+      return `${typeInfo.name}<${genericArgs}>`;
     }
 
     return typeInfo.name;

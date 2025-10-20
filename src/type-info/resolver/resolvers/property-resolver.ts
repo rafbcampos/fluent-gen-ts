@@ -32,7 +32,10 @@ export class PropertyResolver {
     const properties: PropertyInfo[] = [];
 
     try {
-      const typeProperties = type.getProperties();
+      // Use getApparentProperties() to properly handle properties from base types,
+      // including when an interface extends utility types like Omit<T, K>.
+      // This ensures all inherited properties are included, not just direct properties.
+      const typeProperties = type.getApparentProperties();
 
       for (const symbol of typeProperties) {
         const property = await this.resolveProperty({ symbol, type, depth, context });
