@@ -35,9 +35,71 @@ export class PropertyResolver {
       // Use getApparentProperties() to properly handle properties from base types,
       // including when an interface extends utility types like Omit<T, K>.
       // This ensures all inherited properties are included, not just direct properties.
-      const typeProperties = type.getApparentProperties();
+      let allPropertySymbols = type.getApparentProperties();
 
-      for (const symbol of typeProperties) {
+      // WORKAROUND for TypeScript's eager type resolution losing information:
+      // When we have generic interfaces extending utility types (like Omit<T<Generic>, K>)
+      // where the base type has unresolved generics, TypeScript returns an empty result
+      // for getApparentProperties() on the base type.
+      //
+      // To work around this, we access the heritage clauses at the AST/syntax level
+      // BEFORE TypeScript tries to eagerly resolve them. This preserves the type information.
+      if (allPropertySymbols.length === type.getProperties().length) {
+        const symbol = type.getSymbol();
+        if (symbol) {
+          const declarations = symbol.getDeclarations();
+          if (declarations.length > 0) {
+            const declaration = declarations[0];
+
+            if (declaration) {
+              // Check if this is an interface declaration with heritage clauses
+              if (
+                'getHeritageClauses' in declaration &&
+                typeof declaration.getHeritageClauses === 'function'
+              ) {
+                const heritageClauses = declaration.getHeritageClauses();
+
+                for (const clause of heritageClauses) {
+                  const typeNodes = clause.getTypeNodes();
+
+                  for (const typeNode of typeNodes) {
+                    // Get the type from the heritage clause node (before eager resolution)
+                    const heritageType = typeNode.getType();
+                    const heritageProps = heritageType.getApparentProperties();
+
+                    // If we got properties from the heritage clause that aren't in our current list, add them
+                    if (heritageProps.length > 0) {
+                      const existingPropNames = new Set(
+                        allPropertySymbols.map((p: TsSymbol) => p.getName()),
+                      );
+                      const additionalProps = heritageProps.filter(
+                        (p: TsSymbol) => !existingPropNames.has(p.getName()),
+                      );
+
+                      if (additionalProps.length > 0) {
+                        // Merge: base properties first, then direct properties (which override)
+                        const merged = new Map<string, TsSymbol>();
+
+                        for (const prop of additionalProps) {
+                          merged.set(prop.getName(), prop);
+                        }
+
+                        for (const prop of type.getProperties()) {
+                          merged.set(prop.getName(), prop);
+                        }
+
+                        allPropertySymbols = Array.from(merged.values());
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      for (const symbol of allPropertySymbols) {
         const property = await this.resolveProperty({ symbol, type, depth, context });
         if (property) {
           properties.push(property);
