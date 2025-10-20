@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.22
+
+### Patch Changes
+
+- 2ac4dfa: Fix extended methods extraction
+
 ## 0.1.21
 
 ### Patch Changes
