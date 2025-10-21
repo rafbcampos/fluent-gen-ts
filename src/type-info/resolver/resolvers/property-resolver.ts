@@ -37,6 +37,8 @@ export class PropertyResolver {
       // This ensures all inherited properties are included, not just direct properties.
       let allPropertySymbols = type.getApparentProperties();
 
+      const typeSymbol = type.getSymbol();
+
       // WORKAROUND for TypeScript's eager type resolution losing information:
       // When we have generic interfaces extending utility types (like Omit<T<Generic>, K>)
       // where the base type has unresolved generics, TypeScript returns an empty result
@@ -44,21 +46,21 @@ export class PropertyResolver {
       //
       // To work around this, we access the heritage clauses at the AST/syntax level
       // BEFORE TypeScript tries to eagerly resolve them. This preserves the type information.
-      if (allPropertySymbols.length === type.getProperties().length) {
-        const symbol = type.getSymbol();
-        if (symbol) {
-          const declarations = symbol.getDeclarations();
-          if (declarations.length > 0) {
-            const declaration = declarations[0];
+      if (typeSymbol) {
+        const declarations = typeSymbol.getDeclarations();
+        if (declarations.length > 0) {
+          const declaration = declarations[0];
 
-            if (declaration) {
-              // Check if this is an interface declaration with heritage clauses
-              if (
-                'getHeritageClauses' in declaration &&
-                typeof declaration.getHeritageClauses === 'function'
-              ) {
-                const heritageClauses = declaration.getHeritageClauses();
+          if (declaration) {
+            // Check if this is an interface declaration with heritage clauses
+            if (
+              'getHeritageClauses' in declaration &&
+              typeof declaration.getHeritageClauses === 'function'
+            ) {
+              const heritageClauses = declaration.getHeritageClauses();
 
+              // If we have heritage clauses, process them to get inherited properties
+              if (heritageClauses.length > 0) {
                 for (const clause of heritageClauses) {
                   const typeNodes = clause.getTypeNodes();
 
@@ -84,7 +86,7 @@ export class PropertyResolver {
                           merged.set(prop.getName(), prop);
                         }
 
-                        for (const prop of type.getProperties()) {
+                        for (const prop of allPropertySymbols) {
                           merged.set(prop.getName(), prop);
                         }
 
