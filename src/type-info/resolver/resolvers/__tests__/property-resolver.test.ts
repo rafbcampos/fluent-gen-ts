@@ -709,6 +709,138 @@ describe('PropertyResolver', () => {
       }
     });
 
+    it('should handle interface extending Omit with generics', async () => {
+      const sourceFile = project.createSourceFile(
+        'test-omit-generic.ts',
+        `
+        interface BaseAsset<T = unknown> {
+          id: string;
+          type: string;
+          binding: string;
+          label?: string;
+          help?: string;
+          note?: string;
+          placeholder?: string;
+          metadata?: T;
+        }
+
+        interface CustomMetadata {
+          role: 'custom';
+        }
+
+        interface DerivedAsset<T = unknown> extends Omit<BaseAsset<T>, 'binding' | 'metadata'> {
+          metadata?: CustomMetadata;
+        }
+
+        const derived: DerivedAsset = {} as DerivedAsset;
+      `,
+      );
+
+      const derivedType = sourceFile.getVariableDeclarationOrThrow('derived').getType();
+      const result = await propertyResolver.resolveProperties({
+        type: derivedType,
+        depth: 0,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const propNames = result.value.map(p => p.name).sort();
+
+        expect(propNames).toContain('id');
+        expect(propNames).toContain('type');
+        expect(propNames).toContain('label');
+        expect(propNames).toContain('help');
+        expect(propNames).toContain('note');
+        expect(propNames).toContain('placeholder');
+        expect(propNames).toContain('metadata');
+
+        expect(propNames).not.toContain('binding');
+
+        expect(result.value.length).toBe(7);
+      }
+    });
+
+    it('should handle interface extending Pick with generics', async () => {
+      const sourceFile = project.createSourceFile(
+        'test-pick-generic.ts',
+        `
+        interface FullAsset<T = unknown> {
+          id: string;
+          type: string;
+          binding: string;
+          label?: string;
+          help?: string;
+          metadata?: T;
+        }
+
+        interface PickedAsset<T = unknown> extends Pick<FullAsset<T>, 'id' | 'label' | 'help'> {
+          extra?: string;
+        }
+
+        const picked: PickedAsset = {} as PickedAsset;
+      `,
+      );
+
+      const pickedType = sourceFile.getVariableDeclarationOrThrow('picked').getType();
+      const result = await propertyResolver.resolveProperties({
+        type: pickedType,
+        depth: 0,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const propNames = result.value.map(p => p.name).sort();
+
+        expect(propNames).toContain('id');
+        expect(propNames).toContain('label');
+        expect(propNames).toContain('help');
+        expect(propNames).toContain('extra');
+
+        expect(propNames).not.toContain('type');
+        expect(propNames).not.toContain('binding');
+        expect(propNames).not.toContain('metadata');
+
+        expect(result.value.length).toBe(4);
+      }
+    });
+
+    it('should handle interface extending Partial with generics', async () => {
+      const sourceFile = project.createSourceFile(
+        'test-partial-generic.ts',
+        `
+        interface RequiredAsset<T = unknown> {
+          id: string;
+          type: string;
+          metadata?: T;
+        }
+
+        interface PartialAsset<T = unknown> extends Partial<RequiredAsset<T>> {
+          extra?: string;
+        }
+
+        const partial: PartialAsset = {} as PartialAsset;
+      `,
+      );
+
+      const partialType = sourceFile.getVariableDeclarationOrThrow('partial').getType();
+      const result = await propertyResolver.resolveProperties({
+        type: partialType,
+        depth: 0,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        const propNames = result.value.map(p => p.name).sort();
+
+        expect(propNames).toContain('id');
+        expect(propNames).toContain('type');
+        expect(propNames).toContain('metadata');
+        expect(propNames).toContain('extra');
+
+        expect(result.value.length).toBe(4);
+      }
+    });
+
     it('should handle properties with array types', async () => {
       const sourceFile = project.createSourceFile(
         'test.ts',

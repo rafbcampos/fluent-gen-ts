@@ -32,34 +32,22 @@ export class PropertyResolver {
     const properties: PropertyInfo[] = [];
 
     try {
-      // Use getApparentProperties() to properly handle properties from base types,
-      // including when an interface extends utility types like Omit<T, K>.
-      // This ensures all inherited properties are included, not just direct properties.
       let allPropertySymbols = type.getApparentProperties();
 
       const typeSymbol = type.getSymbol();
 
-      // WORKAROUND for TypeScript's eager type resolution losing information:
-      // When we have generic interfaces extending utility types (like Omit<T<Generic>, K>)
-      // where the base type has unresolved generics, TypeScript returns an empty result
-      // for getApparentProperties() on the base type.
-      //
-      // To work around this, we access the heritage clauses at the AST/syntax level
-      // BEFORE TypeScript tries to eagerly resolve them. This preserves the type information.
       if (typeSymbol) {
         const declarations = typeSymbol.getDeclarations();
         if (declarations.length > 0) {
           const declaration = declarations[0];
 
           if (declaration) {
-            // Check if this is an interface declaration with heritage clauses
             if (
               'getHeritageClauses' in declaration &&
               typeof declaration.getHeritageClauses === 'function'
             ) {
               const heritageClauses = declaration.getHeritageClauses();
 
-              // If we have heritage clauses, process them to get inherited properties
               if (heritageClauses.length > 0) {
                 for (const clause of heritageClauses) {
                   const typeNodes = clause.getTypeNodes();
@@ -67,7 +55,17 @@ export class PropertyResolver {
                   for (const typeNode of typeNodes) {
                     // Get the type from the heritage clause node (before eager resolution)
                     const heritageType = typeNode.getType();
-                    const heritageProps = heritageType.getApparentProperties();
+                    let heritageProps = heritageType.getApparentProperties();
+
+                    // Handle utility types with generic parameters that return empty properties
+                    // When we have utility types like Omit<T<Generic>, Keys> or Pick<T<Generic>, Keys>,
+                    // TypeScript's getApparentProperties returns empty due to eager type resolution
+                    if (heritageProps.length === 0) {
+                      const expandedProps = this.expandUtilityTypeProperties(typeNode);
+                      if (expandedProps) {
+                        heritageProps = expandedProps;
+                      }
+                    }
 
                     // If we got properties from the heritage clause that aren't in our current list, add them
                     if (heritageProps.length > 0) {
@@ -405,6 +403,86 @@ export class PropertyResolver {
       return Boolean(param.isOptional());
     }
     return false;
+  }
+
+  /**
+   * Expands utility types (Omit, Pick, etc.) to get their properties when TypeScript returns empty.
+   * This handles cases where utility types with generic parameters lose type information.
+   * @param typeNode - The heritage clause type node
+   * @returns Array of property symbols or null if not a recognized utility type
+   */
+  private expandUtilityTypeProperties(typeNode: Node): TsSymbol[] | null {
+    if (!('getText' in typeNode && typeof typeNode.getText === 'function')) {
+      return null;
+    }
+
+    const typeText = typeNode.getText();
+    if (!typeText) return null;
+
+    if (!('getTypeArguments' in typeNode && typeof typeNode.getTypeArguments === 'function')) {
+      return null;
+    }
+
+    const typeArgs = typeNode.getTypeArguments();
+    if (!typeArgs || typeArgs.length < 2) return null;
+
+    const sourceTypeNode = typeArgs[0];
+    if (!sourceTypeNode) return null;
+
+    const sourceType = sourceTypeNode.getType();
+    const sourceProps = sourceType.getApparentProperties();
+
+    // Handle Omit<T, K> - include all properties except K
+    if (typeText.startsWith('Omit<')) {
+      const omittedKeysNode = typeArgs[1];
+      if (!omittedKeysNode) return null;
+
+      const omittedKeys = this.extractLiteralKeys(omittedKeysNode.getType());
+      return sourceProps.filter((p: TsSymbol) => !omittedKeys.has(p.getName()));
+    }
+
+    // Handle Pick<T, K> - include only properties in K
+    if (typeText.startsWith('Pick<')) {
+      const pickedKeysNode = typeArgs[1];
+      if (!pickedKeysNode) return null;
+
+      const pickedKeys = this.extractLiteralKeys(pickedKeysNode.getType());
+      return sourceProps.filter((p: TsSymbol) => pickedKeys.has(p.getName()));
+    }
+
+    // Handle Partial<T>, Required<T>, Readonly<T> - include all properties
+    // (the modifier is applied to the properties themselves, not the set of properties)
+    if (
+      typeText.startsWith('Partial<') ||
+      typeText.startsWith('Required<') ||
+      typeText.startsWith('Readonly<')
+    ) {
+      return sourceProps;
+    }
+
+    return null;
+  }
+
+  /**
+   * Extracts string literal keys from a union type or single literal type.
+   * @param keysType - The type representing the keys (union of string literals)
+   * @returns Set of key names
+   */
+  private extractLiteralKeys(keysType: Type): Set<string> {
+    const keys = new Set<string>();
+
+    if (keysType.isUnion()) {
+      const unionTypes = keysType.getUnionTypes();
+      for (const unionType of unionTypes) {
+        if (unionType.isStringLiteral()) {
+          keys.add(unionType.getLiteralValue() as string);
+        }
+      }
+    } else if (keysType.isStringLiteral()) {
+      keys.add(keysType.getLiteralValue() as string);
+    }
+
+    return keys;
   }
 
   /**
