@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.26
+
+### Patch Changes
+
+- e98f910: Inheritance property extraction rework
+
 ## 0.1.25
 
 ### Patch Changes
