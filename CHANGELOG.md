@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.25
+
+### Patch Changes
+
+- 2193d20: Issues with symlinks while using utility types
+
 ## 0.1.24
 
 ### Patch Changes
