@@ -160,5 +160,5 @@ export interface GeneratorOptions {
   outputPath?: string;
   useDefaults?: boolean;
   contextType?: string;
-  importPath?: string;
+  customCommonFilePath?: string;
 }

@@ -91,10 +91,16 @@ export class BatchCommand {
     const spinner = ora();
     const tasks = this.taskRunner.createTasksFromTargets(config.targets);
 
+    // Determine batching strategy: batch together if using common file
+    // If customCommonFilePath is NOT set, we generate common.ts (default behavior)
+    // If customCommonFilePath IS set, user has their own common file for all builders
+    // In both cases, we can batch tasks together since they share a common file
+    const shouldBatchTogether = true;
+
     const result = await this.taskRunner.runTasks(tasks, generator, {
       ...(options.parallel !== undefined && { parallel: options.parallel }),
       ...(options.dryRun !== undefined && { dryRun: options.dryRun }),
-      generateCommonFile: config.generator?.generateCommonFile ?? true,
+      generateCommonFile: shouldBatchTogether,
       ...(config.generator && { generatorConfig: config.generator }),
       onProgress: message => {
         spinner.start(message);

@@ -69,8 +69,8 @@ export class GeneratorService {
     if (options.contextType !== undefined) {
       result.contextType = options.contextType;
     }
-    if (options.importPath !== undefined) {
-      result.importPath = options.importPath;
+    if (options.customCommonFilePath !== undefined) {
+      result.customCommonFilePath = options.customCommonFilePath;
     }
 
     return result;
@@ -107,8 +107,8 @@ export class GeneratorService {
     if (generatorConfig.contextType !== undefined) {
       result.contextType = generatorConfig.contextType;
     }
-    if (generatorConfig.importPath !== undefined) {
-      result.importPath = generatorConfig.importPath;
+    if (generatorConfig.customCommonFilePath !== undefined) {
+      result.customCommonFilePath = generatorConfig.customCommonFilePath;
     }
     if (generatorConfig.addComments !== undefined) {
       result.addComments = generatorConfig.addComments;

@@ -65,7 +65,6 @@ describe('BatchCommand', () => {
           ],
           generator: {
             outputDir: testDir,
-            generateCommonFile: true,
           },
         }),
       );

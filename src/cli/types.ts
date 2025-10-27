@@ -44,7 +44,7 @@ export interface CommandOptions {
   useDefaults?: boolean;
   addComments?: boolean;
   contextType?: string;
-  importPath?: string;
+  customCommonFilePath?: string;
 }
 
 export type GenerateTask = {

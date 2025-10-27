@@ -227,8 +227,23 @@ You can create and customize your own common utilities:
 npx fluent-gen-ts setup-common --output ./src/common.ts
 ```
 
-This creates a customizable `common.ts` file. When generating builders in the
-same directory, they'll automatically use your custom common file.
+This creates a customizable `common.ts` file. To use your custom common file instead of the auto-generated one, configure `customCommonFilePath` in your config:
+
+```javascript
+export default {
+  generator: {
+    outputDir: './src/builders',
+    customCommonFilePath: './src/common.js', // Path to your custom common file
+  },
+  // ... other options
+};
+```
+
+When `customCommonFilePath` is set:
+
+- fluent-gen-ts will NOT generate a `common.ts` file
+- All builders will import utilities from your specified path
+- You have full control over the common utilities
 
 ## TypeScript Configuration
 

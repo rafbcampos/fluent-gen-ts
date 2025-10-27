@@ -27,7 +27,6 @@ const isObjectType = (
 
 export interface GeneratorConfig extends GeneratorOptions {
   addComments?: boolean;
-  generateCommonFile?: boolean;
   outputDir?: string;
   tsConfigPath?: string;
   namingStrategy?: (typeName: string) => string;
@@ -214,7 +213,7 @@ export class BuilderGenerator {
       config: {
         isGeneratingMultiple: this.isGeneratingMultiple,
         hasExistingCommon: hasCommon,
-        commonImportPath: this.config.importPath ?? './common.js',
+        commonImportPath: this.config.customCommonFilePath ?? './common.js',
         pluginManager: this.pluginManager,
         outputDir: checkDir,
       },

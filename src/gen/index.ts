@@ -103,7 +103,7 @@ function extractGeneratorConfig(options: FluentGenOptions): GeneratorConfig {
     'outputDir',
     'useDefaults',
     'contextType',
-    'importPath',
+    'customCommonFilePath',
     'addComments',
     'tsConfigPath',
     'namingStrategy',
@@ -248,6 +248,15 @@ export class FluentGen {
   }
 
   /**
+   * Determines whether common.ts should be generated based on configuration
+   * @returns true if common.ts should be generated, false if user has custom common file
+   */
+  private shouldGenerateCommonFile(): boolean {
+    // If customCommonFilePath is provided, user has their own common file
+    return this.options.customCommonFilePath === undefined;
+  }
+
+  /**
    * Generates a fluent builder for a specific type from a TypeScript file
    *
    * @param filePath - Path to the TypeScript file containing the type
@@ -324,8 +333,10 @@ export class FluentGen {
     return withGeneratorStateManagement(this.generator, this.extractor, async () => {
       const results = new Map<string, string>();
 
-      // Generate common.ts file
-      results.set('common.ts', this.generator.generateCommonFile());
+      // Generate common.ts file only if configured to do so
+      if (this.shouldGenerateCommonFile()) {
+        results.set('common.ts', this.generator.generateCommonFile());
+      }
 
       // Generate each builder
       for (const typeName of typeNames) {
@@ -363,8 +374,10 @@ export class FluentGen {
     return withGeneratorStateManagement(this.generator, this.extractor, async () => {
       const results = new Map<string, string>();
 
-      // Generate common.ts file
-      results.set('common.ts', this.generator.generateCommonFile());
+      // Generate common.ts file only if configured to do so
+      if (this.shouldGenerateCommonFile()) {
+        results.set('common.ts', this.generator.generateCommonFile());
+      }
 
       // Generate builders from each file
       for (const [filePath, typeNames] of fileTypeMap) {

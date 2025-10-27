@@ -130,8 +130,7 @@ interface GeneratorConfig {
   useDefaults?: boolean; // Generate smart defaults (default: true)
   addComments?: boolean; // Add JSDoc comments (default: true)
   contextType?: string; // Custom context type name
-  importPath?: string; // Custom import path for common utilities
-  generateCommonFile?: boolean; // Whether to generate common.ts (default: true)
+  customCommonFilePath?: string; // Path to custom common file (if not using generated common.ts)
   naming?: NamingConfig; // File naming configuration
 }
 ```
@@ -227,39 +226,49 @@ build(context?: MyCustomContext): T {
 See [Custom Context](/guide/advanced-usage#custom-nested-context-generation) for
 details.
 
-### importPath
+### customCommonFilePath
 
-Custom import path for common utilities (default: `'./common.js'`).
+Path to your own custom common utilities file. When provided, fluent-gen-ts will:
 
-```javascript
-generator: {
-  importPath: '@/builders/common'; // Use path alias
-}
-```
-
-### generateCommonFile
-
-Whether to generate the `common.ts` utilities file.
-
-**true (default):**
+1. Skip generating the default `common.ts` file
+2. Configure all generated builders to import from your custom path
 
 ```javascript
 generator: {
-  generateCommonFile: true;
+  customCommonFilePath: '@/builders/common.js'; // Use path alias or relative path
 }
 ```
 
-Generates `common.ts` with shared builder utilities.
+**When not provided (default behavior):**
 
-**false:**
+- `common.ts` is automatically generated with shared builder utilities
+- Builders import from `./common.js`
+
+**When provided:**
+
+- No `common.ts` is generated (you provide your own)
+- Builders import from your specified path
+
+This is useful when you want to:
+
+- Use a custom utilities file with additional features
+- Share common utilities across multiple projects
+- Use path aliases for imports (e.g., `@/builders/common.js`)
+
+**Example with custom common file:**
 
 ```javascript
 generator: {
-  generateCommonFile: false;
+  outputDir: './src/builders',
+  customCommonFilePath: '@/shared/fluent-builder-common.js'
 }
 ```
 
-Useful when you want to provide your own common utilities file.
+You can create a custom common file using:
+
+```bash
+npx fluent-gen-ts setup-common --output ./src/shared/fluent-builder-common.ts
+```
 
 ### naming {#generator-naming}
 

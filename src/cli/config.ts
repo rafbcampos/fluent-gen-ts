@@ -20,9 +20,8 @@ export const GeneratorConfigSchema = z
     outputDir: z.string().optional(),
     useDefaults: z.boolean().optional(),
     contextType: z.string().optional(),
-    importPath: z.string().optional(),
+    customCommonFilePath: z.string().optional(),
     addComments: z.boolean().optional(),
-    generateCommonFile: z.boolean().optional(),
     naming: z
       .object({
         convention: z.enum(['camelCase', 'kebab-case', 'snake_case', 'PascalCase']).optional(),

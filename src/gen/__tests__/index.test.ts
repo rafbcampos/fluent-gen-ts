@@ -410,6 +410,60 @@ describe('FluentGen', () => {
     });
   });
 
+  describe('customCommonFilePath', () => {
+    test('should not generate common.ts when customCommonFilePath is provided', async () => {
+      const fluentGen = new FluentGen({ customCommonFilePath: '@/custom/common.js' });
+
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+
+      const result = await fluentGen.generateMultiple('/test/file.ts', ['User']);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should only have the builder file, NOT common.ts
+        expect(result.value.size).toBe(1);
+        expect(result.value.get('common.ts')).toBeUndefined();
+        expect(result.value.get('User.builder.ts')).toBe('generated code');
+      }
+    });
+
+    test('should generate common.ts when customCommonFilePath is not provided', async () => {
+      const fluentGen = new FluentGen();
+
+      const mockResolvedType: ResolvedType = {
+        sourceFile: '/test/file.ts',
+        name: 'User',
+        typeInfo: { kind: TypeKind.Object, properties: [], genericParams: [] },
+        imports: [],
+        dependencies: [],
+      };
+
+      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
+      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+
+      const result = await fluentGen.generateMultiple('/test/file.ts', ['User']);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should have both builder file AND common.ts
+        expect(result.value.size).toBe(2);
+        expect(result.value.get('common.ts')).toBe('common code');
+        expect(result.value.get('User.builder.ts')).toBe('generated code');
+      }
+    });
+  });
+
   describe('generateToFile', () => {
     let fluentGen: FluentGen;
 

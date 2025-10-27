@@ -62,7 +62,6 @@ describe('GeneratorService', () => {
         outputDir: './gen',
         useDefaults: true,
         contextType: 'BaseContext',
-        importPath: '@/types',
         addComments: true,
       };
 
@@ -72,7 +71,6 @@ describe('GeneratorService', () => {
         outputDir: './gen',
         useDefaults: true,
         contextType: 'BaseContext',
-        importPath: '@/types',
         addComments: true,
       });
     });
