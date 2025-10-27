@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.27
+
+### Patch Changes
+
+- db4ce44: Simplify common file configuration
+
 ## 0.1.26
 
 ### Patch Changes
