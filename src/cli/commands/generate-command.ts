@@ -43,7 +43,7 @@ export class GenerateCommand {
     const spinner = ora('Loading configuration...').start();
 
     try {
-      const configResult = this.configLoader.load(options.config);
+      const configResult = await this.configLoader.load(options.config);
       if (!isOk(configResult)) {
         this.handleError(spinner, 'Failed to load configuration', configResult.error);
       }

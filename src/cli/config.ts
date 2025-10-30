@@ -1,8 +1,27 @@
 import { z } from 'zod';
-import { cosmiconfigSync } from 'cosmiconfig';
+import { cosmiconfig, type Loader } from 'cosmiconfig';
+import { pathToFileURL } from 'node:url';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { MonorepoConfig as CoreMonorepoConfig } from '../core/package-resolver.js';
+
+/**
+ * Custom loader for TypeScript config files using tsx
+ */
+const typescriptLoader: Loader = async (filepath: string) => {
+  // Dynamic import with string variable to prevent bundler from resolving at build time
+  const tsxModule = 'tsx/esm/api';
+  const { register } = await import(/* @vite-ignore */ tsxModule);
+  const unregister = register();
+
+  try {
+    const fileUrl = pathToFileURL(filepath).href;
+    const module = await import(fileUrl);
+    return module.default ?? module;
+  } finally {
+    unregister();
+  }
+};
 
 export const MonorepoConfigSchema = z
   .object({
@@ -69,7 +88,7 @@ export type { CoreMonorepoConfig as MonorepoConfig };
  * fluentgen.config.js, or package.json.
  */
 export class ConfigLoader {
-  private readonly explorer = cosmiconfigSync('fluentgen', {
+  private readonly explorer = cosmiconfig('fluentgen', {
     searchPlaces: [
       '.fluentgenrc',
       '.fluentgenrc.json',
@@ -77,10 +96,21 @@ export class ConfigLoader {
       '.fluentgenrc.yml',
       '.fluentgenrc.js',
       '.fluentgenrc.cjs',
+      '.fluentgenrc.ts',
+      '.fluentgenrc.mts',
+      '.fluentgenrc.cts',
       'fluentgen.config.js',
       'fluentgen.config.cjs',
+      'fluentgen.config.ts',
+      'fluentgen.config.mts',
+      'fluentgen.config.cts',
       'package.json',
     ],
+    loaders: {
+      '.ts': typescriptLoader,
+      '.mts': typescriptLoader,
+      '.cts': typescriptLoader,
+    },
   });
 
   /**
@@ -88,20 +118,22 @@ export class ConfigLoader {
    *
    * @param configPath - Optional path to a specific configuration file.
    *                     If not provided, searches in standard locations.
-   * @returns A Result containing the validated configuration or an error.
+   * @returns A Promise resolving to a Result containing the validated configuration or an error.
    *
    * @example
    * ```typescript
    * const loader = new ConfigLoader();
-   * const config = loader.load();
+   * const config = await loader.load();
    * if (config.ok) {
    *   console.log('Config loaded:', config.value);
    * }
    * ```
    */
-  load(configPath?: string): Result<Config> {
+  async load(configPath?: string): Promise<Result<Config>> {
     try {
-      const result = configPath ? this.explorer.load(configPath) : this.explorer.search();
+      const result = configPath
+        ? await this.explorer.load(configPath)
+        : await this.explorer.search();
 
       if (!result) {
         return ok({});

@@ -3,16 +3,22 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync, writeFileSync } from 'node:fs';
 import type { Config } from '../config.js';
 
-type ConfigFormat = 'js' | 'cjs' | 'json';
+type ConfigFormat = 'js' | 'cjs' | 'ts' | 'mts' | 'cts' | 'json';
 
 const CONFIG_FILE_NAMES = {
   json: '.fluentgenrc.json',
   js: 'fluentgen.config.js',
   cjs: 'fluentgen.config.cjs',
+  ts: 'fluentgen.config.ts',
+  mts: 'fluentgen.config.mts',
+  cts: 'fluentgen.config.cts',
   yaml: '.fluentgenrc.yaml',
   yml: '.fluentgenrc.yml',
   jsLegacy: '.fluentgenrc.js',
   cjsLegacy: '.fluentgenrc.cjs',
+  tsLegacy: '.fluentgenrc.ts',
+  mtsLegacy: '.fluentgenrc.mts',
+  ctsLegacy: '.fluentgenrc.cts',
 } as const;
 
 /**

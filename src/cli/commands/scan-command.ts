@@ -63,7 +63,7 @@ export class ScanCommand {
 
       spinner.succeed(chalk.green(`Found ${files.length} file(s)`));
 
-      const configResult = this.configLoader.load(options.config);
+      const configResult = await this.configLoader.load(options.config);
       if (!isOk(configResult)) {
         spinner.fail(chalk.red('Failed to load configuration'));
         throw new Error('Failed to load configuration');

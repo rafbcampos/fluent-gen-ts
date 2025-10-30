@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { PluginManager, isValidPlugin } from '../../core/plugin/index.js';
 
 /**
@@ -43,8 +44,29 @@ export class PluginService {
 
   private async loadPlugin(pluginPath: string): Promise<void> {
     const absolutePath = path.resolve(pluginPath);
+    const isTypeScript = /\.(ts|mts|cts)$/.test(absolutePath);
 
-    const pluginModule = await import(absolutePath);
+    let pluginModule;
+
+    if (isTypeScript) {
+      // Use tsx for TypeScript files
+      // Dynamic import with string concatenation to prevent bundler from resolving at build time
+      const tsxModule = 'tsx/esm/api';
+      const { register } = await import(/* @vite-ignore */ tsxModule);
+      const unregister = register();
+
+      try {
+        // Convert to file URL for proper ESM import
+        const fileUrl = pathToFileURL(absolutePath).href;
+        pluginModule = await import(fileUrl);
+      } finally {
+        unregister();
+      }
+    } else {
+      // Use regular import for JavaScript files
+      pluginModule = await import(absolutePath);
+    }
+
     const pluginInstance = pluginModule.default ?? pluginModule;
 
     if (isValidPlugin(pluginInstance)) {

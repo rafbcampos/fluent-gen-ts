@@ -16,6 +16,7 @@ export default defineConfig({
     'chalk',
     'ora',
     'cosmiconfig',
+    'tsx',
     'zod',
     'glob',
     'fast-glob',

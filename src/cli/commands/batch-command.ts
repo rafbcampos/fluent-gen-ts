@@ -26,7 +26,7 @@ export class BatchCommand {
    */
   async execute(options: BatchOptions = {}): Promise<void> {
     try {
-      const config = this.loadAndValidateConfig(options);
+      const config = await this.loadAndValidateConfig(options);
       const pluginManager = await this.loadPluginsIfNeeded(options, config);
       const result = await this.runGeneration(options, config, pluginManager);
       this.printSummary(result);
@@ -35,13 +35,13 @@ export class BatchCommand {
     }
   }
 
-  private loadAndValidateConfig(options: BatchOptions): ValidatedConfig {
+  private async loadAndValidateConfig(options: BatchOptions): Promise<ValidatedConfig> {
     this.printSectionHeader('Configuration Phase');
     const configPath = options.config || 'default search path';
     console.log(chalk.gray(`Config: ${configPath}`));
     console.log();
 
-    const configResult = this.configLoader.load(options.config);
+    const configResult = await this.configLoader.load(options.config);
     if (!isOk(configResult)) {
       console.error(chalk.red('✖ Failed to load configuration'));
       console.error(configResult.error);

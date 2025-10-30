@@ -9,14 +9,14 @@ describe('ConfigLoader', () => {
   });
 
   describe('load', () => {
-    test('handles missing config gracefully', () => {
+    test('handles missing config gracefully', async () => {
       const mockExplorer = {
-        search: vi.fn().mockReturnValue(null),
+        search: vi.fn().mockResolvedValue(null),
         load: vi.fn(),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load();
+      const result = await loader.load();
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -24,16 +24,16 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('handles invalid config object', () => {
+    test('handles invalid config object', async () => {
       const mockExplorer = {
-        search: vi.fn().mockReturnValue({
+        search: vi.fn().mockResolvedValue({
           config: { invalid: 'property' },
         }),
         load: vi.fn(),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load();
+      const result = await loader.load();
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -41,16 +41,14 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('handles explorer error when specific path provided', () => {
+    test('handles explorer error when specific path provided', async () => {
       const mockExplorer = {
         search: vi.fn(),
-        load: vi.fn().mockImplementation(() => {
-          throw new Error('File not found');
-        }),
+        load: vi.fn().mockRejectedValue(new Error('File not found')),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load('/nonexistent/path');
+      const result = await loader.load('/nonexistent/path');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -58,16 +56,14 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('handles non-Error thrown objects', () => {
+    test('handles non-Error thrown objects', async () => {
       const mockExplorer = {
         search: vi.fn(),
-        load: vi.fn().mockImplementation(() => {
-          throw 'string error';
-        }),
+        load: vi.fn().mockRejectedValue('string error'),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load('/some/path');
+      const result = await loader.load('/some/path');
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -75,20 +71,20 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('handles valid config', () => {
+    test('handles valid config', async () => {
       const validConfig = {
         outputDir: './output',
         useDefaults: true,
       };
       const mockExplorer = {
-        search: vi.fn().mockReturnValue({
+        search: vi.fn().mockResolvedValue({
           config: { generator: validConfig },
         }),
         load: vi.fn(),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load();
+      const result = await loader.load();
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -96,7 +92,7 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('extracts default export from ES module config', () => {
+    test('extracts default export from ES module config', async () => {
       const validConfig = {
         generator: {
           naming: {
@@ -107,7 +103,7 @@ describe('ConfigLoader', () => {
       };
       // Simulate what cosmiconfig returns for ES module exports
       const mockExplorer = {
-        search: vi.fn().mockReturnValue({
+        search: vi.fn().mockResolvedValue({
           config: {
             __esModule: true,
             default: validConfig,
@@ -117,7 +113,7 @@ describe('ConfigLoader', () => {
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load();
+      const result = await loader.load();
 
       expect(result.ok).toBe(true);
       if (result.ok) {
@@ -128,7 +124,7 @@ describe('ConfigLoader', () => {
       }
     });
 
-    test('handles config without default export', () => {
+    test('handles config without default export', async () => {
       const validConfig = {
         generator: {
           naming: {
@@ -138,14 +134,14 @@ describe('ConfigLoader', () => {
         targets: [{ file: 'test.ts' }],
       };
       const mockExplorer = {
-        search: vi.fn().mockReturnValue({
+        search: vi.fn().mockResolvedValue({
           config: validConfig,
         }),
         load: vi.fn(),
       };
       (loader as any).explorer = mockExplorer;
 
-      const result = loader.load();
+      const result = await loader.load();
 
       expect(result.ok).toBe(true);
       if (result.ok) {
