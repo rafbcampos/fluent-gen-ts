@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.28
+
+### Patch Changes
+
+- 47e9734: Support to config and plugins as TypeScript files
+
 ## 0.1.27
 
 ### Patch Changes
