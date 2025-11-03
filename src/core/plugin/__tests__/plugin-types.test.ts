@@ -558,9 +558,9 @@ describe('Plugin Types', () => {
           withProperties: mockObjectMatcher,
         };
 
-        expect(matcher.withGeneric).toBeDefined();
-        expect(matcher.withProperty).toBeDefined();
-        expect(matcher.withProperties).toBeDefined();
+        expect(typeof matcher.withGeneric).toBe('function');
+        expect(typeof matcher.withProperty).toBe('function');
+        expect(typeof matcher.withProperties).toBe('function');
       });
     });
 
@@ -572,7 +572,7 @@ describe('Plugin Types', () => {
           of: () => ({}) as ArrayTypeMatcher,
         };
 
-        expect(matcher.of).toBeDefined();
+        expect(typeof matcher.of).toBe('function');
       });
     });
 
@@ -587,8 +587,8 @@ describe('Plugin Types', () => {
           exact: mockUnionMatcher,
         };
 
-        expect(matcher.containing).toBeDefined();
-        expect(matcher.exact).toBeDefined();
+        expect(typeof matcher.containing).toBe('function');
+        expect(typeof matcher.exact).toBe('function');
       });
     });
 
@@ -603,8 +603,8 @@ describe('Plugin Types', () => {
           exact: mockIntersectionMatcher,
         };
 
-        expect(matcher.including).toBeDefined();
-        expect(matcher.exact).toBeDefined();
+        expect(typeof matcher.including).toBe('function');
+        expect(typeof matcher.exact).toBe('function');
       });
     });
   });

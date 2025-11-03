@@ -112,7 +112,7 @@ export class CacheManager {
       case 'tuple':
         return `[${type.elements.map(e => this.serializeTypeInfo(e)).join(',')}]`;
       case 'literal':
-        return `"${type.literal}"`;
+        return `"${type.literal as string}"`;
       case 'function':
         return type.name || 'Function';
       default:

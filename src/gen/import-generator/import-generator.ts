@@ -8,6 +8,7 @@ import { PackageResolver } from './resolvers/package-resolver.js';
 import { PluginIntegration } from './plugins/plugin-integration.js';
 import { extractModulesFromNamedImports } from './utils/deduplication.js';
 import { ok, err } from '../../core/result.js';
+import { formatError } from '../../core/utils/error-utils.js';
 
 function hasDispose(obj: unknown): obj is { dispose(): void } {
   return typeof obj === 'object' && obj !== null && typeof (obj as any).dispose === 'function';
@@ -119,7 +120,7 @@ export class ImportGenerator {
 
       return finalResult;
     } catch (error) {
-      return err(new Error(`Failed to generate all imports: ${error}`));
+      return err(new Error(`Failed to generate all imports: ${formatError(error)}`));
     }
   }
 
@@ -300,7 +301,7 @@ export class ImportGenerator {
       imports.push(...moduleImportsResult.value);
       return ok('');
     } catch (error) {
-      return err(new Error(`Failed to add module imports: ${error}`));
+      return err(new Error(`Failed to add module imports: ${formatError(error)}`));
     }
   }
 }

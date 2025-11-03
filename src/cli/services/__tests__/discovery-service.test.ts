@@ -108,7 +108,7 @@ describe('DiscoveryService', () => {
 
       expect(result).toEqual(['file1.ts']);
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Warning: Failed to process pattern "invalid-pattern": Error: Invalid glob pattern',
+        'Warning: Failed to process pattern "invalid-pattern": Invalid glob pattern',
       );
 
       consoleSpy.mockRestore();
@@ -164,7 +164,7 @@ describe('DiscoveryService', () => {
         { file: 'file2.ts', name: 'Interface1', displayName: 'file2.ts:Interface1' },
       ]);
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Warning: Failed to scan file "file1.ts": Error: Scan failed',
+        'Warning: Failed to scan file "file1.ts": Scan failed',
       );
 
       consoleSpy.mockRestore();

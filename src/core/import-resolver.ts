@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { Result } from './result.js';
 import { ok, err } from './result.js';
+import { formatError } from './utils/error-utils.js';
 
 /**
  * Information about a resolved import path.
@@ -95,7 +96,7 @@ export class ImportResolver {
 
       return this.resolveAbsoluteOrOtherPath(importPath);
     } catch (error) {
-      return err(new Error(`Failed to resolve import: ${error}`));
+      return err(new Error(`Failed to resolve import: ${formatError(error)}`));
     }
   }
 

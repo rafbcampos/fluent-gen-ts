@@ -4,6 +4,7 @@ import { TypeExtractor } from '../type-info/index.js';
 import type { TypeExtractorOptions } from '../type-info/index.js';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
+import { formatError } from '../core/utils/error-utils.js';
 import { PluginManager } from '../core/plugin/index.js';
 import type { Plugin } from '../core/plugin/index.js';
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -435,7 +436,7 @@ export class FluentGen {
 
       return ok(output);
     } catch (error) {
-      return err(new Error(`Failed to write file: ${error}`));
+      return err(new Error(`Failed to write file: ${formatError(error)}`));
     }
   }
 
@@ -472,7 +473,7 @@ export class FluentGen {
 
       return ok(results);
     } catch (error) {
-      return err(new Error(`Failed to scan and generate: ${error}`));
+      return err(new Error(`Failed to scan and generate: ${formatError(error)}`));
     }
   }
 
@@ -499,7 +500,7 @@ export class FluentGen {
       this.pluginManager.register(plugin);
       return ok(undefined);
     } catch (error) {
-      return err(new Error(`Failed to register plugin: ${error}`));
+      return err(new Error(`Failed to register plugin: ${formatError(error)}`));
     }
   }
 

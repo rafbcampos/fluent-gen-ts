@@ -1,3 +1,4 @@
+/* oxlint-disable typescript-eslint/unbound-method */
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { FluentGen } from '../index.js';
 import { TypeExtractor } from '../../type-info/index.js';
@@ -138,8 +139,11 @@ describe('FluentGen', () => {
         dependencies: [],
       };
 
-      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
-      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
+      const extractTypeMock = vi.mocked(mockTypeExtractor.extractType);
+      const generateMock = vi.mocked(mockBuilderGenerator.generate);
+
+      extractTypeMock.mockResolvedValue(ok(mockResolvedType));
+      generateMock.mockResolvedValue(ok('generated code'));
 
       const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
 
@@ -147,8 +151,8 @@ describe('FluentGen', () => {
       if (result.ok) {
         expect(result.value).toBe('generated code');
       }
-      expect(mockTypeExtractor.extractType).toHaveBeenCalledWith('/test/file.ts', 'User');
-      expect(mockBuilderGenerator.generate).toHaveBeenCalledWith(mockResolvedType);
+      expect(extractTypeMock).toHaveBeenCalledWith('/test/file.ts', 'User');
+      expect(generateMock).toHaveBeenCalledWith(mockResolvedType);
     });
 
     test('should return error for invalid filePath', async () => {
@@ -188,9 +192,8 @@ describe('FluentGen', () => {
     });
 
     test('should return error when extractor fails', async () => {
-      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(
-        err(new Error('Extraction failed')),
-      );
+      const extractTypeMock = vi.mocked(mockTypeExtractor.extractType);
+      extractTypeMock.mockResolvedValue(err(new Error('Extraction failed')));
 
       const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
       expect(result.ok).toBe(false);
@@ -208,10 +211,11 @@ describe('FluentGen', () => {
         dependencies: [],
       };
 
-      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
-      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(
-        err(new Error('Generation failed')),
-      );
+      const extractTypeMock = vi.mocked(mockTypeExtractor.extractType);
+      const generateMock = vi.mocked(mockBuilderGenerator.generate);
+
+      extractTypeMock.mockResolvedValue(ok(mockResolvedType));
+      generateMock.mockResolvedValue(err(new Error('Generation failed')));
 
       const result = await fluentGen.generateBuilder('/test/file.ts', 'User');
       expect(result.ok).toBe(false);
@@ -237,9 +241,15 @@ describe('FluentGen', () => {
         dependencies: [],
       };
 
-      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(ok(mockResolvedType));
-      vi.mocked(mockBuilderGenerator.generate).mockResolvedValue(ok('generated code'));
-      vi.mocked(mockBuilderGenerator.generateCommonFile).mockReturnValue('common code');
+      const extractTypeMock = vi.mocked(mockTypeExtractor.extractType);
+      const generateMock = vi.mocked(mockBuilderGenerator.generate);
+      const generateCommonFileMock = vi.mocked(mockBuilderGenerator.generateCommonFile);
+      const setGeneratingMultipleMock = vi.mocked(mockBuilderGenerator.setGeneratingMultiple);
+      const clearCacheMock = vi.mocked(mockBuilderGenerator.clearCache);
+
+      extractTypeMock.mockResolvedValue(ok(mockResolvedType));
+      generateMock.mockResolvedValue(ok('generated code'));
+      generateCommonFileMock.mockReturnValue('common code');
 
       const result = await fluentGen.generateMultiple('/test/file.ts', ['User', 'Product']);
 
@@ -251,9 +261,9 @@ describe('FluentGen', () => {
         expect(result.value.get('Product.builder.ts')).toBe('generated code');
       }
 
-      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(true);
-      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
-      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+      expect(setGeneratingMultipleMock).toHaveBeenCalledWith(true);
+      expect(setGeneratingMultipleMock).toHaveBeenCalledWith(false);
+      expect(clearCacheMock).toHaveBeenCalled();
     });
 
     test('should return error for invalid filePath', async () => {
@@ -278,13 +288,17 @@ describe('FluentGen', () => {
     });
 
     test('should cleanup state even when generation fails', async () => {
-      vi.mocked(mockTypeExtractor.extractType).mockResolvedValue(err(new Error('Failed')));
+      const extractTypeMock = vi.mocked(mockTypeExtractor.extractType);
+      const setGeneratingMultipleMock = vi.mocked(mockBuilderGenerator.setGeneratingMultiple);
+      const clearCacheMock = vi.mocked(mockBuilderGenerator.clearCache);
+
+      extractTypeMock.mockResolvedValue(err(new Error('Failed')));
 
       const result = await fluentGen.generateMultiple('/test/file.ts', ['User']);
       expect(result.ok).toBe(false);
 
-      expect(mockBuilderGenerator.setGeneratingMultiple).toHaveBeenCalledWith(false);
-      expect(mockBuilderGenerator.clearCache).toHaveBeenCalled();
+      expect(setGeneratingMultipleMock).toHaveBeenCalledWith(false);
+      expect(clearCacheMock).toHaveBeenCalled();
     });
   });
 

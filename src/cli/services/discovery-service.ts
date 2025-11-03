@@ -1,6 +1,7 @@
 import { glob } from 'glob';
 import { TypeExtractor } from '../../type-info/index.js';
 import { isOk } from '../../core/result.js';
+import { formatError } from '../../core/utils/error-utils.js';
 
 /**
  * Represents a discovered TypeScript interface in a file
@@ -42,7 +43,7 @@ export class DiscoveryService {
   private typeExtractor = new TypeExtractor();
 
   private logWarning(action: string, item: string, error: unknown): void {
-    console.warn(`Warning: Failed to ${action} "${item}": ${error}`);
+    console.warn(`Warning: Failed to ${action} "${item}": ${formatError(error)}`);
   }
 
   private isTypeScriptFile(filename: string): boolean {

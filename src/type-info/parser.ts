@@ -6,6 +6,7 @@ import { TypeResolutionCache } from '../core/cache.js';
 import { PluginManager, HookType } from '../core/plugin/index.js';
 import { PackageResolver } from '../core/package-resolver.js';
 import path from 'node:path';
+import { formatError } from '../core/utils/error-utils.js';
 
 import type { MonorepoConfig } from '../core/package-resolver.js';
 
@@ -118,7 +119,9 @@ export class TypeScriptParser {
             this.project.addSourceFileAtPath(resolvedPackage.typesPath);
             typesLoaded = true;
           } catch (error) {
-            warnings.push(`Failed to load types from ${resolvedPackage.typesPath}: ${error}`);
+            warnings.push(
+              `Failed to load types from ${resolvedPackage.typesPath}: ${formatError(error)}`,
+            );
           }
         }
 
@@ -149,7 +152,7 @@ export class TypeScriptParser {
 
       return ok({ loadedPackages, failedPackages, warnings });
     } catch (error) {
-      return err(new Error(`Failed to load external dependencies: ${error}`));
+      return err(new Error(`Failed to load external dependencies: ${formatError(error)}`));
     }
   }
 
@@ -180,7 +183,7 @@ export class TypeScriptParser {
 
       return ok(sourceFile);
     } catch (error) {
-      return err(new Error(`Failed to parse file: ${error}`));
+      return err(new Error(`Failed to parse file: ${formatError(error)}`));
     }
   }
 
@@ -264,7 +267,7 @@ export class TypeScriptParser {
 
       return ok(imports);
     } catch (error) {
-      return err(new Error(`Failed to resolve imports: ${error}`));
+      return err(new Error(`Failed to resolve imports: ${formatError(error)}`));
     }
   }
 

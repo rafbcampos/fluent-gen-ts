@@ -1,6 +1,7 @@
 import type { Type } from 'ts-morph';
 import type { Result } from '../../core/result.js';
 import { ok, err } from '../../core/result.js';
+import { formatError } from '../../core/utils/error-utils.js';
 import type { TypeInfo } from '../../core/types.js';
 import { TypeKind } from '../../core/types.js';
 import { TypeResolutionCache } from '../../core/cache.js';
@@ -189,7 +190,7 @@ export class TypeResolver {
       });
     } catch (error) {
       this.context.unmarkVisited(typeString);
-      return err(new Error(`Failed to resolve type: ${error}`));
+      return err(new Error(`Failed to resolve type: ${formatError(error)}`));
     }
   }
 

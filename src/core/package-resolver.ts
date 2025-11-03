@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import type { Result } from './result.js';
 import { ok, err } from './result.js';
+import { formatError } from './utils/error-utils.js';
 
 export interface PackageManager {
   type: 'npm' | 'yarn' | 'pnpm' | 'unknown';
@@ -152,7 +153,7 @@ export class PackageResolver {
 
       return err(new Error(`Package '${packageName}' not found from ${startPath}`));
     } catch (error) {
-      return err(new Error(`Failed to resolve package '${packageName}': ${error}`));
+      return err(new Error(`Failed to resolve package '${packageName}': ${formatError(error)}`));
     }
   }
 
@@ -372,7 +373,7 @@ export class PackageResolver {
 
       return err(new Error(`Package not found in pnpm store`));
     } catch (error) {
-      return err(new Error(`Failed to search pnpm store: ${error}`));
+      return err(new Error(`Failed to search pnpm store: ${formatError(error)}`));
     }
   }
 
@@ -562,7 +563,7 @@ export class PackageResolver {
 
       return ok(resolvedPackage);
     } catch (error) {
-      return err(new Error(`Failed to analyze package at ${packagePath}: ${error}`));
+      return err(new Error(`Failed to analyze package at ${packagePath}: ${formatError(error)}`));
     }
   }
 

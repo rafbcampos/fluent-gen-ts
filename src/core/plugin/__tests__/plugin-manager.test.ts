@@ -308,7 +308,7 @@ describe('PluginManager', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.message).toContain(
-          'Plugin throwing-plugin hook beforeParse threw error: Error: Unexpected error',
+          'Plugin throwing-plugin hook beforeParse threw error: Unexpected error',
         );
       }
     });

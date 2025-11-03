@@ -1,5 +1,6 @@
 import type { Result } from '../result.js';
 import { ok, err } from '../result.js';
+import { formatError } from '../utils/error-utils.js';
 import type {
   Plugin,
   HookTypeValue,
@@ -447,7 +448,9 @@ export class PluginManager {
 
       return result as Result<T>;
     } catch (error) {
-      return err(new Error(`Plugin ${pluginName} hook ${hookType} threw error: ${error}`));
+      return err(
+        new Error(`Plugin ${pluginName} hook ${hookType} threw error: ${formatError(error)}`),
+      );
     }
   }
 

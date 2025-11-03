@@ -380,7 +380,7 @@ describe('ConditionalTypeResolver', () => {
       const type = sourceFile.getTypeAliasOrThrow('Test').getType();
 
       // Mock type.getText to throw an error
-      const originalGetText = type.getText;
+      const originalGetText = type.getText.bind(type);
       type.getText = () => {
         throw new Error('getText failed');
       };

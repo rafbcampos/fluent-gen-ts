@@ -20,9 +20,7 @@ IntelliSense, type safety, and smart defaults.
   fields
 - **🔄 Nested Builder Support** - Seamless composition of complex objects with
   deferred builds
-- **🧩 Sophisticated Plugin System** - Fluent API for creating powerful,
-  type-safe plugins with advanced matching, deep type transformation, custom
-  methods, and auxiliary data storage
+- **🧩 Plugin System** - Fluent API for creating powerful, type-safe plugins with advanced matching, deep type transformation, custom methods, and auxiliary data storage
 - **🎨 Flexible Naming Strategies** - Configurable filename generation with
   predefined conventions or custom transform functions
 - **⚡ CLI & Programmatic API** - Use via command line or integrate into your
@@ -237,8 +235,7 @@ npx fluent-gen-ts setup-common --output ./src/common.ts
 
 ## 🧩 Powerful Plugin System
 
-Extend fluent-gen-ts with a sophisticated plugin system featuring a fluent API,
-advanced type matching, custom naming strategies, and auxiliary data storage:
+Extend fluent-gen-ts with a plugin system featuring a fluent API, advanced type matching, custom naming strategies, and auxiliary data storage:
 
 ```typescript
 // my-plugin.ts
@@ -647,7 +644,6 @@ fluent-gen-ts may not be the best fit if:
 - ❌ **Immutable Data Structures** - Libraries like Immer.js are better suited
 - ❌ **Runtime Validation** - Use Zod, io-ts, or class-validator for runtime
   checks
-- ❌ **Tiny Bundles** - Generated code adds ~2-5KB per builder (tree-shakeable)
 
 **Consider instead:**
 

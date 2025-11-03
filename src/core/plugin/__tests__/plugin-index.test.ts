@@ -207,49 +207,49 @@ describe('Plugin Index Exports', () => {
       expect(typeof primitive).toBe('function');
       const matcher = primitive('string');
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export object matcher function', () => {
       expect(typeof object).toBe('function');
       const matcher = object('User');
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export array matcher function', () => {
       expect(typeof array).toBe('function');
       const matcher = array();
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export union matcher function', () => {
       expect(typeof union).toBe('function');
       const matcher = union();
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export intersection matcher function', () => {
       expect(typeof intersection).toBe('function');
       const matcher = intersection();
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export reference matcher function', () => {
       expect(typeof reference).toBe('function');
       const matcher = reference('MyType');
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export generic matcher function', () => {
       expect(typeof generic).toBe('function');
       const matcher = generic('T');
       expect(matcher).toBeDefined();
-      expect(matcher.match).toBeDefined();
+      expect(typeof matcher.match).toBe('function');
     });
 
     test('should export special matcher functions', () => {

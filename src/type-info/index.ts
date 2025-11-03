@@ -8,6 +8,7 @@ import type { SourceFile } from 'ts-morph';
 // Core modules
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
+import { formatError } from '../core/utils/error-utils.js';
 import type { ResolvedType, TypeInfo } from '../core/types.js';
 import { TypeResolutionCache } from '../core/cache.js';
 import { PluginManager } from '../core/plugin/index.js';
@@ -216,7 +217,11 @@ export class TypeExtractor {
       await access(absolutePath, constants.F_OK | constants.R_OK);
       return ok(absolutePath);
     } catch (error) {
-      return err(new Error(`File '${absolutePath}' does not exist or is not readable: ${error}`));
+      return err(
+        new Error(
+          `File '${absolutePath}' does not exist or is not readable: ${formatError(error)}`,
+        ),
+      );
     }
   }
 
@@ -442,7 +447,7 @@ export class TypeExtractor {
       }
       return ok(resolvedTypes);
     } catch (error) {
-      return err(new Error(`Failed to extract multiple types: ${error}`));
+      return err(new Error(`Failed to extract multiple types: ${formatError(error)}`));
     }
   }
 
@@ -491,7 +496,7 @@ export class TypeExtractor {
 
       return ok(typeNames);
     } catch (error) {
-      return err(new Error(`Failed to scan file '${filePath}': ${error}`));
+      return err(new Error(`Failed to scan file '${filePath}': ${formatError(error)}`));
     }
   }
 

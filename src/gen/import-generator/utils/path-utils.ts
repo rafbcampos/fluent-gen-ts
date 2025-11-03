@@ -301,12 +301,12 @@ export const resolveRelativeImportPath = (
 export const createRelativeImportPath = (outputDir: string, sourceFile: string): string => {
   try {
     // Validate inputs
-    if (!isValidString(outputDir)) {
-      console.warn(`Invalid output directory: ${outputDir}`);
+    if (outputDir.trim() === '') {
+      console.warn(`Invalid output directory: ${String(outputDir)}`);
       return sourceFile;
     }
-    if (!isValidString(sourceFile)) {
-      console.warn(`Invalid source file: ${sourceFile}`);
+    if (sourceFile.trim() === '') {
+      console.warn(`Invalid source file: ${String(sourceFile)}`);
       return sourceFile;
     }
 

@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import path from 'node:path';
 import type { FluentGen } from '../../gen/index.js';
 import { isOk } from '../../core/result.js';
+import { formatError } from '../../core/utils/error-utils.js';
 import type { Target, GeneratorConfig } from '../config.js';
 import type { Task, TaskWithResult, GenerateTask, ScanTask } from '../types.js';
 import { FileService } from './file-service.js';
@@ -143,14 +144,15 @@ export class TaskRunner {
   private formatTypeName(typeName: string, config?: GeneratorConfig): string {
     if (config?.naming?.transform) {
       try {
+        // oxlint-disable-next-line typescript-eslint/no-implied-eval -- Intentionally executing user-provided transform function from config file
         const transformFn = new Function(
           'typeName',
           `return (${config.naming.transform})(typeName)`,
         );
-        return transformFn(typeName);
+        return transformFn(typeName) as string;
       } catch (error) {
         console.warn(
-          `Warning: Invalid naming transform function, falling back to default: ${error}`,
+          `Warning: Invalid naming transform function, falling back to default: ${formatError(error)}`,
         );
       }
     }

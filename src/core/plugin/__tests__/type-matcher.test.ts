@@ -23,9 +23,9 @@ describe('Type Matchers', () => {
     test('should create type matcher builder', () => {
       const builder = createTypeMatcher();
       expect(builder).toBeDefined();
-      expect(builder.primitive).toBeDefined();
-      expect(builder.object).toBeDefined();
-      expect(builder.array).toBeDefined();
+      expect(typeof builder.primitive).toBe('function');
+      expect(typeof builder.object).toBe('function');
+      expect(typeof builder.array).toBe('function');
     });
   });
 

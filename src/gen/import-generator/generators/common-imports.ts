@@ -2,6 +2,7 @@ import type { ImportGeneratorConfig } from '../types.js';
 import { validateImportPath } from '../utils/validation.js';
 import { ok, err } from '../../../core/result.js';
 import type { Result } from '../../../core/result.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 
 /**
  * Generator for common import statements in fluent builder patterns.
@@ -41,7 +42,9 @@ export class CommonImportsGenerator {
       return ok(commonImports);
     } catch (error) {
       return err(
-        error instanceof Error ? error : new Error(`Failed to generate common imports: ${error}`),
+        error instanceof Error
+          ? error
+          : new Error(`Failed to generate common imports: ${formatError(error)}`),
       );
     }
   }

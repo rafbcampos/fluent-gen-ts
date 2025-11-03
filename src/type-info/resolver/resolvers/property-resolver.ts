@@ -2,6 +2,7 @@ import { Type, SyntaxKind, Node, Symbol as TsSymbol } from 'ts-morph';
 import { ts } from 'ts-morph';
 import type { Result } from '../../../core/result.js';
 import { ok, err } from '../../../core/result.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 import type { TypeInfo, PropertyInfo, IndexSignature } from '../../../core/types.js';
 import { TypeKind } from '../../../core/types.js';
 import type { GenericContext } from '../../generic-context.js';
@@ -260,7 +261,11 @@ export class PropertyResolver {
       const commentTag = jsDocTags.find(tag => tag.getName() === 'comment');
       const tagText = commentTag?.getText() || jsDocTags[0]?.getText();
       const jsDoc = Array.isArray(tagText)
-        ? tagText.map(part => part.text || part.toString()).join('')
+        ? tagText
+            .map(part =>
+              typeof part === 'object' && part && 'text' in part ? String(part.text) : String(part),
+            )
+            .join('')
         : tagText;
       if (jsDoc && jsDoc.trim()) {
         return jsDoc.trim();
@@ -306,7 +311,7 @@ export class PropertyResolver {
 
       return ok(null);
     } catch (error) {
-      return err(new Error(`Failed to resolve index signature: ${error}`));
+      return err(new Error(`Failed to resolve index signature: ${formatError(error)}`));
     }
   }
 
@@ -381,8 +386,10 @@ export class PropertyResolver {
       type &&
       typeof type === 'object' &&
       'toString' in type &&
-      typeof type.toString === 'function'
+      typeof type.toString === 'function' &&
+      type.toString !== Object.prototype.toString
     ) {
+      // oxlint-disable-next-line typescript-eslint/no-base-to-string -- Checked that toString is not Object.prototype.toString
       return type.toString();
     }
     return 'unknown';

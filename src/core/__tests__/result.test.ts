@@ -528,8 +528,8 @@ describe('match function', () => {
   test('calls ok function for Ok result', () => {
     const result = ok('success');
     const matched = match(result, {
-      ok: value => `Got: ${value}`,
-      err: error => `Error: ${error}`,
+      ok: value => `Got: ${String(value)}`,
+      err: error => `Error: ${String(error)}`,
     });
 
     expect(matched).toBe('Got: success');
@@ -538,8 +538,8 @@ describe('match function', () => {
   test('calls err function for Err result', () => {
     const result = err('failure');
     const matched = match(result, {
-      ok: value => `Got: ${value}`,
-      err: error => `Error: ${error}`,
+      ok: value => `Got: ${String(value)}`,
+      err: error => `Error: ${String(error)}`,
     });
 
     expect(matched).toBe('Error: failure');

@@ -4,6 +4,7 @@ import type { Config, GeneratorConfig } from '../config.js';
 import type { CommandOptions } from '../types.js';
 import type { PluginManager } from '../../core/plugin/index.js';
 import type { MonorepoConfig } from '../../core/package-resolver.js';
+import { formatError } from '../../core/utils/error-utils.js';
 
 /**
  * Service for creating and configuring FluentGen instances with various options
@@ -170,14 +171,13 @@ export class GeneratorService {
     if (config.generator?.naming?.factoryTransform) {
       try {
         const transformStr = config.generator.naming.factoryTransform;
+        // oxlint-disable-next-line typescript-eslint/no-implied-eval -- Intentionally executing user-provided transform function from config file
         const namingStrategy = new Function('typeName', `return (${transformStr})(typeName)`) as (
           typeName: string,
         ) => string;
         fluentGenOptions.namingStrategy = namingStrategy;
       } catch (error) {
-        console.warn(
-          `Warning: Invalid factoryTransform function, ignoring: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        console.warn(`Warning: Invalid factoryTransform function, ignoring: ${formatError(error)}`);
       }
     }
 
