@@ -96,7 +96,7 @@
     "fast-glob": "3.3.3",
     "glob": "11.0.3",
     "inquirer": "12.10.0",
-    "minimatch": "10.0.3",
+    "minimatch": "10.1.1",
     "ora": "9.0.0",
     "ts-morph": "27.0.2",
     "tsx": "^4.20.6",
