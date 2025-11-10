@@ -139,7 +139,7 @@ export class InteractiveService {
           : [];
         return filtered.length > 0 || 'Please select at least one interface.';
       },
-      filter: input => {
+      filter: (input: unknown) => {
         if (Array.isArray(input) && input.includes('__SELECT_ALL__')) {
           return interfaces;
         }
