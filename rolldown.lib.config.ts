@@ -42,8 +42,10 @@ const jsConfig = defineConfig({
   resolve: {
     extensions: ['.ts', '.js', '.json'],
   },
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
+  transform: {
+    define: {
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
+    },
   },
 });
 
