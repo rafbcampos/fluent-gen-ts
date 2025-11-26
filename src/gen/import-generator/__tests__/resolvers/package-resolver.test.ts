@@ -173,6 +173,22 @@ describe('PackageResolver', () => {
   });
 
   describe('generateExternalTypeImports', () => {
+    test('generates correct import statements for regular packages', () => {
+      const externalTypes = new Map([
+        ['FC', '/node_modules/react/index.d.ts'],
+        ['useState', '/node_modules/react/hooks.d.ts'],
+      ]);
+
+      const result = resolver.generateExternalTypeImports(externalTypes);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should import from "react", not "react/index.d.ts" or "react/hooks.d.ts"
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]).toBe('import type { FC, useState } from "react";');
+      }
+    });
+
     test('groups types by module correctly', () => {
       const externalTypes = new Map([
         ['User', '/node_modules/react/index.d.ts'],
@@ -206,6 +222,49 @@ describe('PackageResolver', () => {
         expect(result.value.length).toBeGreaterThan(0);
         expect(result.value.join('\n')).toContain('User');
         expect(result.value.join('\n')).toContain('Observable');
+      }
+    });
+
+    test('handles pathological input without hanging (ReDoS prevention)', () => {
+      const startTime = Date.now();
+      // This input would cause catastrophic backtracking with the old regex
+      const pathologicalInput = '.pnpm/' + 'a'.repeat(10000);
+
+      const result = resolver.generateExternalTypeImports(new Map([['Type', pathologicalInput]]));
+
+      const elapsed = Date.now() - startTime;
+      // Should complete in well under 100ms with string-based parsing
+      expect(elapsed).toBeLessThan(100);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // Should not match as it's not a valid pnpm path
+        expect(result.value).toHaveLength(0);
+      }
+    });
+
+    test('handles pnpm path with peer deps suffix', () => {
+      const externalTypes = new Map([
+        ['Component', '/.pnpm/react@18.2.0_typescript@5.0.0/node_modules/react/jsx-runtime.d.ts'],
+      ]);
+
+      const result = resolver.generateExternalTypeImports(externalTypes);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value[0]).toContain('from "react"');
+      }
+    });
+
+    test('handles scoped package in pnpm structure', () => {
+      const externalTypes = new Map([
+        ['Config', '/.pnpm/@types+node@20.0.0/node_modules/@types/node/index.d.ts'],
+      ]);
+
+      const result = resolver.generateExternalTypeImports(externalTypes);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toContain('import type { Config } from "@types/node";');
       }
     });
 

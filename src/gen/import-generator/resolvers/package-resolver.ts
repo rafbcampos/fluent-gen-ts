@@ -203,9 +203,15 @@ export class PackageResolver {
    */
   private extractModuleNameFromPath(sourceFile: string): string | null {
     // Handle pnpm structure: /.pnpm/package@version/node_modules/package-name
-    const pnpmMatch = sourceFile.match(/\.pnpm\/([^@]+@[^/]+)\/node_modules\/([^/]+(?:\/[^/]+)?)/);
-    if (pnpmMatch?.[2]) {
-      return pnpmMatch[2];
+    const pnpmIndex = sourceFile.indexOf('.pnpm/');
+    if (pnpmIndex !== -1) {
+      const afterPnpm = sourceFile.substring(pnpmIndex + 6); // 6 = '.pnpm/'.length
+      const nodeModulesIndex = afterPnpm.indexOf('/node_modules/');
+
+      if (nodeModulesIndex !== -1) {
+        const afterNodeModules = afterPnpm.substring(nodeModulesIndex + 14); // 14 = '/node_modules/'.length
+        return this.extractPackageNameFromSegment(afterNodeModules);
+      }
     }
 
     // Handle regular npm structure: use lastIndexOf for better performance
@@ -215,8 +221,42 @@ export class PackageResolver {
     }
 
     const afterNodeModules = sourceFile.substring(nodeModulesIndex + 13); // 13 = 'node_modules/'.length
-    const match = afterNodeModules.match(/^([^/]+(?:\/[^/]+)?)/);
-    return match?.[1] ?? null;
+    return this.extractPackageNameFromSegment(afterNodeModules);
+  }
+
+  /**
+   * Extracts package name from the segment after node_modules/.
+   * Handles both regular packages (lodash) and scoped packages (@types/node).
+   */
+  private extractPackageNameFromSegment(segment: string): string | null {
+    if (!segment) {
+      return null;
+    }
+
+    // Handle scoped packages (@scope/package)
+    if (segment.startsWith('@')) {
+      const firstSlash = segment.indexOf('/');
+      if (firstSlash === -1) {
+        return null; // Invalid scoped package
+      }
+
+      const secondSlash = segment.indexOf('/', firstSlash + 1);
+      if (secondSlash === -1) {
+        // Package name is the rest of the segment (no subpath)
+        return segment;
+      }
+
+      // Return @scope/package
+      return segment.substring(0, secondSlash);
+    }
+
+    // Regular package
+    const slashIndex = segment.indexOf('/');
+    if (slashIndex === -1) {
+      return segment;
+    }
+
+    return segment.substring(0, slashIndex);
   }
 
   /**
