@@ -23,7 +23,7 @@ packages:
   - "packages/*"
   - "apps/*"
 
-// fluent-gen.config.js
+// fluentgen.config.js
 module.exports = {
   monorepo: {
     enabled: true,
@@ -49,7 +49,7 @@ Works seamlessly with yarn's hoisting behavior:
   "workspaces": ["packages/*", "apps/*"]
 }
 
-// fluent-gen.config.js
+// fluentgen.config.js
 module.exports = {
   monorepo: {
     enabled: true,
@@ -63,7 +63,7 @@ module.exports = {
 For complex setups or non-standard layouts:
 
 ```javascript
-// fluent-gen.config.js
+// fluentgen.config.js
 module.exports = {
   monorepo: {
     enabled: true,
@@ -772,7 +772,7 @@ const myDomainPlugin = createPlugin('my-domain', '1.0.0')
   )
   .build();
 
-// In fluent-gen.config.js
+// In fluentgen.config.js
 module.exports = {
   plugins: [myDomainPlugin],
   // Generated builders will use MyDomainContext type
@@ -1097,7 +1097,7 @@ conventions and custom transform functions.
 Choose from built-in naming conventions:
 
 ```javascript
-// fluent-gen.config.js
+// fluentgen.config.js
 export default {
   generator: {
     naming: {
@@ -1119,7 +1119,7 @@ For complete control over filename generation, provide a JavaScript transform
 function:
 
 ```javascript
-// fluent-gen.config.js
+// fluentgen.config.js
 export default {
   generator: {
     naming: {

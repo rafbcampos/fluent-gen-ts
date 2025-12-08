@@ -20,9 +20,8 @@ npx fluent-gen-ts generate ./src/types.ts User -o ./src/builders/
 npx fluent-gen-ts generate ./src/types.ts User \
   --output ./src/builders/ \
   --tsconfig ./tsconfig.build.json \
-  --use-defaults false \
-  --add-comments false \
-  --max-depth 15
+  --defaults \
+  --no-comments
 ```
 
 ### Batch Generation
@@ -37,8 +36,8 @@ npx fluent-gen-ts batch --config custom.config.js
 # Dry run (preview only)
 npx fluent-gen-ts batch --dry-run
 
-# Verbose output
-npx fluent-gen-ts batch --verbose
+# Run in parallel
+npx fluent-gen-ts batch --parallel
 ```
 
 ### Interactive Setup
@@ -47,11 +46,8 @@ npx fluent-gen-ts batch --verbose
 # Create config interactively
 npx fluent-gen-ts init
 
-# Force overwrite existing config
-npx fluent-gen-ts init --force
-
-# Custom config path
-npx fluent-gen-ts init --config my.config.js
+# Overwrite existing config
+npx fluent-gen-ts init --overwrite
 ```
 
 ### Scan for Types
@@ -60,11 +56,14 @@ npx fluent-gen-ts init --config my.config.js
 # Scan files
 npx fluent-gen-ts scan "src/**/*.ts"
 
-# JSON output
-npx fluent-gen-ts scan "src/**/*.ts" --json
+# Ignore non-exported types
+npx fluent-gen-ts scan "src/**/*.ts" --ignore-private
 
-# Include non-exported types
-npx fluent-gen-ts scan "src/**/*.ts" --no-exports-only
+# Filter specific types
+npx fluent-gen-ts scan "src/**/*.ts" --types User,Product,Order
+
+# Interactive selection mode
+npx fluent-gen-ts scan "src/**/*.ts" --interactive
 ```
 
 ### Setup Common File
@@ -103,36 +102,43 @@ npx fluent-gen-ts setup-common --overwrite
 
 ```bash
 <file>                    # TypeScript file path (required)
-<typeName>                # Type name to generate (required)
+<type>                    # Type name to generate (required)
 -o, --output <path>       # Output file path
---tsconfig <path>         # Path to tsconfig.json
---use-defaults <boolean>  # Generate smart defaults (default: true)
---add-comments <boolean>  # Add JSDoc comments (default: true)
---max-depth <n>           # Max recursion depth (default: 10)
+-c, --config <path>       # Path to configuration file
+-t, --tsconfig <path>     # Path to tsconfig.json
+-p, --plugins <paths...>  # Path(s) to plugin files
+-d, --defaults            # Use default values for optional properties
+--dry-run                 # Preview without writing files
+--no-comments             # Don't include JSDoc comments
 ```
 
 ### batch Options
 
 ```bash
--c, --config <path>      # Config file path (default: fluentgen.config.js)
---dry-run                # Preview without generating
---verbose                # Show detailed output
+-c, --config <path>       # Config file path (default: fluentgen.config.js)
+-p, --plugins <paths...>  # Path(s) to plugin files
+-d, --dry-run             # Dry run without writing files
+--parallel                # Generate builders in parallel
 ```
 
 ### init Options
 
 ```bash
---config <path>          # Config file path (default: fluentgen.config.js)
---force                  # Overwrite existing config
+--overwrite              # Overwrite existing configuration
 ```
 
 ### scan Options
 
 ```bash
-<pattern>                # Glob pattern (required)
---json                   # Output as JSON
---exports-only          # Only exported types (default: true)
---no-exports-only       # Include non-exported
+<pattern>                    # Glob pattern (required)
+-o, --output <pattern>       # Output file pattern (use {file} and {type} placeholders)
+-c, --config <path>          # Path to configuration file
+-p, --plugins <paths...>     # Path(s) to plugin files
+-e, --exclude <patterns...>  # Patterns to exclude from scanning
+-t, --types <types>          # Comma-separated list of type names to include
+-i, --interactive            # Interactive mode to select types
+--dry-run                    # Preview discovered types without generating
+--ignore-private             # Ignore non-exported interfaces
 ```
 
 ### setup-common Options
@@ -164,7 +170,7 @@ npm run generate
 
 ```bash
 # Scan to see available types
-npx fluent-gen-ts scan "src/**/*.ts" --json > types.json
+npx fluent-gen-ts scan "src/**/*.ts"
 
 # Generate builders for testing
 npx fluent-gen-ts batch --config test.config.js
@@ -201,7 +207,7 @@ files or command-line flags instead.
 
 | Code | Meaning           | Action                 |
 | ---- | ----------------- | ---------------------- |
-| `0`  | Success           | ✅ Continue            |
+| `0`  | Success           | Continue               |
 | `1`  | General error     | Check error message    |
 | `2`  | Invalid arguments | Check command syntax   |
 | `3`  | File not found    | Verify file path       |
@@ -213,8 +219,8 @@ files or command-line flags instead.
 ### See What Will Be Generated
 
 ```bash
-# Dry run with verbose output
-npx fluent-gen-ts batch --dry-run --verbose
+# Dry run to preview
+npx fluent-gen-ts batch --dry-run
 ```
 
 ### Check Available Types
@@ -223,8 +229,8 @@ npx fluent-gen-ts batch --dry-run --verbose
 # List all types in a file
 npx fluent-gen-ts scan "./src/types.ts"
 
-# JSON format for processing
-npx fluent-gen-ts scan "./src/types.ts" --json | jq '.'
+# List exported types only
+npx fluent-gen-ts scan "./src/types.ts" --ignore-private
 ```
 
 ### Verify Config
@@ -232,13 +238,6 @@ npx fluent-gen-ts scan "./src/types.ts" --json | jq '.'
 ```bash
 # Use Node to validate
 node -e "console.log(require('./fluentgen.config.js'))"
-```
-
-### Debug Generation Issues
-
-```bash
-# Enable verbose output
-npx fluent-gen-ts batch --verbose
 ```
 
 ## Integration Examples
@@ -325,15 +324,6 @@ npm install -D nodemon
 }
 ```
 
-### Quick Type Discovery
-
-```bash
-# Find all interfaces/types
-npx fluent-gen-ts scan "src/**/*.ts" --json | \
-  jq -r '.[] | .types[] | .name' | \
-  sort -u
-```
-
 ### Batch Generate Multiple Configs
 
 ```bash
@@ -412,7 +402,7 @@ When using `fluent-gen-ts init`:
 | Set up config interactively      | `fluent-gen-ts init`                      |
 | See what types exist             | `fluent-gen-ts scan "src/**/*.ts"`        |
 | Preview without generating       | `fluent-gen-ts batch --dry-run`           |
-| See detailed output              | `fluent-gen-ts batch --verbose`           |
+| Run generation in parallel       | `fluent-gen-ts batch --parallel`          |
 | Create common utilities          | `fluent-gen-ts setup-common`              |
 | Use custom config                | `fluent-gen-ts batch -c custom.config.js` |
 

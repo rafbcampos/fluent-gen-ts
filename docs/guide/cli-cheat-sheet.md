@@ -46,8 +46,8 @@ npm run generate
 # Preview changes (dry run)
 npx fluent-gen-ts batch --dry-run
 
-# Verbose output for debugging
-npx fluent-gen-ts batch --verbose
+# Parallel generation for speed
+npx fluent-gen-ts batch --parallel
 ```
 
 ## Command Quick Reference
@@ -66,26 +66,34 @@ npx fluent-gen-ts batch --verbose
 
 ```bash
 -o, --output <path>       # Where to save the builder
---tsconfig <path>         # Custom tsconfig path
---use-defaults <bool>     # Smart defaults (default: true)
---add-comments <bool>     # JSDoc comments (default: true)
---max-depth <n>           # Recursion limit (default: 10)
+-c, --config <path>       # Config file path
+-t, --tsconfig <path>     # Custom tsconfig path
+-p, --plugins <paths...>  # Plugin file paths
+-d, --defaults            # Enable smart defaults
+--dry-run                 # Preview without writing
+--no-comments             # Disable JSDoc comments
 ```
 
 ### For `batch` Command
 
 ```bash
 -c, --config <path>       # Config file (default: fluentgen.config.js)
---dry-run                 # Preview only, don't write files
---verbose                 # Show detailed output
+-p, --plugins <paths...>  # Plugin file paths
+-d, --dry-run             # Preview only, don't write files
+--parallel                # Run generation in parallel
 ```
 
 ### For `scan` Command
 
 ```bash
---json                    # Output as JSON
---exports-only           # Only exported types (default)
---no-exports-only        # Include private types
+-o, --output <pattern>    # Output pattern with {file}, {type}
+-c, --config <path>       # Config file path
+-p, --plugins <paths...>  # Plugin file paths
+-e, --exclude <patterns...> # Exclude patterns
+-t, --types <types>       # Comma-separated type names
+-i, --interactive         # Interactive selection mode
+--dry-run                 # Preview mode
+--ignore-private          # Ignore non-exported types
 ```
 
 ## Common Patterns
@@ -141,14 +149,14 @@ export interface User { ... }
 node -e "console.log(require('./fluentgen.config.js'))"
 
 # Recreate config
-npx fluent-gen-ts init --force
+npx fluent-gen-ts init --overwrite
 ```
 
 ### "Nothing generated"
 
 ```bash
 # Check what would be generated
-npx fluent-gen-ts batch --dry-run --verbose
+npx fluent-gen-ts batch --dry-run
 
 # Verify config targets
 cat fluentgen.config.js
@@ -200,10 +208,11 @@ fgen generate ./types.ts User
 ### Quick Type Discovery
 
 ```bash
-# List all type names
-npx fluent-gen-ts scan "src/**/*.ts" --json | \
-  jq -r '.[] | .types[] | .name' | \
-  sort -u
+# List all types in a directory
+npx fluent-gen-ts scan "src/**/*.ts"
+
+# Interactive selection
+npx fluent-gen-ts scan "src/**/*.ts" --interactive
 ```
 
 ### Parallel Generation (Monorepo)

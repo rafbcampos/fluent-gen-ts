@@ -109,7 +109,7 @@ This will guide you through:
 fluent-gen-ts provides intelligent dependency resolution for monorepo setups:
 
 ```javascript
-// fluent-gen.config.js
+// fluentgen.config.js
 module.exports = {
   monorepo: {
     enabled: true,
@@ -459,7 +459,7 @@ interface Config {
 | `setup-common`           | Create customizable common utilities   |
 
 See the
-[CLI documentation](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-commands)
+[CLI documentation](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-reference)
 for detailed options.
 
 ## ⚙️ Configuration
@@ -604,7 +604,7 @@ const config = appConfig()
   Your first builder in less than a minute
 - **[Core Concepts](https://rafbcampos.github.io/fluent-gen-ts/guide/core-concepts)** -
   Understanding the fundamentals
-- **[CLI Commands](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-commands)** -
+- **[CLI Reference](https://rafbcampos.github.io/fluent-gen-ts/guide/cli-reference)** -
   Complete CLI reference
 - **[Plugin System](https://rafbcampos.github.io/fluent-gen-ts/guide/plugins)** -
   Extending with plugins

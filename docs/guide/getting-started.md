@@ -5,7 +5,7 @@ This guide will help you get up and running with fluent-gen-ts in minutes.
 ## Prerequisites
 
 - Node.js 18 or higher
-- TypeScript 4.5 or higher
+- TypeScript 5.0 or higher
 - A TypeScript project with interfaces or types
 
 ## Installation
