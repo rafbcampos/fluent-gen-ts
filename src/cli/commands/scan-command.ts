@@ -5,14 +5,23 @@ import path from 'node:path';
 import { minimatch } from 'minimatch';
 import { isOk } from '../../core/result.js';
 import type { ScanOptions } from '../types.js';
-import { ConfigLoader } from '../config.js';
-import { PluginService } from '../services/plugin-service.js';
-import { GeneratorService } from '../services/generator-service.js';
-import { FileService } from '../services/file-service.js';
-import { InteractiveService } from '../services/interactive-service.js';
 import { TypeExtractor } from '../../type-info/index.js';
 import type { FluentGen } from '../../gen/index.js';
 import type { PluginManager } from '../../core/plugin/plugin-manager.js';
+import { createScanCommandServices, type ScanCommandServices } from '../shared/command-services.js';
+
+/**
+ * Error thrown when scan command execution fails.
+ */
+export class ScanCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'ScanCommandError';
+  }
+}
 
 /**
  * Command for scanning files and generating builders for TypeScript types
@@ -21,11 +30,11 @@ import type { PluginManager } from '../../core/plugin/plugin-manager.js';
  * and builder generation with support for interactive selection and various output options.
  */
 export class ScanCommand {
-  private configLoader = new ConfigLoader();
-  private pluginService = new PluginService();
-  private generatorService = new GeneratorService();
-  private fileService = new FileService();
-  private interactiveService = new InteractiveService();
+  private readonly services: ScanCommandServices;
+
+  constructor(services?: ScanCommandServices) {
+    this.services = services ?? createScanCommandServices();
+  }
 
   /**
    * Execute the scan command with the given pattern and options
@@ -46,6 +55,7 @@ export class ScanCommand {
    */
   async execute(pattern: string, options: ScanOptions = {}): Promise<void> {
     const spinner = ora(`Scanning for files matching ${chalk.cyan(pattern)}...`).start();
+    const { configLoader, pluginService, generatorService } = this.services;
 
     try {
       let files = await glob(pattern);
@@ -63,23 +73,23 @@ export class ScanCommand {
 
       spinner.succeed(chalk.green(`Found ${files.length} file(s)`));
 
-      const configResult = await this.configLoader.load(options.config);
+      const configResult = await configLoader.load(options.config);
       if (!isOk(configResult)) {
         spinner.fail(chalk.red('Failed to load configuration'));
-        throw new Error('Failed to load configuration');
+        throw new ScanCommandError('Failed to load configuration', configResult.error);
       }
 
       const config = configResult.value;
 
-      const allPluginPaths = this.pluginService.mergePluginPaths(options.plugins, config.plugins);
+      const allPluginPaths = pluginService.mergePluginPaths(options.plugins, config.plugins);
 
       let pluginManager: PluginManager | undefined = undefined;
       if (allPluginPaths.length > 0) {
         spinner.text = 'Loading plugins...';
-        pluginManager = await this.pluginService.loadPlugins(allPluginPaths);
+        pluginManager = await pluginService.loadPlugins(allPluginPaths);
       }
 
-      const generator = this.generatorService.createGenerator({
+      const generator = generatorService.createGenerator({
         config,
         ...(pluginManager && { pluginManager }),
       });
@@ -107,7 +117,10 @@ export class ScanCommand {
     } catch (error) {
       spinner.fail(chalk.red('Unexpected error'));
       console.error(error);
-      throw error;
+      if (error instanceof ScanCommandError) {
+        throw error;
+      }
+      throw new ScanCommandError('Unexpected error during scan', error);
     }
   }
 
@@ -117,12 +130,14 @@ export class ScanCommand {
     generatedCode: string,
     options: ScanOptions,
   ): Promise<string> {
+    const { fileService } = this.services;
+
     if (options.output) {
-      const outputPath = this.fileService.resolveOutputPath(options.output, {
+      const outputPath = fileService.resolveOutputPath(options.output, {
         file: path.basename(file, '.ts'),
         type: type.toLowerCase(),
       });
-      await this.fileService.writeOutput(outputPath, generatedCode);
+      await fileService.writeOutput(outputPath, generatedCode);
       return outputPath;
     } else {
       console.log(generatedCode);
@@ -164,7 +179,8 @@ export class ScanCommand {
     generator: FluentGen,
     options: ScanOptions,
   ): Promise<void> {
-    const selected = await this.interactiveService.selectTypes(allTypes);
+    const { interactiveService } = this.services;
+    const selected = await interactiveService.selectTypes(allTypes);
 
     for (const { file, type } of selected) {
       const genSpinner = ora(`Generating builder for ${chalk.cyan(type)}...`).start();

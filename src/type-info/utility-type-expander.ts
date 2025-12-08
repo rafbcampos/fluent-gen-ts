@@ -22,7 +22,15 @@ const UTILITY_TYPE_NAMES = [
   'Awaited',
 ] as const;
 
+type UtilityTypeName = (typeof UTILITY_TYPE_NAMES)[number];
+
+const UTILITY_TYPE_NAMES_SET: ReadonlySet<string> = new Set(UTILITY_TYPE_NAMES);
+
 const UTILITY_TYPE_PATTERNS = new Set(UTILITY_TYPE_NAMES.map(name => `${name}<`));
+
+function isUtilityTypeName(name: string): name is UtilityTypeName {
+  return UTILITY_TYPE_NAMES_SET.has(name);
+}
 
 export interface UtilityTypeExpanderOptions {
   readonly maxDepth?: number;
@@ -175,7 +183,7 @@ export class UtilityTypeExpander {
     if (!genericParamMatches) return;
 
     for (const paramName of genericParamMatches) {
-      if (UTILITY_TYPE_NAMES.includes(paramName as any)) {
+      if (isUtilityTypeName(paramName)) {
         continue;
       }
 

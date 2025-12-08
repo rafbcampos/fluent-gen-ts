@@ -2,23 +2,38 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { isOk } from '../../core/result.js';
 import type { BatchOptions } from '../types.js';
-import { ConfigLoader, type Config, type Target } from '../config.js';
-import { PluginService } from '../services/plugin-service.js';
-import { GeneratorService } from '../services/generator-service.js';
-import { TaskRunner } from '../services/task-runner.js';
+import type { Config, Target } from '../config.js';
 import type { PluginManager } from '../../core/plugin/index.js';
+import {
+  createBatchCommandServices,
+  type BatchCommandServices,
+} from '../shared/command-services.js';
 
 type ValidatedConfig = Config & { targets: Target[] };
+
+/**
+ * Error thrown when batch command execution fails.
+ */
+export class BatchCommandError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'BatchCommandError';
+  }
+}
 
 /**
  * Handles batch generation of builders from configuration files.
  * Orchestrates configuration loading, plugin management, and task execution.
  */
 export class BatchCommand {
-  private configLoader = new ConfigLoader();
-  private pluginService = new PluginService();
-  private generatorService = new GeneratorService();
-  private taskRunner = new TaskRunner();
+  private readonly services: BatchCommandServices;
+
+  constructor(services?: BatchCommandServices) {
+    this.services = services ?? createBatchCommandServices();
+  }
 
   /**
    * Executes the batch generation command.
@@ -36,16 +51,18 @@ export class BatchCommand {
   }
 
   private async loadAndValidateConfig(options: BatchOptions): Promise<ValidatedConfig> {
+    const { configLoader } = this.services;
+
     this.printSectionHeader('Configuration Phase');
     const configPath = options.config || 'default search path';
     console.log(chalk.gray(`Config: ${configPath}`));
     console.log();
 
-    const configResult = await this.configLoader.load(options.config);
+    const configResult = await configLoader.load(options.config);
     if (!isOk(configResult)) {
       console.error(chalk.red('✖ Failed to load configuration'));
       console.error(configResult.error);
-      process.exit(1);
+      throw new BatchCommandError('Failed to load configuration', configResult.error);
     }
 
     const config = configResult.value;
@@ -53,7 +70,7 @@ export class BatchCommand {
 
     if (!config.targets || config.targets.length === 0) {
       console.error(chalk.red('✖ No targets found in configuration'));
-      process.exit(1);
+      throw new BatchCommandError('No targets found in configuration');
     }
 
     return config as ValidatedConfig;
@@ -63,14 +80,15 @@ export class BatchCommand {
     options: BatchOptions,
     config: ValidatedConfig,
   ): Promise<PluginManager | undefined> {
-    const allPluginPaths = this.pluginService.mergePluginPaths(options.plugins, config.plugins);
+    const { pluginService } = this.services;
+    const allPluginPaths = pluginService.mergePluginPaths(options.plugins, config.plugins);
 
     if (allPluginPaths.length === 0) {
       return undefined;
     }
 
     this.printSectionHeader('Plugin Phase');
-    const pluginManager = await this.pluginService.loadPlugins(allPluginPaths);
+    const pluginManager = await pluginService.loadPlugins(allPluginPaths);
     console.log(chalk.green(`✔ Loaded ${allPluginPaths.length} plugin(s)`));
 
     return pluginManager;
@@ -81,15 +99,17 @@ export class BatchCommand {
     config: ValidatedConfig,
     pluginManager: PluginManager | undefined,
   ): Promise<{ successCount: number; failCount: number; errors: string[] }> {
+    const { generatorService, taskRunner } = this.services;
+
     this.printSectionHeader('Generation Phase');
     console.log(chalk.gray(`Processing ${config.targets.length} target(s)...\n`));
 
-    const generator = this.generatorService.createGenerator({
+    const generator = generatorService.createGenerator({
       config,
       ...(pluginManager && { pluginManager }),
     });
     const spinner = ora();
-    const tasks = this.taskRunner.createTasksFromTargets(config.targets);
+    const tasks = taskRunner.createTasksFromTargets(config.targets);
 
     // Determine batching strategy: batch together if using common file
     // If customCommonFilePath is NOT set, we generate common.ts (default behavior)
@@ -97,7 +117,7 @@ export class BatchCommand {
     // In both cases, we can batch tasks together since they share a common file
     const shouldBatchTogether = true;
 
-    const result = await this.taskRunner.runTasks(tasks, generator, {
+    const result = await taskRunner.runTasks(tasks, generator, {
       ...(options.parallel !== undefined && { parallel: options.parallel }),
       ...(options.dryRun !== undefined && { dryRun: options.dryRun }),
       generateCommonFile: shouldBatchTogether,
@@ -138,6 +158,9 @@ export class BatchCommand {
   private handleError(error: unknown): never {
     console.error(chalk.red('✖ Unexpected error'));
     console.error(error);
-    process.exit(1);
+    if (error instanceof BatchCommandError) {
+      throw error;
+    }
+    throw new BatchCommandError('Unexpected error during batch execution', error);
   }
 }

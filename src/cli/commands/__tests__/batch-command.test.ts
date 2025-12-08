@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { BatchCommand } from '../batch-command.js';
+import { BatchCommand, BatchCommandError } from '../batch-command.js';
 import type { BatchOptions } from '../../types.js';
 
 describe('BatchCommand', () => {
@@ -14,8 +14,6 @@ describe('BatchCommand', () => {
   let testDir: string;
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  let processExitSpy: any;
 
   beforeEach(() => {
     command = new BatchCommand();
@@ -25,9 +23,6 @@ describe('BatchCommand', () => {
     // Spy on console methods to suppress output during tests
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    processExitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
-      throw new Error(`process.exit(${code})`);
-    }) as never);
   });
 
   afterEach(() => {
@@ -36,7 +31,6 @@ describe('BatchCommand', () => {
     }
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    processExitSpy.mockRestore();
   });
 
   describe('execute with valid configuration', () => {
@@ -250,19 +244,19 @@ describe('BatchCommand', () => {
   });
 
   describe('error handling', () => {
-    it('should exit with error when config file not found', async () => {
+    it('should throw BatchCommandError when config file not found', async () => {
       const options: BatchOptions = {
         config: join(testDir, 'non-existent-config.json'),
       };
 
-      await expect(command.execute(options)).rejects.toThrow('process.exit(1)');
+      await expect(command.execute(options)).rejects.toThrow(BatchCommandError);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load configuration'),
       );
     });
 
-    it('should exit with error when config has no targets', async () => {
+    it('should throw BatchCommandError when config has no targets', async () => {
       const configFile = join(testDir, 'empty-config.json');
       writeFileSync(
         configFile,
@@ -277,14 +271,14 @@ describe('BatchCommand', () => {
         config: configFile,
       };
 
-      await expect(command.execute(options)).rejects.toThrow('process.exit(1)');
+      await expect(command.execute(options)).rejects.toThrow(BatchCommandError);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('No targets found in configuration'),
       );
     });
 
-    it('should exit with error when config has empty targets array', async () => {
+    it('should throw BatchCommandError when config has empty targets array', async () => {
       const configFile = join(testDir, 'empty-targets-config.json');
       writeFileSync(
         configFile,
@@ -300,7 +294,7 @@ describe('BatchCommand', () => {
         config: configFile,
       };
 
-      await expect(command.execute(options)).rejects.toThrow('process.exit(1)');
+      await expect(command.execute(options)).rejects.toThrow(BatchCommandError);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('No targets found in configuration'),
@@ -315,7 +309,7 @@ describe('BatchCommand', () => {
         config: configFile,
       };
 
-      await expect(command.execute(options)).rejects.toThrow('process.exit(1)');
+      await expect(command.execute(options)).rejects.toThrow(BatchCommandError);
 
       expect(consoleErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining('Failed to load configuration'),
@@ -396,8 +390,8 @@ describe('BatchCommand', () => {
       // This tests the "default search path" behavior
       const options: BatchOptions = {};
 
-      // Should attempt to load config and exit due to no config found
-      await expect(command.execute(options)).rejects.toThrow('process.exit(1)');
+      // Should attempt to load config and throw due to no config found
+      await expect(command.execute(options)).rejects.toThrow(BatchCommandError);
 
       expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining('default search path'));
     });

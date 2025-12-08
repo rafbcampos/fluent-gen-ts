@@ -229,7 +229,7 @@ export class PropertyResolver {
     const params = callSignature.getParameters();
     return params.map(param => {
       const paramName = param.getName();
-      const paramDeclaration = (param as any).valueDeclaration;
+      const paramDeclaration = param.getValueDeclaration();
 
       if (!paramDeclaration) {
         const isOptional = this.isOptionalParameter(param);

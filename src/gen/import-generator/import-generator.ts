@@ -11,7 +11,11 @@ import { ok, err } from '../../core/result.js';
 import { formatError } from '../../core/utils/error-utils.js';
 
 function hasDispose(obj: unknown): obj is { dispose(): void } {
-  return typeof obj === 'object' && obj !== null && typeof (obj as any).dispose === 'function';
+  if (typeof obj !== 'object' || obj === null) {
+    return false;
+  }
+  const record = obj as Record<string, unknown>;
+  return 'dispose' in record && typeof record.dispose === 'function';
 }
 
 function isValidImportPath(value: unknown): value is string {

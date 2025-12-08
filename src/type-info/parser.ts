@@ -312,21 +312,19 @@ export class TypeScriptParser {
   }
 
   private isSourceFile(value: unknown): value is SourceFile {
-    return (
-      value != null &&
-      typeof value === 'object' &&
-      'getFilePath' in value &&
-      typeof (value as any).getFilePath === 'function'
-    );
+    if (value == null || typeof value !== 'object') {
+      return false;
+    }
+    const obj = value as Record<string, unknown>;
+    return 'getFilePath' in obj && typeof obj.getFilePath === 'function';
   }
 
   private isType(value: unknown): value is Type {
-    return (
-      value != null &&
-      typeof value === 'object' &&
-      'getSymbol' in value &&
-      typeof (value as any).getSymbol === 'function'
-    );
+    if (value == null || typeof value !== 'object') {
+      return false;
+    }
+    const obj = value as Record<string, unknown>;
+    return 'getSymbol' in obj && typeof obj.getSymbol === 'function';
   }
 
   private async findTypeInSourceFile(

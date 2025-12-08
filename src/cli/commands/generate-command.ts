@@ -2,20 +2,20 @@ import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 import { isOk } from '../../core/result.js';
 import type { GenerateOptions } from '../types.js';
-import { ConfigLoader } from '../config.js';
-import { PluginService } from '../services/plugin-service.js';
-import { GeneratorService } from '../services/generator-service.js';
 import type { PluginManager } from '../../core/plugin/index.js';
 import { CommandUtils } from '../shared/command-utils.js';
+import { createCoreCommandServices, type CoreCommandServices } from '../shared/command-services.js';
 
 /**
  * Command for generating fluent builder code for a specific TypeScript type.
  * Handles configuration loading, plugin initialization, and code generation.
  */
 export class GenerateCommand {
-  private configLoader = new ConfigLoader();
-  private pluginService = new PluginService();
-  private generatorService = new GeneratorService();
+  private readonly services: CoreCommandServices;
+
+  constructor(services?: CoreCommandServices) {
+    this.services = services ?? createCoreCommandServices();
+  }
 
   private handleError(spinner: Ora, message: string, error: unknown): never {
     spinner.fail(chalk.red(message));
@@ -41,21 +41,22 @@ export class GenerateCommand {
    */
   async execute(file: string, typeName: string, options: GenerateOptions = {}): Promise<void> {
     const spinner = ora('Loading configuration...').start();
+    const { configLoader, pluginService, generatorService } = this.services;
 
     try {
-      const configResult = await this.configLoader.load(options.config);
+      const configResult = await configLoader.load(options.config);
       if (!isOk(configResult)) {
         this.handleError(spinner, 'Failed to load configuration', configResult.error);
       }
 
       const config = configResult.value;
 
-      const allPluginPaths = this.pluginService.mergePluginPaths(options.plugins, config.plugins);
+      const allPluginPaths = pluginService.mergePluginPaths(options.plugins, config.plugins);
 
       let pluginManager: PluginManager | undefined = undefined;
       if (allPluginPaths.length > 0) {
         spinner.text = 'Loading plugins...';
-        pluginManager = await this.pluginService.loadPlugins(allPluginPaths);
+        pluginManager = await pluginService.loadPlugins(allPluginPaths);
       }
 
       spinner.text = 'Initializing generator...';
@@ -71,13 +72,13 @@ export class GenerateCommand {
         commandOptions.addComments = options.comments;
       }
 
-      const genOptions = this.generatorService.mergeGeneratorOptions({
+      const genOptions = generatorService.mergeGeneratorOptions({
         config,
         commandOptions,
         ...(options.output && { outputPath: options.output }),
       });
 
-      const generator = this.generatorService.createGenerator({
+      const generator = generatorService.createGenerator({
         config,
         ...(pluginManager && { pluginManager }),
         overrides: genOptions,
