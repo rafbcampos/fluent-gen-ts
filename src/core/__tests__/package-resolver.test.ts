@@ -5,9 +5,11 @@ import fs from 'node:fs';
 
 // Mock fs and glob modules
 vi.mock('node:fs');
-vi.mock('glob', () => ({
-  glob: vi.fn(),
-}));
+vi.mock('glob', () => {
+  return {
+    glob: vi.fn(),
+  };
+});
 
 describe('PackageResolver', () => {
   let resolver: PackageResolver;

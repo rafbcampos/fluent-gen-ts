@@ -4,14 +4,15 @@ import { BuiltInResolver } from '../built-in-resolver.js';
 import { ok, err } from '../../../../core/result.js';
 import { TypeKind } from '../../../../core/types.js';
 import { GenericContext } from '../../../generic-context.js';
+import type { TypeResolverFunction } from '../../core/resolver-context.js';
 
 describe('BuiltInResolver', () => {
   let resolver: BuiltInResolver;
   let project: Project;
-  let mockResolveType: ReturnType<typeof vi.fn>;
+  let mockResolveType: TypeResolverFunction & ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    mockResolveType = vi.fn();
+    mockResolveType = vi.fn() as TypeResolverFunction & ReturnType<typeof vi.fn>;
     resolver = new BuiltInResolver(mockResolveType);
     project = new Project();
   });
@@ -148,7 +149,7 @@ describe('BuiltInResolver', () => {
       const type = variable.getType();
 
       // Mock the resolveType function to return an error
-      const mockError = err('Type resolution failed');
+      const mockError = err(new Error('Type resolution failed'));
       mockResolveType.mockResolvedValue(mockError);
 
       const result = await resolver.resolveBuiltInType({

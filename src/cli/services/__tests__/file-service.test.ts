@@ -10,15 +10,19 @@ import { FileService } from '../file-service.js';
 import type { Config } from '../../config.js';
 
 // Mock file system operations
-vi.mock('node:fs/promises', () => ({
-  writeFile: vi.fn(),
-  mkdir: vi.fn(),
-}));
+vi.mock('node:fs/promises', () => {
+  return {
+    writeFile: vi.fn(),
+    mkdir: vi.fn(),
+  };
+});
 
-vi.mock('node:fs', () => ({
-  existsSync: vi.fn(),
-  writeFileSync: vi.fn(),
-}));
+vi.mock('node:fs', () => {
+  return {
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+  };
+});
 
 describe('FileService', () => {
   let fileService: FileService;

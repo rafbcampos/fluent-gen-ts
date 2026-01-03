@@ -6,12 +6,16 @@ import { isErr } from '../../../../core/result.js';
 import { ImportResolver } from '../../../../core/import-resolver.js';
 
 // Mock the ImportResolver
-vi.mock('../../../../core/import-resolver.js', () => ({
-  ImportResolver: vi.fn(() => ({
-    resolve: vi.fn(),
-    formatImportPath: vi.fn(),
-  })),
-}));
+vi.mock('../../../../core/import-resolver.js', () => {
+  return {
+    ImportResolver: vi.fn(function () {
+      return {
+        resolve: vi.fn(),
+        formatImportPath: vi.fn(),
+      };
+    }),
+  };
+});
 
 describe('PackageResolver', () => {
   let resolver: PackageResolver;
@@ -25,7 +29,9 @@ describe('PackageResolver', () => {
       resolve: vi.fn(),
       formatImportPath: vi.fn(),
     };
-    (ImportResolver as any).mockImplementation(() => mockImportResolver);
+    (ImportResolver as any).mockImplementation(function () {
+      return mockImportResolver;
+    });
     resolver = new PackageResolver();
   });
 

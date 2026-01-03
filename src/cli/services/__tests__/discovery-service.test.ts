@@ -9,19 +9,27 @@ import { isOk } from '../../../core/result.js';
 import type { MockedFunction } from 'vitest';
 
 // Mock dependencies
-vi.mock('glob', () => ({
-  glob: vi.fn(),
-}));
+vi.mock('glob', () => {
+  return {
+    glob: vi.fn(),
+  };
+});
 
-vi.mock('../../../type-info/index.js', () => ({
-  TypeExtractor: vi.fn().mockImplementation(() => ({
-    scanFile: vi.fn(),
-  })),
-}));
+vi.mock('../../../type-info/index.js', () => {
+  return {
+    TypeExtractor: vi.fn().mockImplementation(function () {
+      return {
+        scanFile: vi.fn(),
+      };
+    }),
+  };
+});
 
-vi.mock('../../../core/result.js', () => ({
-  isOk: vi.fn(),
-}));
+vi.mock('../../../core/result.js', () => {
+  return {
+    isOk: vi.fn(),
+  };
+});
 
 describe('DiscoveryService', () => {
   let discoveryService: DiscoveryService;

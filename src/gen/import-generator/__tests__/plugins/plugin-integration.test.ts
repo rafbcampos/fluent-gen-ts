@@ -9,9 +9,13 @@ import { ImportParser } from '../../../../core/plugin/import-transformer.js';
 import type { StructuredImport } from '../../../../core/plugin/plugin-types.js';
 
 // Mock deduplication
-vi.mock('../../utils/deduplication.js', () => ({
-  deduplicateImports: vi.fn((imports: string[]) => [...new Set(imports)]),
-}));
+vi.mock('../../utils/deduplication.js', () => {
+  return {
+    deduplicateImports: vi.fn(function (imports: string[]) {
+      return [...new Set(imports)];
+    }),
+  };
+});
 
 // Helper function to parse import strings to structured imports for tests
 function parseImportsForTest(importStrings: string[]): StructuredImport[] {

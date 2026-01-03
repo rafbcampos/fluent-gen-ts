@@ -11,20 +11,36 @@ import { tmpdir } from 'node:os';
 import { SetupCommonCommand } from '../setup-common-command.js';
 
 // Mock chalk to avoid colorized output in tests
-vi.mock('chalk', () => ({
-  default: {
-    red: (str: string) => str,
-    green: (str: string) => str,
-    cyan: (str: string) => str,
-    gray: (str: string) => str,
-    blue: (str: string) => str,
-  },
-}));
+vi.mock('chalk', () => {
+  return {
+    default: {
+      red: function (str: string) {
+        return str;
+      },
+      green: function (str: string) {
+        return str;
+      },
+      cyan: function (str: string) {
+        return str;
+      },
+      gray: function (str: string) {
+        return str;
+      },
+      blue: function (str: string) {
+        return str;
+      },
+    },
+  };
+});
 
 // Mock template generator
-vi.mock('../../../gen/template-generator.js', () => ({
-  getCommonFileTemplate: () => 'export const mockTemplate = "test";',
-}));
+vi.mock('../../../gen/template-generator.js', () => {
+  return {
+    getCommonFileTemplate: function () {
+      return 'export const mockTemplate = "test";';
+    },
+  };
+});
 
 describe('SetupCommonCommand', () => {
   let command: SetupCommonCommand;

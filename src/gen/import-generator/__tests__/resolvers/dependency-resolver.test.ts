@@ -5,33 +5,43 @@ import type { ResolvedType } from '../../../../core/types.js';
 import { Project } from 'ts-morph';
 
 // Mock ts-morph
-vi.mock('ts-morph', () => ({
-  Project: vi.fn(),
-}));
+vi.mock('ts-morph', () => {
+  return {
+    Project: vi.fn(),
+  };
+});
 
 // Mock path utils functions
-vi.mock('../../utils/path-utils.js', () => ({
-  looksLikePackagePath: vi.fn((path: string) => path.includes('node_modules')),
-  resolveRelativeImportPath: vi.fn((_sourcePath: string, importPath: string) => {
-    if (importPath === './types') return '/project/src/types.ts';
-    if (importPath === '../utils') return '/project/utils.ts';
-    if (importPath === '../shared') return '/project/shared.ts';
-    if (importPath === './b') return '/project/src/b.ts';
-    if (importPath === './a') return '/project/src/a.ts';
-    if (importPath === './c') return '/project/src/c.ts';
-    if (importPath === './d') return '/project/src/d.ts';
-    if (importPath === './e') return '/project/src/e.ts';
-    if (importPath === './f') return '/project/src/f.ts';
-    // Clean up the path to remove ./ prefix
-    const cleanPath = importPath.replace(/^\.\//, '');
-    return `/project/src/${cleanPath}.ts`;
-  }),
-}));
+vi.mock('../../utils/path-utils.js', () => {
+  return {
+    looksLikePackagePath: vi.fn(function (path: string) {
+      return path.includes('node_modules');
+    }),
+    resolveRelativeImportPath: vi.fn(function (_sourcePath: string, importPath: string) {
+      if (importPath === './types') return '/project/src/types.ts';
+      if (importPath === '../utils') return '/project/utils.ts';
+      if (importPath === '../shared') return '/project/shared.ts';
+      if (importPath === './b') return '/project/src/b.ts';
+      if (importPath === './a') return '/project/src/a.ts';
+      if (importPath === './c') return '/project/src/c.ts';
+      if (importPath === './d') return '/project/src/d.ts';
+      if (importPath === './e') return '/project/src/e.ts';
+      if (importPath === './f') return '/project/src/f.ts';
+      // Clean up the path to remove ./ prefix
+      const cleanPath = importPath.replace(/^\.\//, '');
+      return `/project/src/${cleanPath}.ts`;
+    }),
+  };
+});
 
 // Mock validation
-vi.mock('../../utils/validation.js', () => ({
-  validateTypeName: vi.fn((name: string) => /^[A-Z]/.test(name)),
-}));
+vi.mock('../../utils/validation.js', () => {
+  return {
+    validateTypeName: vi.fn(function (name: string) {
+      return /^[A-Z]/.test(name);
+    }),
+  };
+});
 
 describe('DependencyResolver', () => {
   let resolver: DependencyResolver;
@@ -52,7 +62,9 @@ describe('DependencyResolver', () => {
       ]),
     };
 
-    (Project as any).mockImplementation(() => mockProject);
+    (Project as any).mockImplementation(function () {
+      return mockProject;
+    });
     resolver = new DependencyResolver();
   });
 
@@ -301,7 +313,7 @@ describe('DependencyResolver', () => {
     });
 
     test('handles project creation errors gracefully', () => {
-      (Project as any).mockImplementation(() => {
+      (Project as any).mockImplementation(function () {
         throw new Error('Project creation failed');
       });
 

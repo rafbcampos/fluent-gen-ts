@@ -14,35 +14,55 @@ import type {
 } from '../../types.js';
 
 // Mock all command classes
-vi.mock('../generate-command.js', () => ({
-  GenerateCommand: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('../generate-command.js', () => {
+  return {
+    GenerateCommand: vi.fn().mockImplementation(function () {
+      return {
+        execute: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
 
-vi.mock('../batch-command.js', () => ({
-  BatchCommand: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('../batch-command.js', () => {
+  return {
+    BatchCommand: vi.fn().mockImplementation(function () {
+      return {
+        execute: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
 
-vi.mock('../scan-command.js', () => ({
-  ScanCommand: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('../scan-command.js', () => {
+  return {
+    ScanCommand: vi.fn().mockImplementation(function () {
+      return {
+        execute: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
 
-vi.mock('../init-command.js', () => ({
-  InitCommand: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('../init-command.js', () => {
+  return {
+    InitCommand: vi.fn().mockImplementation(function () {
+      return {
+        execute: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
 
-vi.mock('../setup-common-command.js', () => ({
-  SetupCommonCommand: vi.fn().mockImplementation(() => ({
-    execute: vi.fn().mockResolvedValue(undefined),
-  })),
-}));
+vi.mock('../setup-common-command.js', () => {
+  return {
+    SetupCommonCommand: vi.fn().mockImplementation(function () {
+      return {
+        execute: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
 
 describe('Commands', () => {
   let commands: Commands;

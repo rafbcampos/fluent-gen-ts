@@ -6,43 +6,77 @@ import { TypeKind } from '../../../core/types.js';
 import { isErr } from '../../../core/result.js';
 
 // Mock all the dependencies
-vi.mock('../generators/nodejs-imports.js', () => ({
-  NodeJSImportsGenerator: vi.fn(() => ({
-    generateNodeJSImports: vi.fn(() => []),
-  })),
-}));
+vi.mock('../generators/nodejs-imports.js', () => {
+  return {
+    NodeJSImportsGenerator: vi.fn(function () {
+      return {
+        generateNodeJSImports: vi.fn(function () {
+          return [];
+        }),
+      };
+    }),
+  };
+});
 
-vi.mock('../generators/common-imports.js', () => ({
-  CommonImportsGenerator: vi.fn(() => ({
-    generateCommonImports: vi.fn(() => ({ ok: true, value: '' })),
-  })),
-}));
+vi.mock('../generators/common-imports.js', () => {
+  return {
+    CommonImportsGenerator: vi.fn(function () {
+      return {
+        generateCommonImports: vi.fn(function () {
+          return { ok: true, value: '' };
+        }),
+      };
+    }),
+  };
+});
 
-vi.mock('../generators/type-imports.js', () => ({
-  TypeImportsGenerator: vi.fn(() => ({
-    generateTypeImports: vi.fn(() => ({ ok: true, value: '' })),
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('../generators/type-imports.js', () => {
+  return {
+    TypeImportsGenerator: vi.fn(function () {
+      return {
+        generateTypeImports: vi.fn(function () {
+          return { ok: true, value: '' };
+        }),
+        dispose: vi.fn(),
+      };
+    }),
+  };
+});
 
-vi.mock('../resolvers/package-resolver.js', () => ({
-  PackageResolver: vi.fn(() => ({
-    generateModuleImports: vi.fn(() => ({ ok: true, value: [] })),
-    shouldPreserveNamedImports: vi.fn(() => false),
-  })),
-}));
+vi.mock('../resolvers/package-resolver.js', () => {
+  return {
+    PackageResolver: vi.fn(function () {
+      return {
+        generateModuleImports: vi.fn(function () {
+          return { ok: true, value: [] };
+        }),
+        shouldPreserveNamedImports: vi.fn(function () {
+          return false;
+        }),
+      };
+    }),
+  };
+});
 
-vi.mock('../plugins/plugin-integration.js', () => ({
-  PluginIntegration: vi.fn(() => ({
-    processPluginImports: vi.fn(imports =>
-      Promise.resolve({ ok: true, value: imports.join('\n') }),
-    ),
-  })),
-}));
+vi.mock('../plugins/plugin-integration.js', () => {
+  return {
+    PluginIntegration: vi.fn(function () {
+      return {
+        processPluginImports: vi.fn(function (imports) {
+          return Promise.resolve({ ok: true, value: imports.join('\n') });
+        }),
+      };
+    }),
+  };
+});
 
-vi.mock('../utils/deduplication.js', () => ({
-  extractModulesFromNamedImports: vi.fn(() => new Set()),
-}));
+vi.mock('../utils/deduplication.js', () => {
+  return {
+    extractModulesFromNamedImports: vi.fn(function () {
+      return new Set();
+    }),
+  };
+});
 
 describe('ImportGenerator', () => {
   let generator: ImportGenerator;
@@ -62,35 +96,55 @@ describe('ImportGenerator', () => {
 
     // Create mock instances
     mockNodeJSGenerator = {
-      generateNodeJSImports: vi.fn(() => []),
+      generateNodeJSImports: vi.fn(function () {
+        return [];
+      }),
     };
 
     mockCommonGenerator = {
-      generateCommonImports: vi.fn(() => ({ ok: true, value: '' })),
+      generateCommonImports: vi.fn(function () {
+        return { ok: true, value: '' };
+      }),
     };
 
     mockTypeGenerator = {
-      generateTypeImports: vi.fn(() => ({ ok: true, value: '' })),
+      generateTypeImports: vi.fn(function () {
+        return { ok: true, value: '' };
+      }),
       dispose: vi.fn(),
     };
 
     mockPackageResolver = {
-      generateModuleImports: vi.fn(() => ({ ok: true, value: [] })),
-      shouldPreserveNamedImports: vi.fn(() => false),
+      generateModuleImports: vi.fn(function () {
+        return { ok: true, value: [] };
+      }),
+      shouldPreserveNamedImports: vi.fn(function () {
+        return false;
+      }),
     };
 
     mockPluginIntegration = {
-      processPluginImports: vi.fn(imports =>
-        Promise.resolve({ ok: true, value: imports.join('\n') }),
-      ),
+      processPluginImports: vi.fn(function (imports) {
+        return Promise.resolve({ ok: true, value: imports.join('\n') });
+      }),
     };
 
     // Configure mocked constructors
-    (NodeJSImportsGenerator as any).mockImplementation(() => mockNodeJSGenerator);
-    (CommonImportsGenerator as any).mockImplementation(() => mockCommonGenerator);
-    (TypeImportsGenerator as any).mockImplementation(() => mockTypeGenerator);
-    (PackageResolver as any).mockImplementation(() => mockPackageResolver);
-    (PluginIntegration as any).mockImplementation(() => mockPluginIntegration);
+    (NodeJSImportsGenerator as any).mockImplementation(function () {
+      return mockNodeJSGenerator;
+    });
+    (CommonImportsGenerator as any).mockImplementation(function () {
+      return mockCommonGenerator;
+    });
+    (TypeImportsGenerator as any).mockImplementation(function () {
+      return mockTypeGenerator;
+    });
+    (PackageResolver as any).mockImplementation(function () {
+      return mockPackageResolver;
+    });
+    (PluginIntegration as any).mockImplementation(function () {
+      return mockPluginIntegration;
+    });
 
     generator = new ImportGenerator(); // No tsconfig for consistent test behavior
   });

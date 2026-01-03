@@ -8,23 +8,27 @@ import type { GeneratorConfig } from '../generator.js';
 import { ok, err } from '../../core/result.js';
 
 // Mock the ImportGenerator to prevent file system access during tests
-vi.mock('../import-generator/index.js', () => ({
-  ImportGenerator: vi.fn(() => ({
-    generateAllImports: vi.fn(({ config }) => {
-      // When generating multiple files, include import from common.js
-      if (config?.isGeneratingMultiple) {
-        return {
-          ok: true,
-          value:
-            'import { FluentBuilder, FluentBuilderBase, createInspectMethod } from "./common.js";',
-        };
-      }
-      // When single file mode, return empty imports (utilities are inlined)
-      return { ok: true, value: '' };
+vi.mock('../import-generator/index.js', () => {
+  return {
+    ImportGenerator: vi.fn(function () {
+      return {
+        generateAllImports: vi.fn(function ({ config }) {
+          // When generating multiple files, include import from common.js
+          if (config?.isGeneratingMultiple) {
+            return {
+              ok: true,
+              value:
+                'import { FluentBuilder, FluentBuilderBase, createInspectMethod } from "./common.js";',
+            };
+          }
+          // When single file mode, return empty imports (utilities are inlined)
+          return { ok: true, value: '' };
+        }),
+        dispose: vi.fn(),
+      };
     }),
-    dispose: vi.fn(),
-  })),
-}));
+  };
+});
 
 describe('BuilderGenerator', () => {
   let generator: BuilderGenerator;

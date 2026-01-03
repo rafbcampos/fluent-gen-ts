@@ -5,80 +5,106 @@ import type { ResolvedType, TypeInfo, PropertyInfo, GenericParam } from '../../.
 import { isErr } from '../../../../core/result.js';
 
 // Mock the dependencies
-vi.mock('../../resolvers/dependency-resolver.js', () => ({
-  DependencyResolver: vi.fn(() => ({
-    discoverTransitiveDependencies: vi.fn(() => []),
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('../../resolvers/dependency-resolver.js', () => {
+  return {
+    DependencyResolver: vi.fn(function () {
+      return {
+        discoverTransitiveDependencies: vi.fn(function () {
+          return [];
+        }),
+        dispose: vi.fn(),
+      };
+    }),
+  };
+});
 
-vi.mock('../../resolvers/package-resolver.js', () => ({
-  PackageResolver: vi.fn(() => ({
-    generateExternalTypeImports: vi.fn(),
-    resolveImportPath: vi.fn(),
-    shouldPreserveNamedImports: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('../../resolvers/package-resolver.js', () => {
+  return {
+    PackageResolver: vi.fn(function () {
+      return {
+        generateExternalTypeImports: vi.fn(),
+        resolveImportPath: vi.fn(),
+        shouldPreserveNamedImports: vi.fn(),
+        dispose: vi.fn(),
+      };
+    }),
+  };
+});
 
-vi.mock('../../utils/validation.js', () => ({
-  validateTypeName: vi.fn((name: string) => /^[A-Z]/.test(name)),
-  isGlobalType: vi.fn((name: string) => ['Array', 'Date', 'Promise'].includes(name)),
-  isTypeScriptUtilityType: vi.fn((name: string) =>
-    [
-      'Partial',
-      'Required',
-      'Readonly',
-      'Pick',
-      'Omit',
-      'Record',
-      'Exclude',
-      'Extract',
-      'NonNullable',
-      'Parameters',
-      'ReturnType',
-      'ConstructorParameters',
-      'InstanceType',
-      'Awaited',
-    ].includes(name),
-  ),
-  isNonImportableType: vi.fn((name: string) =>
-    [
-      'Array',
-      'Date',
-      'Promise',
-      'Partial',
-      'Required',
-      'Readonly',
-      'Pick',
-      'Omit',
-      'Record',
-      'Exclude',
-      'Extract',
-      'NonNullable',
-      'Parameters',
-      'ReturnType',
-      'ConstructorParameters',
-      'InstanceType',
-      'Awaited',
-    ].includes(name),
-  ),
-}));
+vi.mock('../../utils/validation.js', () => {
+  return {
+    validateTypeName: vi.fn(function (name: string) {
+      return /^[A-Z]/.test(name);
+    }),
+    isGlobalType: vi.fn(function (name: string) {
+      return ['Array', 'Date', 'Promise'].includes(name);
+    }),
+    isTypeScriptUtilityType: vi.fn(function (name: string) {
+      return [
+        'Partial',
+        'Required',
+        'Readonly',
+        'Pick',
+        'Omit',
+        'Record',
+        'Exclude',
+        'Extract',
+        'NonNullable',
+        'Parameters',
+        'ReturnType',
+        'ConstructorParameters',
+        'InstanceType',
+        'Awaited',
+      ].includes(name);
+    }),
+    isNonImportableType: vi.fn(function (name: string) {
+      return [
+        'Array',
+        'Date',
+        'Promise',
+        'Partial',
+        'Required',
+        'Readonly',
+        'Pick',
+        'Omit',
+        'Record',
+        'Exclude',
+        'Extract',
+        'NonNullable',
+        'Parameters',
+        'ReturnType',
+        'ConstructorParameters',
+        'InstanceType',
+        'Awaited',
+      ].includes(name);
+    }),
+  };
+});
 
-vi.mock('../../utils/path-utils.js', () => ({
-  looksLikePackagePath: vi.fn((path: string) => path.includes('node_modules')),
-}));
+vi.mock('../../utils/path-utils.js', () => {
+  return {
+    looksLikePackagePath: vi.fn(function (path: string) {
+      return path.includes('node_modules');
+    }),
+  };
+});
 
-vi.mock('../../utils/deduplication.js', () => ({
-  resolveImportConflicts: vi.fn(),
-}));
+vi.mock('../../utils/deduplication.js', () => {
+  return {
+    resolveImportConflicts: vi.fn(),
+  };
+});
 
-vi.mock('../../resolvers/type-definition-finder.js', () => ({
-  TypeDefinitionFinder: vi.fn(() => ({
-    findTypeSourceFile: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
+vi.mock('../../resolvers/type-definition-finder.js', () => {
+  return {
+    TypeDefinitionFinder: vi.fn(function () {
+      return {
+        findTypeSourceFile: vi.fn(),
+        dispose: vi.fn(),
+      };
+    }),
+  };
+});
 
 describe('TypeImportsGenerator', () => {
   let generator: TypeImportsGenerator;
@@ -103,8 +129,12 @@ describe('TypeImportsGenerator', () => {
     );
     const { PackageResolver } = vi.mocked(await import('../../resolvers/package-resolver.js'));
 
-    (DependencyResolver as any).mockImplementation(() => mockDependencyResolver);
-    (PackageResolver as any).mockImplementation(() => mockPackageResolver);
+    (DependencyResolver as any).mockImplementation(function () {
+      return mockDependencyResolver;
+    });
+    (PackageResolver as any).mockImplementation(function () {
+      return mockPackageResolver;
+    });
 
     generator = new TypeImportsGenerator();
   });

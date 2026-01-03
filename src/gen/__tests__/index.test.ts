@@ -44,9 +44,15 @@ describe('FluentGen', () => {
     } as unknown as PluginManager;
 
     // Mock constructors
-    vi.mocked(TypeExtractor).mockImplementation(() => mockTypeExtractor);
-    vi.mocked(BuilderGenerator).mockImplementation(() => mockBuilderGenerator);
-    vi.mocked(PluginManager).mockImplementation(() => mockPluginManager);
+    vi.mocked(TypeExtractor).mockImplementation(function () {
+      return mockTypeExtractor;
+    });
+    vi.mocked(BuilderGenerator).mockImplementation(function () {
+      return mockBuilderGenerator;
+    });
+    vi.mocked(PluginManager).mockImplementation(function () {
+      return mockPluginManager;
+    });
   });
 
   describe('constructor', () => {
@@ -636,7 +642,7 @@ describe('FluentGen', () => {
         version: '1.0.0',
       };
 
-      vi.mocked(mockPluginManager.register).mockImplementation(() => {
+      vi.mocked(mockPluginManager.register).mockImplementation(function () {
         throw new Error('Registration failed');
       });
 
