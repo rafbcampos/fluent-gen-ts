@@ -1,5 +1,5 @@
 # Run gitleaks for secret detection (if installed)
-if command -v gitleaks &> /dev/null; then
+if command -v gitleaks > /dev/null 2>&1; then
   gitleaks protect --staged --verbose
 else
   echo "Warning: gitleaks not installed. Skipping secret detection."
