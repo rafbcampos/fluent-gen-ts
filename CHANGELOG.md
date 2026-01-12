@@ -1,5 +1,11 @@
 # fluent-gen-ts
 
+## 0.1.29
+
+### Patch Changes
+
+- 0794b85: Dependency versions update
+
 ## 0.1.28
 
 ### Patch Changes
