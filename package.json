@@ -84,7 +84,7 @@
     "oxlint": "1.39.0",
     "oxlint-tsgolint": "0.11.0",
     "prettier": "3.8.0",
-    "rolldown": "1.0.0-beta.59",
+    "rolldown": "1.0.0-beta.60",
     "rolldown-plugin-dts": "0.20.0",
     "typescript": "5.9.3",
     "vitepress": "2.0.0-alpha.15",
