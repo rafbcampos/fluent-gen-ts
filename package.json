@@ -76,19 +76,19 @@
     "@commitlint/cli": "20.3.1",
     "@commitlint/config-conventional": "20.3.1",
     "@types/inquirer": "9.0.9",
-    "@types/node": "25.0.9",
-    "@vitest/coverage-v8": "4.0.17",
+    "@types/node": "25.0.10",
+    "@vitest/coverage-v8": "4.0.18",
     "execa": "9.6.1",
     "husky": "9.1.7",
     "lint-staged": "16.2.7",
-    "oxlint": "1.39.0",
+    "oxlint": "1.41.0",
     "oxlint-tsgolint": "0.11.1",
-    "prettier": "3.8.0",
-    "rolldown": "1.0.0-beta.60",
-    "rolldown-plugin-dts": "0.21.2",
+    "prettier": "3.8.1",
+    "rolldown": "1.0.0-rc.1",
+    "rolldown-plugin-dts": "0.21.6",
     "typescript": "5.9.3",
     "vitepress": "2.0.0-alpha.15",
-    "vitest": "4.0.17"
+    "vitest": "4.0.18"
   },
   "dependencies": {
     "chalk": "5.6.2",
@@ -96,12 +96,12 @@
     "cosmiconfig": "9.0.0",
     "fast-glob": "3.3.3",
     "glob": "13.0.0",
-    "inquirer": "13.2.0",
+    "inquirer": "13.2.1",
     "minimatch": "10.1.1",
-    "ora": "9.0.0",
+    "ora": "9.1.0",
     "ts-morph": "27.0.2",
     "tsx": "4.21.0",
-    "zod": "4.3.5"
+    "zod": "4.3.6"
   },
   "lint-staged": {
     "*.{ts,js,tsx,jsx}": [
