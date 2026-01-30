@@ -466,8 +466,8 @@ import { primitive, object } from 'fluent-gen-ts';
 4. Check console output for errors
 
 ```bash
-# Run with verbose output
-npx fluent-gen-ts batch --verbose
+# Run batch generation
+npx fluent-gen-ts batch
 ```
 
 ### Type Errors in Generated Code

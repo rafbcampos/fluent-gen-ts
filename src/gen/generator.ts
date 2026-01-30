@@ -10,6 +10,7 @@ import { DefaultValueGenerator } from './default-value-generator.js';
 import { MethodGenerator } from './method-generator.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { formatError } from '../core/utils/error-utils.js';
 
 const DEFAULT_OUTPUT_PATH = './generated';
 const DEFAULT_CONTEXT_TYPE = 'BaseBuildContext';
@@ -118,7 +119,7 @@ export class BuilderGenerator {
 
       return ok(afterHook.value);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       return err(new Error(`Failed to generate builder: ${errorMessage}`));
     }
   }
@@ -145,12 +146,8 @@ export class BuilderGenerator {
    * @returns True if common.ts exists
    */
   private hasExistingCommonFile(outputDir: string): boolean {
-    try {
-      const commonTsPath = path.join(outputDir, 'common.ts');
-      return fs.existsSync(commonTsPath);
-    } catch {
-      return false;
-    }
+    const commonTsPath = path.join(outputDir, 'common.ts');
+    return fs.existsSync(commonTsPath);
   }
 
   /**
@@ -569,7 +566,7 @@ ${buildMethod}
           result = transformed.value;
         }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = formatError(error);
         console.warn(`Plugin '${plugin.name}' transformBuildMethod failed: ${errorMessage}`);
       }
     }

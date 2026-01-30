@@ -109,11 +109,7 @@ export class PropertyResolver {
 
       return ok(properties);
     } catch (error) {
-      return err(
-        new Error(
-          `Failed to resolve properties: ${error instanceof Error ? error.message : String(error)}`,
-        ),
-      );
+      return err(new Error(`Failed to resolve properties: ${formatError(error)}`));
     }
   }
 

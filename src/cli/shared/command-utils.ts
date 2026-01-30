@@ -6,6 +6,7 @@
 import chalk from 'chalk';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { formatError } from '../../core/utils/error-utils.js';
 
 /**
  * Options for file existence checking
@@ -100,7 +101,7 @@ export class CommandUtils {
    * @throws Error with a formatted message
    */
   static handleCommandError(error: unknown, context: string): never {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = formatError(error);
     console.error(chalk.red(`\n✗ ${context}:`), errorMessage);
     throw new Error(`${context}: ${errorMessage}`);
   }

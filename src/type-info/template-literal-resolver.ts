@@ -3,6 +3,7 @@ import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { TypeInfo } from '../core/types.js';
 import { TypeKind } from '../core/types.js';
+import { formatError } from '../core/utils/error-utils.js';
 
 /**
  * Configuration options for TemplateLiteralResolver.
@@ -116,7 +117,7 @@ export class TemplateLiteralResolver {
         unionTypes,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       return err(new Error(`Failed to resolve template literal type: ${errorMessage}`));
     }
   }

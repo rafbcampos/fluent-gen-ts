@@ -125,6 +125,60 @@ describe('FluentGen', () => {
     });
   });
 
+  describe('create', () => {
+    test('should create instance with default options', () => {
+      const result = FluentGen.create();
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeInstanceOf(FluentGen);
+      }
+    });
+
+    test('should create instance with valid custom options', () => {
+      const result = FluentGen.create({
+        outputDir: './custom',
+        fileName: 'custom.ts',
+        maxDepth: 5,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value).toBeInstanceOf(FluentGen);
+      }
+    });
+
+    test('should return error for invalid outputDir', () => {
+      const result = FluentGen.create({ outputDir: '' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('outputDir must be a non-empty string');
+      }
+    });
+
+    test('should return error for invalid fileName', () => {
+      const result = FluentGen.create({ fileName: '' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('fileName must be a non-empty string');
+      }
+    });
+
+    test('should return error for invalid maxDepth', () => {
+      const result = FluentGen.create({ maxDepth: 0 });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('maxDepth must be between 1 and 100');
+      }
+    });
+
+    test('should return error for invalid tsConfigPath', () => {
+      const result = FluentGen.create({ tsConfigPath: '' });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.message).toContain('tsConfigPath must be a non-empty string');
+      }
+    });
+  });
+
   describe('generateBuilder', () => {
     let fluentGen: FluentGen;
 

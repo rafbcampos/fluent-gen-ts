@@ -102,7 +102,7 @@ export const isGlobalType = (typeName: string): boolean => {
  * TypeScript utility types that are built-in and should not be imported.
  * These types exist only at compile time and are part of TypeScript's type system.
  */
-const TYPESCRIPT_UTILITY_TYPES = new Set([
+const TYPESCRIPT_UTILITY_TYPES: ReadonlySet<string> = new Set([
   'Partial',
   'Required',
   'Readonly',
@@ -124,7 +124,7 @@ const TYPESCRIPT_UTILITY_TYPES = new Set([
   'Lowercase',
   'Capitalize',
   'Uncapitalize',
-] as const);
+]);
 
 /**
  * Checks if a type name is a TypeScript built-in utility type.
@@ -148,7 +148,7 @@ export const isTypeScriptUtilityType = (typeName: string): boolean => {
     return false;
   }
 
-  return TYPESCRIPT_UTILITY_TYPES.has(typeName as any);
+  return TYPESCRIPT_UTILITY_TYPES.has(typeName);
 };
 
 /**

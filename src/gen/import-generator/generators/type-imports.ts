@@ -8,6 +8,7 @@ import type {
 } from '../types.js';
 import { validateTypeName, isNonImportableType } from '../utils/validation.js';
 import { resolveImportConflicts } from '../utils/deduplication.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 import { looksLikePackagePath } from '../utils/path-utils.js';
 import { DependencyResolver } from '../resolvers/dependency-resolver.js';
 import { PackageResolver } from '../resolvers/package-resolver.js';
@@ -84,9 +85,7 @@ export class TypeImportsGenerator {
         ? `Failed to generate type imports for '${resolvedType.name}' from '${resolvedType.sourceFile || 'unknown'}'`
         : 'Failed to generate type imports for unknown type';
 
-      return err(
-        new Error(`${errorContext}: ${error instanceof Error ? error.message : String(error)}`),
-      );
+      return err(new Error(`${errorContext}: ${formatError(error)}`));
     }
   }
 

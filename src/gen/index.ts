@@ -249,6 +249,29 @@ export class FluentGen {
   }
 
   /**
+   * Creates a new FluentGen instance, returning a Result instead of throwing on invalid options.
+   *
+   * @param options - Configuration options for the generator
+   * @returns A Result containing the FluentGen instance, or an error if options are invalid
+   *
+   * @example
+   * ```typescript
+   * const result = FluentGen.create({ outputDir: './generated' });
+   * if (result.ok) {
+   *   const gen = result.value;
+   *   // use gen...
+   * }
+   * ```
+   */
+  static create(options: FluentGenOptions = {}): Result<FluentGen> {
+    const validationResult = validateOptions(options);
+    if (!validationResult.ok) {
+      return err(new Error(`Invalid FluentGen options: ${validationResult.error.message}`));
+    }
+    return ok(new FluentGen(options));
+  }
+
+  /**
    * Determines whether common.ts should be generated based on configuration
    * @returns true if common.ts should be generated, false if user has custom common file
    */

@@ -772,6 +772,23 @@ jsDoc(doc: string): CustomMethodBuilder
 
 Sets JSDoc comment.
 
+#### when
+
+```typescript
+when(predicate: (context: BuilderContext) => boolean): CustomMethodBuilder
+```
+
+Conditionally applies the custom method based on a predicate. When set, the method is only added to builders where the predicate returns `true`.
+
+```typescript
+plugin.addMethod(method =>
+  method
+    .name('validate')
+    .implementation(ctx => `/* validate ${ctx.typeName} */`)
+    .when(ctx => ctx.hasProperty('email')),
+);
+```
+
 #### build
 
 ```typescript

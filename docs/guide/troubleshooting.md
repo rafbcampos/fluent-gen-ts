@@ -478,9 +478,9 @@ Error: Cannot find package '@workspace/shared'
    }
    ```
 
-4. **Use verbose mode to debug:**
+4. **Run batch generation to debug:**
    ```bash
-   npx fluent-gen-ts batch --verbose
+   npx fluent-gen-ts batch
    ```
 
 ### pnpm symlinks not resolved
@@ -627,10 +627,10 @@ Verify plugin is loaded and condition matches:
 
 ## Getting More Help
 
-### Enable Verbose Logging
+### Run Batch Generation
 
 ```bash
-npx fluent-gen-ts batch --verbose
+npx fluent-gen-ts batch
 ```
 
 ### Check Generated Code

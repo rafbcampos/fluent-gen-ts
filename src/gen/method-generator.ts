@@ -307,13 +307,11 @@ class MethodGeneratorUtils {
       try {
         const result = parameterType(context);
         if (typeof result !== 'string') {
-          console.warn('parameterType function returned non-string value:', typeof result);
           return null;
         }
         const trimmed = result.trim();
         return trimmed || null;
-      } catch (error) {
-        console.warn('Failed to evaluate parameterType function:', error);
+      } catch {
         return null;
       }
     }
@@ -394,7 +392,7 @@ class MethodGeneratorUtils {
       return false;
     }
 
-    const candidate = method as unknown as Record<string, unknown>;
+    const candidate = method as Record<string, unknown>;
     return (
       typeof candidate.name === 'string' &&
       candidate.name.trim().length > 0 &&
@@ -413,10 +411,7 @@ class MethodGeneratorUtils {
       return false;
     }
 
-    const candidate = method as unknown as Record<string, unknown>;
-    return (
-      typeof candidate.implementation === 'string' && candidate.implementation.trim().length > 0
-    );
+    return method.implementation.trim().length > 0;
   }
 
   /**
@@ -435,8 +430,7 @@ class MethodGeneratorUtils {
         return [];
       }
       return customMethods;
-    } catch (error) {
-      console.warn('Failed to get custom methods from plugin manager:', error);
+    } catch {
       return [];
     }
   }
@@ -567,9 +561,8 @@ ${methods}
           typeInfo: params.typeInfo,
         });
         methods.push(method);
-      } catch (error) {
-        // Log error but continue with other properties
-        console.warn(`Skipping invalid property ${property.name}:`, error);
+      } catch {
+        // Continue with other properties
       }
     }
 
@@ -683,8 +676,8 @@ ${methods}
         if (safeTransform.parameterType) {
           paramType = safeTransform.parameterType;
         }
-      } catch (error) {
-        console.warn(`Plugin transformation failed for property ${params.property.name}:`, error);
+      } catch {
+        // Continue with default parameter type
       }
     }
 
@@ -726,8 +719,8 @@ ${methods}
     return this.set("${params.property.name}", extractedValue);
   `.trim();
         }
-      } catch (error) {
-        console.warn(`Plugin transformation failed for property ${params.property.name}:`, error);
+      } catch {
+        // Continue with default implementation
       }
     }
 

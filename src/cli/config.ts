@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import type { Result } from '../core/result.js';
 import { ok, err } from '../core/result.js';
 import type { MonorepoConfig as CoreMonorepoConfig } from '../core/package-resolver.js';
+import { formatError } from '../core/utils/error-utils.js';
 
 /**
  * Custom loader for TypeScript config files using tsx
@@ -147,7 +148,7 @@ export class ConfigLoader {
 
       return this.validate(config);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatError(error);
       return err(new Error(`Failed to load configuration: ${message}`));
     }
   }

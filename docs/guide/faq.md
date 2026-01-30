@@ -498,10 +498,10 @@ Common causes:
 2. **Missing dependencies** - Install required packages
 3. **Wrong tsconfig** - Ensure `moduleResolution: "bundler"` or `"node16"`
 
-Run with verbose output:
+Run batch generation:
 
 ```bash
-npx fluent-gen-ts batch --verbose
+npx fluent-gen-ts batch
 ```
 
 ### Types are not found during generation
@@ -534,10 +534,10 @@ npx fluent-gen-ts generate ./types.ts User --max-depth 15
 
 ### How do I debug generation issues?
 
-Use verbose mode:
+Run batch generation:
 
 ```bash
-npx fluent-gen-ts batch --verbose
+npx fluent-gen-ts batch
 ```
 
 Or dry-run to preview:

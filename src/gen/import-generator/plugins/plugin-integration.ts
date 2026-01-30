@@ -5,6 +5,7 @@ import type { Result } from '../../../core/result.js';
 import type { ImportGeneratorConfig } from '../types.js';
 import { deduplicateImports } from '../utils/deduplication.js';
 import { ok, err } from '../../../core/result.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 import {
   ImportParser,
   ImportSerializer,
@@ -81,7 +82,7 @@ export class PluginIntegration {
 
       return ok(finalImports.join('\n'));
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       return err(new Error(`Failed to process plugin imports: ${errorMessage}`));
     }
   }
@@ -129,7 +130,7 @@ export class PluginIntegration {
       const transformedImports = ImportSerializer.serializeImports(transformResult.value.imports);
       return ok(transformedImports);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatError(error);
       return err(new Error(`Failed to apply plugin transformations: ${errorMessage}`));
     }
   }

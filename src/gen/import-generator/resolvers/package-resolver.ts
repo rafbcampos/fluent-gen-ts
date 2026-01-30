@@ -8,6 +8,7 @@ import {
 } from '../utils/path-utils.js';
 import { NodeJSTypeResolver } from '../utils/nodejs-type-resolver.js';
 import { ok, err, isOk, type Result } from '../../../core/result.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 
 /**
  * Resolves package imports and generates import statements for TypeScript modules.
@@ -99,7 +100,7 @@ export class PackageResolver {
 
       return ok(moduleImports);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatError(error);
       return err(new Error(`Failed to generate module imports: ${message}`));
     }
   }
@@ -136,7 +137,7 @@ export class PackageResolver {
 
       return ok(imports);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = formatError(error);
       return err(new Error(`Failed to generate external type imports: ${message}`));
     }
   }

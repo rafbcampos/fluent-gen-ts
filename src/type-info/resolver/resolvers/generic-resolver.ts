@@ -1,10 +1,11 @@
-import type { Type } from 'ts-morph';
+import type { Type, TypeParameterDeclaration } from 'ts-morph';
 import type { Result } from '../../../core/result.js';
 import { ok, err } from '../../../core/result.js';
 import type { TypeInfo, GenericParam } from '../../../core/types.js';
 import { TypeKind } from '../../../core/types.js';
 import type { GenericContext } from '../../generic-context.js';
 import type { TypeResolverFunction } from '../core/resolver-context.js';
+import { formatError } from '../../../core/utils/error-utils.js';
 
 /**
  * Resolves generic type parameters and their constraints to TypeInfo representation.
@@ -62,8 +63,8 @@ export class GenericResolver {
       if (!typeParams) return ok(genericParams);
 
       for (const param of typeParams) {
-        const constraintType = (param as any).getConstraint?.()?.getType?.();
-        const defaultType = (param as any).getDefault?.()?.getType?.();
+        const constraintType = param.getConstraint()?.getType();
+        const defaultType = param.getDefault()?.getType();
 
         const { constraint, default: defaultInfo } = await this.resolveConstraintAndDefault({
           constraint: constraintType,
@@ -72,7 +73,7 @@ export class GenericResolver {
         });
 
         genericParams.push({
-          name: (param as any).getName?.() ?? 'unknown',
+          name: param.getName(),
           ...(constraint && { constraint }),
           ...(defaultInfo && { default: defaultInfo }),
         });
@@ -80,13 +81,7 @@ export class GenericResolver {
 
       return ok(genericParams);
     } catch (error) {
-      return err(
-        new Error(
-          `Failed to resolve generic parameters: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        ),
-      );
+      return err(new Error(`Failed to resolve generic parameters: ${formatError(error)}`));
     }
   }
 
@@ -126,7 +121,7 @@ export class GenericResolver {
    * @param type - The type to extract parameters from
    * @returns Array of type parameters or undefined if none found
    */
-  private extractTypeParameters(type: Type): unknown[] | undefined {
+  private extractTypeParameters(type: Type): TypeParameterDeclaration[] | undefined {
     const symbol = type.getSymbol();
     if (!symbol) return undefined;
 
@@ -137,7 +132,7 @@ export class GenericResolver {
     if (!declaration) return undefined;
 
     if ('getTypeParameters' in declaration && typeof declaration.getTypeParameters === 'function') {
-      return declaration.getTypeParameters() ?? [];
+      return (declaration.getTypeParameters() as TypeParameterDeclaration[]) ?? [];
     }
 
     return undefined;

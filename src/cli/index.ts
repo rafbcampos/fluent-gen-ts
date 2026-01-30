@@ -6,6 +6,7 @@ import chalk from 'chalk';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { formatError } from '../core/utils/error-utils.js';
 
 interface PackageJson {
   name?: string;
@@ -66,7 +67,7 @@ function withErrorHandling<T extends readonly unknown[]>(
     try {
       await commandFn(...args);
     } catch (error) {
-      console.error(chalk.red('Error:'), error);
+      console.error(chalk.red('Error:'), formatError(error));
       process.exit(1);
     }
   };
