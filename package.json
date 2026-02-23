@@ -96,7 +96,7 @@
     "cosmiconfig": "9.0.0",
     "fast-glob": "3.3.3",
     "glob": "13.0.3",
-    "inquirer": "13.2.4",
+    "inquirer": "13.3.0",
     "minimatch": "10.2.0",
     "ora": "9.3.0",
     "ts-morph": "27.0.2",
