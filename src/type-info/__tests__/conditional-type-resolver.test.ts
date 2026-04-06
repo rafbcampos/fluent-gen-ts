@@ -69,7 +69,7 @@ describe('ConditionalTypeResolver - TypeScript API Investigation', () => {
 
     // Verify unresolved conditionals have the Conditional flag
     expect(!!(unresolvedCompilerType.flags & ts.TypeFlags.Conditional)).toBe(true);
-    expect(unresolvedCompilerType.flags).toBe(16777216); // ts.TypeFlags.Conditional
+    expect(unresolvedCompilerType.flags).toBe(ts.TypeFlags.Conditional);
 
     // Check if it's a ConditionalType in TypeScript's internal type system
     const conditionalType = unresolvedCompilerType as ts.ConditionalType;

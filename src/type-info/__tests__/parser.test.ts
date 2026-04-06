@@ -406,7 +406,7 @@ describe('TypeScriptParser', () => {
       const sourceFile = project.createSourceFile(
         'main.ts',
         `
-        import { ImportedType } from "./imported";
+        import { ImportedType } from "./imported.js";
         export interface MainType extends ImportedType {
           id: string;
         }

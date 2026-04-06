@@ -91,13 +91,13 @@ export class BuiltInDetector {
    * ```
    */
   isNodeJSBuiltInType(type: Type): boolean {
-    const symbol = type.getSymbol();
-    if (!symbol) return false;
-
     const typeText = type.getText();
     if (typeText.startsWith('NodeJS.')) {
       return this.isNodeJSNamespaceType(typeText);
     }
+
+    const symbol = type.getSymbol();
+    if (!symbol) return false;
 
     const symbolName = symbol.getName();
 
