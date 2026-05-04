@@ -39,8 +39,8 @@ importers:
         specifier: 4.21.0
         version: 4.21.0
       zod:
-        specifier: 4.3.6
-        version: 4.3.6
+        specifier: 4.4.2
+        version: 4.4.2
     devDependencies:
       '@changesets/cli':
         specifier: 2.31.0
@@ -2462,8 +2462,8 @@ packages:
     resolution: {integrity: sha512-CzhO+pFNo8ajLM2d2IW/R93ipy99LWjtwblvC1RsoSUMZgyLbYFr221TnSNT7GjGdYui6P459mw9JH/g/zW2ug==}
     engines: {node: '>=18'}
 
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+  zod@4.4.2:
+    resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
 
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
@@ -4712,6 +4712,6 @@ snapshots:
 
   yoctocolors@2.1.2: {}
 
-  zod@4.3.6: {}
+  zod@4.4.2: {}
 
   zwitch@2.0.4: {}
