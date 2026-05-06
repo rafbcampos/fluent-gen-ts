@@ -81,11 +81,11 @@
     "execa": "9.6.1",
     "husky": "9.1.7",
     "lint-staged": "16.4.0",
-    "oxlint": "1.62.0",
-    "oxlint-tsgolint": "0.21.1",
+    "oxlint": "1.63.0",
+    "oxlint-tsgolint": "0.22.1",
     "prettier": "3.8.3",
     "rolldown": "1.0.0-rc.18",
-    "rolldown-plugin-dts": "0.23.2",
+    "rolldown-plugin-dts": "0.24.1",
     "typescript": "6.0.3",
     "vitepress": "2.0.0-alpha.17",
     "vitest": "4.1.5"
@@ -101,7 +101,7 @@
     "ora": "9.4.0",
     "ts-morph": "28.0.0",
     "tsx": "4.21.0",
-    "zod": "4.4.2"
+    "zod": "4.4.3"
   },
   "lint-staged": {
     "*.{ts,js,tsx,jsx}": [
