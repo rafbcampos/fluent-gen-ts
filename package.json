@@ -72,9 +72,9 @@
     "provenance": true
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
-    "@commitlint/cli": "21.0.1",
-    "@commitlint/config-conventional": "21.0.1",
+    "@changesets/cli": "2.31.1",
+    "@commitlint/cli": "21.2.1",
+    "@commitlint/config-conventional": "21.2.0",
     "@types/inquirer": "9.0.9",
     "@types/node": "25.9.1",
     "@vitest/coverage-v8": "4.1.7",
